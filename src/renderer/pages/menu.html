@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https: data:; style-src 'self'" />
+  <title>メニュー</title>
+  <link rel="stylesheet" href="menu.css" />
+</head>
+<body>
+  <!-- ページの上に重なる透明レイヤー。外側クリックで閉じる -->
+  <div id="backdrop">
+    <div id="menu" class="hidden">
+      <div class="menu-label">プロファイル</div>
+      <div id="items"></div>
+      <div class="menu-separator"></div>
+      <button id="manage" class="menu-item">
+        <span class="icon">⚙</span>
+        <span class="name">プロファイルと設定</span>
+      </button>
+    </div>
+  </div>
+
+  <script src="menu.js"></script>
+</body>
+</html>

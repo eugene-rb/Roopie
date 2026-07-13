@@ -1,0 +1,120 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  user-select: none;
+}
+
+:root {
+  --menu-bg: #2b2c34;
+  --menu-hover: #3a3b45;
+  --text: #e4e4e8;
+  --text-dim: #9a9aa4;
+  --accent: #6c8cff;
+  --border: rgba(255, 255, 255, 0.08);
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  color: var(--text);
+  font-family: "Segoe UI", "Yu Gothic UI", sans-serif;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* ページ全体を覆う透明レイヤー(クリックでメニューを閉じる) */
+#backdrop {
+  position: absolute;
+  inset: 0;
+}
+
+#menu {
+  position: absolute;
+  width: 260px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--menu-bg);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  animation: pop 0.12s ease-out;
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.menu-label {
+  padding: 6px 10px 4px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menu-item:hover {
+  background: var(--menu-hover);
+}
+
+.menu-item .avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  color: #14151a;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.menu-item .icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  flex-shrink: 0;
+  color: var(--text-dim);
+}
+
+.menu-item .name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.menu-item .check {
+  flex-shrink: 0;
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.menu-separator {
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--border);
+}

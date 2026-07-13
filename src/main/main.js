@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu, protocol, net } = require('electron');
+const { app, BrowserWindow, WebContentsView, ipcMain, Menu, protocol, net } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
 const TabManager = require('./tab-manager');
@@ -82,6 +82,7 @@ function createWindow() {
   downloads.attachSession(session);
 
   tabManager = new TabManager(mainWindow, { history, bookmarks, session });
+  tabManager.setOverlay(createOverlayView(session));
 
   mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
 
@@ -106,6 +107,24 @@ function createWindow() {
 
 function store(profile, key, defaultValue) {
   return new Store(profiles.dataFile(profile, key), defaultValue);
+}
+
+// ページの上に重ねる透明View。プルダウンメニューをここに描画する
+// (タブはネイティブViewなので、通常のHTMLドロップダウンはページの下に隠れてしまう)
+function createOverlayView(session) {
+  const view = new WebContentsView({
+    webPreferences: {
+      preload: path.join(__dirname, '..', 'preload', 'internal-preload.js'),
+      session,
+      transparent: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  view.setBackgroundColor('#00000000');
+  view.webContents.loadURL('roopie://menu');
+  return view;
 }
 
 
@@ -317,6 +336,18 @@ ipcMain.on('tabs:zoom', (_e, direction) => tabManager?.zoom(direction));
 
 ipcMain.on('ui:chrome-height', (_e, height) => tabManager?.setChromeHeight(height));
 ipcMain.on('ui:toggle-bookmark-bar', toggleBookmarkBar);
+
+// プロファイルのプルダウン: ツールバーのボタン位置(anchor)を受け取り、オーバーレイに描画させる
+ipcMain.on('menu:open-profiles', (_e, anchor) => {
+  if (!tabManager?.overlay || !profiles) return;
+  tabManager.showOverlay(true);
+  tabManager.overlay.webContents.send('menu:show', {
+    profiles: profiles.list(),
+    activeId: profiles.activeId,
+    anchor,
+  });
+});
+ipcMain.on('menu:close', () => tabManager?.showOverlay(false));
 
 ipcMain.on('find:start', (_e, text, options) => tabManager?.find(text, options));
 ipcMain.on('find:stop', () => tabManager?.stopFind());

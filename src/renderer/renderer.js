@@ -123,61 +123,25 @@ function renderBookmarkBar() {
 
 // ---- プロファイル ----
 const profileBtn = $('profile-btn');
-const profileBar = $('profile-bar');
-let profileState = { profiles: [], activeId: null };
 
 window.roopie.onProfilesState((state) => {
-  profileState = state;
-  renderProfiles();
+  const active = state.profiles.find((p) => p.id === state.activeId);
+  if (!active) return;
+  profileBtn.textContent = (active.name[0] || '?').toUpperCase();
+  profileBtn.style.background = active.color;
+  profileBtn.title = `プロファイル: ${active.name}(クリックで切り替え)`;
 });
 
-function renderProfiles() {
-  const active = profileState.profiles.find((p) => p.id === profileState.activeId);
-  if (active) {
-    profileBtn.textContent = (active.name[0] || '?').toUpperCase();
-    profileBtn.style.background = active.color;
-    profileBtn.title = `プロファイル: ${active.name}(クリックで切り替え)`;
-  }
-
-  profileBar.textContent = '';
-  for (const profile of profileState.profiles) {
-    const chip = document.createElement('div');
-    chip.className = 'profile-chip' + (profile.id === profileState.activeId ? ' active' : '');
-
-    const dot = document.createElement('span');
-    dot.className = 'dot';
-    dot.style.background = profile.color;
-    dot.textContent = (profile.name[0] || '?').toUpperCase();
-    chip.appendChild(dot);
-
-    const label = document.createElement('span');
-    label.textContent = profile.name;
-    chip.appendChild(label);
-
-    chip.addEventListener('click', () => {
-      window.roopie.switchProfile(profile.id);
-      toggleProfileBar(false);
-    });
-    profileBar.appendChild(chip);
-  }
-
-  const manage = document.createElement('div');
-  manage.className = 'profile-chip';
-  manage.textContent = '⚙ 管理';
-  manage.addEventListener('click', () => {
-    window.roopie.newTab('roopie://settings');
-    toggleProfileBar(false);
+// プルダウンはページの上に重なるオーバーレイViewに描画するため、
+// ボタンの位置(ページ表示領域から見た座標)をメインプロセスへ渡す
+profileBtn.addEventListener('click', () => {
+  const rect = profileBtn.getBoundingClientRect();
+  window.roopie.openProfileMenu({
+    right: Math.round(rect.right),
+    bottom: Math.round(rect.bottom - chromeEl.offsetHeight),
   });
-  profileBar.appendChild(manage);
-}
+});
 
-function toggleProfileBar(show) {
-  const visible = show ?? profileBar.classList.contains('hidden');
-  profileBar.classList.toggle('hidden', !visible);
-  reportChromeHeight();
-}
-
-profileBtn.addEventListener('click', () => toggleProfileBar());
 $('settings-btn').addEventListener('click', () => window.roopie.newTab('roopie://settings'));
 
 // ---- ダウンロード ----

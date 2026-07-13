@@ -25,6 +25,7 @@ class TabManager {
     this.tabs = []; // { id, view, isInternal, favicon }
     this.activeTabId = null;
     this.chromeHeight = DEFAULT_CHROME_HEIGHT;
+    this.overlay = null; // メニュー等を表示する、常にタブより手前のView
 
     for (const event of ['resize', 'maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen']) {
       window.on(event, () => this.layout());
@@ -53,7 +54,30 @@ class TabManager {
     this.attachEvents(tab);
     view.webContents.loadURL(url);
     this.switchTab(id);
+    this.raiseOverlay(); // 新しいタブを載せた後もメニューが手前に来るようにする
     return tab;
+  }
+
+  // オーバーレイ(メニュー用の透明View)を登録する
+  setOverlay(view) {
+    this.overlay = view;
+    this.window.contentView.addChildView(view);
+    view.setVisible(false);
+    this.layout();
+  }
+
+  // 子Viewは後から追加したものが手前に来るため、追加し直して最前面へ戻す
+  raiseOverlay() {
+    if (!this.overlay || this.window.isDestroyed()) return;
+    this.window.contentView.addChildView(this.overlay);
+  }
+
+  showOverlay(visible) {
+    if (!this.overlay) return;
+    if (visible) this.raiseOverlay();
+    this.overlay.setVisible(visible);
+    if (visible) this.overlay.webContents.focus();
+    else this.activeWebContents()?.focus();
   }
 
   attachEvents(tab) {
@@ -256,15 +280,17 @@ class TabManager {
   }
 
   layout() {
-    const active = this.getTab(this.activeTabId);
-    if (!active || this.window.isDestroyed()) return;
+    if (this.window.isDestroyed()) return;
     const [width, height] = this.window.getContentSize();
-    active.view.setBounds({
+    const bounds = {
       x: 0,
       y: this.chromeHeight,
       width,
       height: Math.max(0, height - this.chromeHeight),
-    });
+    };
+
+    this.getTab(this.activeTabId)?.view.setBounds(bounds);
+    this.overlay?.setBounds(bounds);
   }
 
   // 内部ページ(履歴・ダウンロード等)を開いているタブへ通知を送る

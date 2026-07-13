@@ -45,6 +45,10 @@ if (location.protocol === 'roopie:') {
     getSettings: () => ipcRenderer.invoke('settings:get'),
     setSetting: (key, value) => ipcRenderer.send('settings:set', key, value),
 
+    // プルダウンメニュー(オーバーレイ)用
+    onMenuShow: (cb) => ipcRenderer.on('menu:show', (_e, payload) => cb(payload)),
+    closeMenu: () => ipcRenderer.send('menu:close'),
+
     onDownloadsState: (cb) =>
       ipcRenderer.on('downloads:state', (_e, state) => cb(state)),
     onBookmarksState: (cb) =>
