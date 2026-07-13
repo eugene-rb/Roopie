@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https: data:; style-src 'self'" />
+  <title>Roopie</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- タブバー -->
+  <div id="tab-bar">
+    <div id="tabs"></div>
+    <button id="new-tab-btn" title="新しいタブ (Ctrl+T)">+</button>
+  </div>
+
+  <!-- ツールバー -->
+  <div id="toolbar">
+    <button id="back-btn" title="戻る (Alt+←)">&#x2190;</button>
+    <button id="forward-btn" title="進む (Alt+→)">&#x2192;</button>
+    <button id="reload-btn" title="再読み込み (Ctrl+R)">&#x21bb;</button>
+    <input
+      id="address-bar"
+      type="text"
+      placeholder="URLを入力するか、Googleで検索"
+      spellcheck="false"
+      autocomplete="off"
+    />
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
