@@ -5,13 +5,18 @@
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
-    "start:debug": "electron . --remote-debugging-port=9222"
+    "start:debug": "electron . --remote-debugging-port=9222",
+    "build:css": "tailwindcss -i src/renderer/tailwind.css -o src/renderer/pages/app.css --minify",
+    "watch:css": "tailwindcss -i src/renderer/tailwind.css -o src/renderer/pages/app.css --watch"
   },
   "keywords": [],
   "author": "",
   "license": "MIT",
   "type": "commonjs",
   "devDependencies": {
-    "electron": "^43.1.0"
+    "@tailwindcss/cli": "^4.3.2",
+    "electron": "^43.1.0",
+    "preline": "^4.2.0",
+    "tailwindcss": "^4.3.2"
   }
 }

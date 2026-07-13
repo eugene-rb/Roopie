@@ -32,7 +32,7 @@ Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP
 | Phase 4: マウスジェスチャー(GUIカスタム対応) | ✅ 完了 |
 | Phase 4: サイドパネル(ブックマーク/履歴/メモ/Webパネル) | ✅ 完了 |
 | Phase 5: テーマ機能 + Bonjourr風スタートページ | ✅ 完了 |
-| Phase 5: Tailwind + Preline UI への移行 | ⬜ 未着手(ビルド工程の導入判断が必要) |
+| Phase 5: Tailwind CSS v4 + Preline UI 導入 | ✅ 完了 |
 | Phase 6: パスワード保存・細部の作り込み | ⬜ 未着手 |
 
 ### 動く機能(一覧)
@@ -58,14 +58,12 @@ Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP
 優先順は「プロファイルの影響を受ける機能(先)→ 影響を受けないUI機能(後)」。
 プロファイル基盤が固まったので、以降は独立性の高い機能から着手できる。
 
-1. **Phase 5(残り): Tailwind CSS + Preline UI への移行**
-   - テーマ・スタートページは実装済み。残りは既存UI(ツールバー/内部ページ)のPreline風への置き換え
-   - Tailwindはビルド工程(`tailwindcss` CLIでCSS生成)の導入が必要。手書きCSSのままPreline風に寄せる選択肢もあり、**ユーザーに方針を確認してから着手する**
-2. **Phase 2(後回し分): 拡張機能対応の検証**(`electron-chrome-web-store` で uBlock Origin が動くか)
+1. **Phase 2(後回し分): 拡張機能対応の検証**(`electron-chrome-web-store` で uBlock Origin が動くか)
    - 動かない場合は方針転換の判断が必要な重要マイルストーン
-3. **Phase 6: パスワード保存**(`safeStorage` で暗号化。プロファイル単位、共有トグル「保存パスワード」を有効化)
-4. **Phase 6: 残りのChrome機能**(タブのドラッグ並べ替え、複数ウィンドウ、シークレットモード)
-5. 画面分割・メディアプレイヤー(要件定義書 4.3 / 4.4)
+2. **Phase 6: パスワード保存**(`safeStorage` で暗号化。プロファイル単位、共有トグル「保存パスワード」を有効化)
+3. **Phase 6: 残りのChrome機能**(タブのドラッグ並べ替え、複数ウィンドウ、シークレットモード)
+4. 画面分割・メディアプレイヤー(要件定義書 4.3 / 4.4)
+5. デザインの継続改善(Preline UIのコンポーネントパターン適用を広げる)
 
 ## 進捗記録
 
@@ -214,6 +212,22 @@ Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP
   - テーマの背景設定が `auto` のときは時間帯(5-8/8-16/16-19/それ以外)で切り替え
 - 検証: CDPで背景の自動/固定切り替え・アクセント反映(UI+内部ページ)・カスタムCSS適用/解除・不正値の拒否を確認。スクリーンショットで4背景の見た目も確認済み
 - **Tailwind + Preline UI への移行は未着手**: ビルド工程の導入が必要になるため、方針(Tailwind導入 or 手書きCSSでPreline風)をユーザーに確認してから進める
+
+### 2026-07-14: Phase 5 Tailwind CSS v4 + Preline UI 導入
+
+- **CSSのビルド工程を導入**: `npm run build:css`(生成)/ `npm run watch:css`(監視)
+  - 入力: `src/renderer/tailwind.css` → 出力: `src/renderer/pages/app.css`(**gitにコミットする**。実行時にビルド不要にするため)
+  - **⚠ CSSを変更するときは必ず `tailwind.css` を編集して `npm run build:css` を実行する。`app.css` を直接編集しない**
+- 旧CSS 5ファイル(style.css / pages.css / settings.css / sidepanel.css / menu.css)を `tailwind.css` に統合し削除。newtab.css だけはBonjourr専用として残した
+- 全ページが `app.css` を読む。内部ページは `roopie://` が `pages/` 配下しか配信できないため、出力先を `pages/app.css` にして index.html からは `pages/app.css` を相対参照
+- bodyレベルのルールはページごとのbodyクラスでスコープ: `.chrome-body`(index.html)/ `.menu-body`(オーバーレイ、背景透過)/ `.panel-body`(サイドパネル、`web-mode` はここに付く)
+- デザイン刷新(Preline風): トークン刷新(--bg #16181d 等)、ピル型タブ(hover付き)、ツールバーに境界線、入力欄のフォーカスリング(`--ring` = color-mix)、カードに影、控えめなスクロールバー
+- 技術メモ:
+  - Tailwind v4 はCSSファースト(`@import "tailwindcss"`)。クラス検出は `source(none)` + `@source "./**/*.{html,js}"` で生成物(app.css)を除外
+  - Preline 4 はTailwindプラグインが廃止され `variants.css` を読む方式。exportsに"style"条件がないため**相対パス**(`../../node_modules/preline/variants.css`)でimportする(`preline@2`+`tailwindcss@3`の旧方式は使わない)
+  - `.hidden { display:none !important }` は自前定義を維持(Tailwindの`.hidden`はID指定の`display:flex`に負けるため)
+  - JSが生成するDOMのクラス名はそのまま(セマンティッククラスを維持し、tailwind.css内で定義する方針)。Tailwindユーティリティは今後HTML側で自由に使える
+- 検証: ブラウザUIのスクリーンショットと、内部ページ(menuオーバーレイ)でapp.cssの読み込み・透過背景・トークンを確認済み
 
 ### 開発の進め方(ツール)
 
