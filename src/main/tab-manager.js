@@ -1,8 +1,13 @@
 const { WebContentsView } = require('electron');
+const path = require('path');
+const { attachContextMenu } = require('./context-menu');
 
-// タブバー(40px) + ツールバー(44px) = UI領域の高さ
-const CHROME_HEIGHT = 84;
-const NEW_TAB_URL = 'https://www.google.com';
+const NEW_TAB_URL = 'roopie://newtab';
+const INTERNAL_SCHEME = 'roopie:';
+const DEFAULT_CHROME_HEIGHT = 84;
+const ZOOM_LEVELS = [-3, -2, -1.5, -1, -0.5, 0, 0.5, 1, 1.5, 2, 2.5, 3];
+
+const INTERNAL_PRELOAD = path.join(__dirname, '..', 'preload', 'internal-preload.js');
 
 let nextTabId = 1;
 
@@ -12,27 +17,34 @@ let nextTabId = 1;
  * アクティブなタブだけを表示する。
  */
 class TabManager {
-  constructor(window) {
+  constructor(window, { history, bookmarks }) {
     this.window = window;
-    this.tabs = []; // { id, view }
+    this.history = history;
+    this.bookmarks = bookmarks;
+    this.tabs = []; // { id, view, isInternal, favicon }
     this.activeTabId = null;
+    this.chromeHeight = DEFAULT_CHROME_HEIGHT;
 
-    window.on('resize', () => this.layout());
-    window.on('maximize', () => this.layout());
-    window.on('unmaximize', () => this.layout());
+    for (const event of ['resize', 'maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen']) {
+      window.on(event, () => this.layout());
+    }
   }
 
   createTab(url = NEW_TAB_URL) {
     const id = nextTabId++;
+    const isInternal = isInternalUrl(url);
     const view = new WebContentsView({
       webPreferences: {
+        // 通常のWebページにはpreloadを渡さない(内部ページのみIPCを使える)
+        preload: isInternal ? INTERNAL_PRELOAD : undefined,
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
       },
     });
 
-    const tab = { id, view };
+    // hasInternalPreload はタブ生成時に固定される(preloadは後から変えられない)
+    const tab = { id, view, isInternal, hasInternalPreload: isInternal, favicon: null };
     this.tabs.push(tab);
     this.window.contentView.addChildView(view);
 
@@ -46,14 +58,51 @@ class TabManager {
     const wc = tab.view.webContents;
     const update = () => this.sendState();
 
-    wc.on('page-title-updated', update);
+    wc.on('page-title-updated', (_e, title) => {
+      this.history.update(wc.getURL(), title);
+      this.sendState();
+    });
     wc.on('did-start-loading', update);
     wc.on('did-stop-loading', update);
-    wc.on('did-navigate', update);
     wc.on('did-navigate-in-page', update);
+
+    wc.on('did-navigate', (_e, url) => {
+      tab.favicon = null;
+      tab.isInternal = isInternalUrl(url);
+      if (!tab.isInternal) this.history.add(url, wc.getTitle());
+      this.sendState();
+    });
+
     wc.on('page-favicon-updated', (_e, favicons) => {
       tab.favicon = favicons[favicons.length - 1] || null;
+      this.history.update(wc.getURL(), null, tab.favicon);
       this.sendState();
+    });
+
+    wc.on('did-fail-load', (_e, code, description, url, isMainFrame) => {
+      // -3 (ABORTED) はユーザー操作による中断なので無視する
+      if (isMainFrame && code !== -3) {
+        console.error(`読み込み失敗: ${url} (${code} ${description})`);
+      }
+    });
+
+    // ページ内検索の結果をUIへ
+    wc.on('found-in-page', (_e, result) => {
+      this.window.webContents.send('find:result', {
+        activeMatchOrdinal: result.activeMatchOrdinal,
+        matches: result.matches,
+      });
+    });
+
+    // 内部ページ(roopie://)はpreloadを持つタブでしか動かせないため、
+    // 通常タブから内部ページへ遷移しようとした場合は新しいタブで開く。
+    // (逆方向の内部ページ→通常ページは同じタブで遷移できる。preloadは
+    //  roopie:以外ではAPIを公開しないため安全)
+    wc.on('will-navigate', (event, url) => {
+      if (isInternalUrl(url) && !tab.hasInternalPreload) {
+        event.preventDefault();
+        this.createTab(url);
+      }
     });
 
     // target="_blank" 等のリンクは新しいタブで開く
@@ -61,6 +110,8 @@ class TabManager {
       this.createTab(url);
       return { action: 'deny' };
     });
+
+    attachContextMenu(wc, this);
   }
 
   closeTab(id) {
@@ -72,8 +123,7 @@ class TabManager {
     tab.view.webContents.close();
 
     if (this.tabs.length === 0) {
-      // 最後のタブを閉じたら新しいタブを開く(Chromeはウィンドウを閉じるが、まずは安全側で)
-      this.createTab();
+      this.window.close();
       return;
     }
 
@@ -108,11 +158,23 @@ class TabManager {
     this.switchTab(this.tabs[next].id);
   }
 
+  switchToIndex(index) {
+    // Ctrl+9 は Chrome と同じく「最後のタブ」
+    const tab = index >= 8 ? this.tabs[this.tabs.length - 1] : this.tabs[index];
+    if (tab) this.switchTab(tab.id);
+  }
+
   // アドレスバー入力: URLらしければURLとして、それ以外はGoogle検索
   navigate(input) {
-    const wc = this.activeWebContents();
-    if (!wc) return;
-    wc.loadURL(toUrl(input));
+    const url = toUrl(input);
+    const tab = this.getTab(this.activeTabId);
+    if (!tab) return;
+    // 内部ページはpreloadを持つタブでしか動かせない
+    if (isInternalUrl(url) && !tab.hasInternalPreload) {
+      this.createTab(url);
+      return;
+    }
+    tab.view.webContents.loadURL(url);
   }
 
   goBack() {
@@ -137,16 +199,67 @@ class TabManager {
     this.activeWebContents()?.toggleDevTools();
   }
 
+  // ---- ズーム ----
+  zoom(direction) {
+    const wc = this.activeWebContents();
+    if (!wc) return;
+    if (direction === 0) {
+      wc.setZoomLevel(0);
+    } else {
+      const current = wc.getZoomLevel();
+      const levels = direction > 0 ? ZOOM_LEVELS : [...ZOOM_LEVELS].reverse();
+      const next = levels.find((l) => (direction > 0 ? l > current + 0.01 : l < current - 0.01));
+      if (next !== undefined) wc.setZoomLevel(next);
+    }
+    this.sendState();
+  }
+
+  // ---- ページ内検索 ----
+  find(text, options = {}) {
+    const wc = this.activeWebContents();
+    if (!wc || !text) return;
+    wc.findInPage(text, { forward: options.forward !== false, findNext: !!options.findNext });
+  }
+
+  stopFind() {
+    this.activeWebContents()?.stopFindInPage('clearSelection');
+  }
+
+  // ---- ブックマーク ----
+  toggleBookmarkForActiveTab() {
+    const tab = this.getTab(this.activeTabId);
+    if (!tab || tab.isInternal) return;
+    const wc = tab.view.webContents;
+    const url = wc.getURL();
+    if (!url) return;
+    this.bookmarks.toggle(url, wc.getTitle() || url, tab.favicon);
+  }
+
+  setChromeHeight(height) {
+    if (!Number.isFinite(height) || height === this.chromeHeight) return;
+    this.chromeHeight = height;
+    this.layout();
+  }
+
   layout() {
     const active = this.getTab(this.activeTabId);
-    if (!active) return;
+    if (!active || this.window.isDestroyed()) return;
     const [width, height] = this.window.getContentSize();
     active.view.setBounds({
       x: 0,
-      y: CHROME_HEIGHT,
+      y: this.chromeHeight,
       width,
-      height: Math.max(0, height - CHROME_HEIGHT),
+      height: Math.max(0, height - this.chromeHeight),
     });
+  }
+
+  // 内部ページ(履歴・ダウンロード等)を開いているタブへ通知を送る
+  broadcastToInternal(channel, payload) {
+    for (const tab of this.tabs) {
+      if (tab.isInternal && !tab.view.webContents.isDestroyed()) {
+        tab.view.webContents.send(channel, payload);
+      }
+    }
   }
 
   getTab(id) {
@@ -164,14 +277,19 @@ class TabManager {
       activeTabId: this.activeTabId,
       tabs: this.tabs.map((t) => {
         const wc = t.view.webContents;
+        const url = wc.getURL();
         return {
           id: t.id,
           title: wc.getTitle() || '新しいタブ',
-          url: wc.getURL(),
-          favicon: t.favicon || null,
+          // 新しいタブページではアドレスバーを空にする(Chromeと同じ挙動)
+          url: isNewTabUrl(url) ? '' : url,
+          favicon: t.favicon,
+          isInternal: t.isInternal,
           isLoading: wc.isLoading(),
           canGoBack: wc.navigationHistory.canGoBack(),
           canGoForward: wc.navigationHistory.canGoForward(),
+          isBookmarked: !t.isInternal && !!this.bookmarks.find(url),
+          zoomLevel: wc.getZoomLevel(),
         };
       }),
     };
@@ -179,11 +297,19 @@ class TabManager {
   }
 }
 
+function isInternalUrl(url) {
+  return typeof url === 'string' && url.startsWith(INTERNAL_SCHEME);
+}
+
+// roopie:// はstandardスキームのため、読み込み後は末尾に "/" が付く
+function isNewTabUrl(url) {
+  return url === NEW_TAB_URL || url === `${NEW_TAB_URL}/`;
+}
+
 // 入力文字列をURLに変換(URLでなければGoogle検索URLにする)
 function toUrl(input) {
-  const text = input.trim();
-  if (/^https?:\/\//i.test(text)) return text;
-  if (/^about:/i.test(text)) return text;
+  const text = String(input).trim();
+  if (/^(https?|file|roopie|about):/i.test(text)) return text;
   // スペースを含まず、ドットかlocalhostを含むならURLとみなす
   if (!/\s/.test(text) && (/\./.test(text) || /^localhost(:\d+)?/.test(text))) {
     return `https://${text}`;
@@ -192,3 +318,4 @@ function toUrl(input) {
 }
 
 module.exports = TabManager;
+module.exports.NEW_TAB_URL = NEW_TAB_URL;
