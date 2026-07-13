@@ -30,7 +30,7 @@ Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP
 | Googleアカウントのプロファイル別管理 | ✅ 完了 |
 | Phase 2: 拡張機能対応 | ⏸ 後回し(ユーザー判断) |
 | Phase 4: マウスジェスチャー(GUIカスタム対応) | ✅ 完了 |
-| Phase 4: サイドパネル | ⬜ 未着手 |
+| Phase 4: サイドパネル(ブックマーク/履歴/メモ/Webパネル) | ✅ 完了 |
 | Phase 5: デザイン作り込み(Tailwind + Preline / Bonjourr風) | ⬜ 未着手 |
 | Phase 6: パスワード保存・細部の作り込み | ⬜ 未着手 |
 
@@ -41,6 +41,7 @@ Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP
 - **プロファイル**: ツールバーのボタンからプルダウンで切り替え。設定画面(Ctrl+,)で追加・名前変更・削除、共有トグル
 - **Googleアカウント**: ブラウザ全体に登録し、プロファイルごとに有効化+プライマリ選択
 - **マウスジェスチャー**: 右クリック+ドラッグ(軌跡+アクション名を表示)。既定: ←戻る / →進む / ↓新しいタブ / ↓→タブを閉じる / ↑↓再読み込み。設定画面のGUIで自由に追加・変更・削除でき、共有トグルで全プロファイル共通にもできる
+- **サイドパネル**(Ctrl+Shift+S / ツールバーの◨ボタン): ブックマーク・履歴クイックアクセス、自動保存メモ、Webパネル(任意サイトの常駐表示・複数登録・ヘッダーのアイコンで切り替え)。データはプロファイル単位
 
 ### 既知の制約・未対応
 
@@ -54,16 +55,13 @@ Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP
 優先順は「プロファイルの影響を受ける機能(先)→ 影響を受けないUI機能(後)」。
 プロファイル基盤が固まったので、以降は独立性の高い機能から着手できる。
 
-1. **Phase 4: サイドパネル**(Webパネル / メモ / ブックマーク・履歴クイックアクセス)
-   - Webパネルは `WebContentsView` を右側に配置し、プロファイルのセッションを共有する
-   - ドロップダウン類は既存の**オーバーレイView**の仕組みに乗せる
-2. **Phase 5: デザイン作り込み**(Tailwind CSS + Preline UI、スタートページはBonjourr風)
+1. **Phase 5: デザイン作り込み**(Tailwind CSS + Preline UI、スタートページはBonjourr風)
    - テーマ/カスタムCSS機能もここ。設定画面の共有トグル「テーマ」を有効化する
-3. **Phase 2(後回し分): 拡張機能対応の検証**(`electron-chrome-web-store` で uBlock Origin が動くか)
+2. **Phase 2(後回し分): 拡張機能対応の検証**(`electron-chrome-web-store` で uBlock Origin が動くか)
    - 動かない場合は方針転換の判断が必要な重要マイルストーン
-4. **Phase 6: パスワード保存**(`safeStorage` で暗号化。プロファイル単位、共有トグル「保存パスワード」を有効化)
-5. **Phase 6: 残りのChrome機能**(タブのドラッグ並べ替え、複数ウィンドウ、シークレットモード)
-6. 画面分割・メディアプレイヤー(要件定義書 4.3 / 4.4)
+3. **Phase 6: パスワード保存**(`safeStorage` で暗号化。プロファイル単位、共有トグル「保存パスワード」を有効化)
+4. **Phase 6: 残りのChrome機能**(タブのドラッグ並べ替え、複数ウィンドウ、シークレットモード)
+5. 画面分割・メディアプレイヤー(要件定義書 4.3 / 4.4)
 
 ## 進捗記録
 
@@ -180,6 +178,26 @@ Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP
   - オーバーレイView(`roopie://menu`)ではジェスチャーを無効化(URLで判定)
   - **CDP検証の注意**: `Runtime.evaluate` で `location.href` を変えると user activation なしのナビゲーションになり、Chromiumの履歴介入で `canGoBack()` が false になる(戻るジェスチャーが効かないように見える)。`userGesture: true` を付ければ実利用と同じ挙動になる
 - 検証: CDPで D(新しいタブ)/ DR(タブを閉じる)/ L(戻る)/ 無効化 / リセット / 設定GUIでの追加・変更・削除・共有トグル表示を確認済み
+
+### 2026-07-14: Phase 4 サイドパネル
+
+- ページ右側(幅360px、狭いウィンドウでは半分まで)に表示。Ctrl+Shift+S / ツールバーの◨ボタンで開閉
+- 4セクション: **ブックマーク**(クリックで現在のタブ、中クリックで新しいタブ)/ **履歴**(検索付き)/ **メモ**(自動保存)/ **Webパネル**
+- **Webパネル**: 任意のサイトを登録してパネル内に常駐表示(Vivaldi/Operaのウェブパネル相当)
+  - 表示中はパネルUIを44pxのヘッダーに縮め、その下にWebコンテンツ用の `WebContentsView` を配置
+  - ヘッダーには登録サイトのfaviconが並び、クリックで切り替え。◀で一覧へ戻る(webViewは破棄)、↻再読み込み、⤈タブで開く
+  - プロファイルのセッションを共有するのでログイン状態が使える。リンクの新規ウィンドウは通常タブで開く
+  - タイトル・faviconはWebパネル表示中に自動取得して登録エントリへ反映
+- データはプロファイル単位: `profiles/<id>/sidepanel.json`(`{ webPanels: [], notes: '' }`)
+- 追加/変更ファイル:
+  - `src/main/side-panel.js` — パネルView(`roopie://sidepanel`)とWebパネルViewの管理、レイアウト、データ管理
+  - `src/main/tab-manager.js` — `layout()` でパネル幅分ページを狭める(`setSidePanel()` で連携)。オーバーレイは全域のまま
+  - `src/renderer/pages/sidepanel.{html,css,js}` — パネルUI(通常モード / web-modeヘッダーの2モード)
+  - `src/main/main.js` — IPC(`sidepanel:toggle/state/add-web/remove-web/open-web/close-web/reload-web/set-notes`)。`broadcast()` がパネルUIにも届くよう `sendToPanel()` を追加(パネルはタブ一覧に含まれないため)
+- 技術メモ:
+  - パネルUIとWebコンテンツは別View。Webパネル表示中のヘッダーはパネルUI自身が web-mode 表示に切り替わる(高さはメイン側の定数 `WEB_HEADER_HEIGHT=44` と一致させる)
+  - プロファイル切り替え時は `switchSession()` で両Viewを破棄して作り直す(タブと同じ方針)
+- 検証: CDPで開閉・ボタンactive・メモ自動保存とプロファイル別分離・Webパネル追加/切替/削除/タイトル反映・タブ幅の縮小(1264→904→1264)を確認済み
 
 ### 開発の進め方(ツール)
 

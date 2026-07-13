@@ -45,6 +45,17 @@ if (location.protocol === 'roopie:') {
     getSettings: () => ipcRenderer.invoke('settings:get'),
     setSetting: (key, value) => ipcRenderer.send('settings:set', key, value),
 
+    // サイドパネル
+    getSidePanel: () => ipcRenderer.invoke('sidepanel:state'),
+    toggleSidePanel: () => ipcRenderer.send('sidepanel:toggle'),
+    addWebPanel: (url) => ipcRenderer.send('sidepanel:add-web', url),
+    removeWebPanel: (id) => ipcRenderer.send('sidepanel:remove-web', id),
+    openWebPanel: (id) => ipcRenderer.send('sidepanel:open-web', id),
+    closeWebPanel: () => ipcRenderer.send('sidepanel:close-web'),
+    reloadWebPanel: () => ipcRenderer.send('sidepanel:reload-web'),
+    setSidePanelNotes: (text) => ipcRenderer.send('sidepanel:set-notes', text),
+    onSidePanelState: (cb) => ipcRenderer.on('sidepanel:state', (_e, s) => cb(s)),
+
     getGestures: () => ipcRenderer.invoke('gestures:config'),
     setGestures: (config) => ipcRenderer.send('gestures:set', config),
     resetGestures: () => ipcRenderer.send('gestures:reset'),

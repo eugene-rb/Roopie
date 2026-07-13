@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('roopie', {
   // UI
   setChromeHeight: (height) => ipcRenderer.send('ui:chrome-height', height),
   toggleBookmarkBar: () => ipcRenderer.send('ui:toggle-bookmark-bar'),
+  toggleSidePanel: () => ipcRenderer.send('sidepanel:toggle'),
 
   // ページ内検索
   find: (text, options) => ipcRenderer.send('find:start', text, options),
@@ -38,6 +39,7 @@ contextBridge.exposeInMainWorld('roopie', {
   onProfilesState: (cb) => ipcRenderer.on('profiles:state', (_e, state) => cb(state)),
   onDownloadsState: (cb) => ipcRenderer.on('downloads:state', (_e, state) => cb(state)),
   onSettings: (cb) => ipcRenderer.on('ui:settings', (_e, s) => cb(s)),
+  onSidePanelState: (cb) => ipcRenderer.on('sidepanel:state', (_e, s) => cb(s)),
   onFocusAddressBar: (cb) => ipcRenderer.on('ui:focus-address-bar', () => cb()),
   onOpenFind: (cb) => ipcRenderer.on('ui:open-find', () => cb()),
   onFindResult: (cb) => ipcRenderer.on('find:result', (_e, r) => cb(r)),

@@ -222,6 +222,10 @@ body {
   color: var(--accent);
 }
 
+#sidepanel-btn.active {
+  color: var(--accent);
+}
+
 /* ---- プロファイル ---- */
 #profile-btn {
   display: flex;

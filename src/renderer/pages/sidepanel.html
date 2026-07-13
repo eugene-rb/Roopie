@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https: data:; style-src 'self'" />
+  <title>サイドパネル</title>
+  <link rel="stylesheet" href="pages.css" />
+  <link rel="stylesheet" href="sidepanel.css" />
+</head>
+<body>
+  <!-- 通常モード: セクション切り替え -->
+  <div id="home">
+    <div class="section-tabs">
+      <button class="section-tab" data-section="bookmarks" title="ブックマーク">★</button>
+      <button class="section-tab" data-section="history" title="履歴">&#x1f551;</button>
+      <button class="section-tab" data-section="notes" title="メモ">&#x270e;</button>
+      <button class="section-tab" data-section="web" title="Webパネル">&#x25e8;</button>
+      <div class="spacer"></div>
+      <button id="panel-close" class="section-tab" title="サイドパネルを閉じる (Ctrl+Shift+S)">&#x2715;</button>
+    </div>
+
+    <div id="section-bookmarks" class="section">
+      <div id="bookmark-list" class="panel-list"></div>
+    </div>
+
+    <div id="section-history" class="section">
+      <input id="history-search" class="panel-input" type="text" placeholder="履歴を検索" spellcheck="false" autocomplete="off" />
+      <div id="history-list" class="panel-list"></div>
+    </div>
+
+    <div id="section-notes" class="section">
+      <textarea id="notes" placeholder="メモを入力(自動保存されます)" spellcheck="false"></textarea>
+    </div>
+
+    <div id="section-web" class="section">
+      <p class="hint">よく使うサイトを登録して、ページを見ながら並行して使えます</p>
+      <div class="web-add">
+        <input id="web-url" class="panel-input" type="text" placeholder="URLを追加(例: gmail.com)" spellcheck="false" autocomplete="off" />
+        <button id="web-add-btn" class="btn">追加</button>
+      </div>
+      <div id="web-list" class="panel-list"></div>
+    </div>
+  </div>
+
+  <!-- Webパネルモード: このヘッダーだけ残して下にWebコンテンツが表示される -->
+  <div id="web-header">
+    <button id="web-back" class="hbtn" title="パネルメニューへ戻る">&#x25c0;</button>
+    <div id="web-icons"></div>
+    <div class="spacer"></div>
+    <button id="web-reload" class="hbtn" title="再読み込み">&#x21bb;</button>
+    <button id="web-open-tab" class="hbtn" title="タブで開く">&#x2b08;</button>
+  </div>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>

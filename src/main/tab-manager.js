@@ -58,6 +58,12 @@ class TabManager {
     return tab;
   }
 
+  // サイドパネル(レイアウト時に幅と領域を問い合わせる)
+  setSidePanel(sidePanel) {
+    this.sidePanel = sidePanel;
+    this.layout();
+  }
+
   // オーバーレイ(メニュー用の透明View)を登録する
   setOverlay(view) {
     this.overlay = view;
@@ -282,15 +288,24 @@ class TabManager {
   layout() {
     if (this.window.isDestroyed()) return;
     const [width, height] = this.window.getContentSize();
-    const bounds = {
+    const contentHeight = Math.max(0, height - this.chromeHeight);
+    const panelWidth = this.sidePanel?.widthFor(width) ?? 0;
+
+    // ページはサイドパネルの分だけ幅を狭める
+    this.getTab(this.activeTabId)?.view.setBounds({
       x: 0,
       y: this.chromeHeight,
-      width,
-      height: Math.max(0, height - this.chromeHeight),
-    };
-
-    this.getTab(this.activeTabId)?.view.setBounds(bounds);
-    this.overlay?.setBounds(bounds);
+      width: width - panelWidth,
+      height: contentHeight,
+    });
+    // オーバーレイ(メニュー)はパネルも含めた全域を覆う
+    this.overlay?.setBounds({ x: 0, y: this.chromeHeight, width, height: contentHeight });
+    this.sidePanel?.layout({
+      x: width - panelWidth,
+      y: this.chromeHeight,
+      width: panelWidth,
+      height: contentHeight,
+    });
   }
 
   // 内部ページ(履歴・ダウンロード等)を開いているタブへ通知を送る

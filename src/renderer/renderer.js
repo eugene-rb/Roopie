@@ -211,6 +211,13 @@ zoomLabel.addEventListener('click', () => window.roopie.zoom(0));
 downloadsBtn.addEventListener('click', () => window.roopie.newTab('roopie://downloads'));
 $('history-btn').addEventListener('click', () => window.roopie.newTab('roopie://history'));
 
+// ---- サイドパネル ----
+const sidepanelBtn = $('sidepanel-btn');
+sidepanelBtn.addEventListener('click', () => window.roopie.toggleSidePanel());
+window.roopie.onSidePanelState((state) => {
+  sidepanelBtn.classList.toggle('active', state.open);
+});
+
 addressBar.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && addressBar.value.trim()) {
     window.roopie.navigate(addressBar.value);

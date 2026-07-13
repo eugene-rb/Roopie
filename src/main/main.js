@@ -8,6 +8,7 @@ const Downloads = require('./downloads');
 const Profiles = require('./profiles');
 const GoogleAccounts = require('./google-accounts');
 const Gestures = require('./gestures');
+const SidePanel = require('./side-panel');
 const Store = require('./store');
 
 const PAGES_DIR = path.join(__dirname, '..', 'renderer', 'pages');
@@ -22,6 +23,7 @@ let bookmarks = null;
 let downloads = null;
 let settings = null;
 let gestures = null;
+let sidePanel = null;
 
 // 内部ページ用スキーム(roopie://newtab など)。app.ready前に宣言する必要がある。
 protocol.registerSchemesAsPrivileged([
@@ -100,6 +102,14 @@ function createWindow() {
   tabManager = new TabManager(mainWindow, { history, bookmarks, session });
   tabManager.setOverlay(createOverlayView(session));
 
+  sidePanel = new SidePanel(mainWindow, {
+    session,
+    store: store(profile, 'sidepanel', { webPanels: [], notes: '' }),
+    tabManager,
+    onState: () => sendSidePanel(),
+  });
+  tabManager.setSidePanel(sidePanel);
+
   mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
 
   mainWindow.webContents.once('did-finish-load', () => {
@@ -116,6 +126,7 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
     tabManager = null;
+    sidePanel = null;
   });
 
   setupMenu();
@@ -156,12 +167,16 @@ function applyActiveProfile({ recreateTabs } = {}) {
   settings.flush();
   settings = store(profile, 'settings', { ...DEFAULT_SETTINGS });
   gestures.setStore(store(profile, 'gestures', Gestures.defaults()));
+  sidePanel.setStore(store(profile, 'sidepanel', { webPanels: [], notes: '' }));
 
   const session = profiles.sessionFor(profile);
   registerInternalProtocol(session);
   registerGesturePreload(session);
   downloads.attachSession(session);
-  if (recreateTabs) tabManager.switchSession(session);
+  if (recreateTabs) {
+    tabManager.switchSession(session);
+    sidePanel.switchSession(session);
+  }
 
   sendAll();
 }
@@ -184,6 +199,7 @@ function broadcast(channel, payload) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   mainWindow.webContents.send(channel, payload);
   tabManager?.broadcastToInternal(channel, payload);
+  sidePanel?.sendToPanel(channel, payload); // パネルUIはタブ一覧に含まれないため個別に送る
 }
 
 function sendBookmarks() {
@@ -224,12 +240,18 @@ function sendGestures() {
   }
 }
 
+function sendSidePanel() {
+  if (!sidePanel) return;
+  broadcast('sidepanel:state', sidePanel.state());
+}
+
 function sendAll() {
   sendProfiles();
   sendSettings();
   sendGestures();
   sendBookmarks();
   sendDownloads();
+  sendSidePanel();
 }
 
 function toggleBookmarkBar() {
@@ -294,6 +316,11 @@ function setupMenu() {
           label: 'ブックマークバーを表示',
           accelerator: 'CmdOrCtrl+Shift+B',
           click: toggleBookmarkBar,
+        },
+        {
+          label: 'サイドパネル',
+          accelerator: 'CmdOrCtrl+Shift+S',
+          click: () => sidePanel?.toggle(),
         },
         { type: 'separator' },
         {
@@ -460,6 +487,16 @@ ipcMain.on('google:signout', async (_e, profileId) => {
   sendProfiles();
 });
 
+// ---- サイドパネル ----
+ipcMain.on('sidepanel:toggle', () => sidePanel?.toggle());
+ipcMain.handle('sidepanel:state', () => sidePanel?.state() ?? null);
+ipcMain.on('sidepanel:add-web', (_e, url) => sidePanel?.addWeb(url));
+ipcMain.on('sidepanel:remove-web', (_e, id) => sidePanel?.removeWeb(id));
+ipcMain.on('sidepanel:open-web', (_e, id) => sidePanel?.openWeb(id));
+ipcMain.on('sidepanel:close-web', () => sidePanel?.closeWeb());
+ipcMain.on('sidepanel:reload-web', () => sidePanel?.reloadWeb());
+ipcMain.on('sidepanel:set-notes', (_e, text) => sidePanel?.setNotes(text));
+
 // ---- マウスジェスチャー ----
 ipcMain.handle('gestures:config', () => gestures?.config() ?? null);
 ipcMain.on('gestures:set', (_e, config) => {
@@ -524,6 +561,7 @@ app.on('before-quit', () => {
   downloads?.store.flush();
   settings?.flush();
   gestures?.store.flush();
+  sidePanel?.store.flush();
 });
 
 app.on('activate', () => {
