@@ -80,6 +80,22 @@ body {
   user-select: none;
 }
 
+/* SVGアイコン共通(stroke式、ボタンの文字色に追従) */
+.icon-btn svg,
+.section-tab svg,
+.hbtn svg,
+#star-btn svg,
+#address-icon svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+}
+
 /* 共通アイコンボタン */
 .icon-btn {
   display: flex;
@@ -108,7 +124,7 @@ body {
   cursor: default;
 }
 
-/* ---- タブバー(ピル型タブ) ---- */
+/* ---- タブバー(ピル型タブ、タイトルバー兼用) ---- */
 #tab-bar {
   display: flex;
   align-items: center;
@@ -116,6 +132,10 @@ body {
   padding: 5px 8px;
   gap: 4px;
   background: var(--bg);
+  /* 空き領域のドラッグでウィンドウを移動できるようにする */
+  -webkit-app-region: drag;
+  /* 右上のウィンドウ操作ボタン(OSオーバーレイ)と重ならないように空ける */
+  padding-right: calc(100vw - env(titlebar-area-width, 100vw) + 8px);
 }
 
 #tabs {
@@ -124,6 +144,11 @@ body {
   gap: 4px;
   overflow: hidden;
   flex: 0 1 auto;
+  -webkit-app-region: no-drag;
+}
+
+#new-tab-btn {
+  -webkit-app-region: no-drag;
 }
 
 .tab {
@@ -156,6 +181,21 @@ body {
   width: 16px;
   height: 16px;
   flex-shrink: 0;
+}
+
+/* faviconがないタブの頭文字 */
+.tab .favicon-letter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-dim);
+  font-size: 9px;
+  font-weight: 700;
 }
 
 .tab .spinner {
@@ -191,6 +231,13 @@ body {
   font-size: 11px;
   line-height: 1;
   cursor: pointer;
+  /* ホバー中かアクティブなタブだけ表示する */
+  visibility: hidden;
+}
+
+.tab:hover .close-btn,
+.tab.active .close-btn {
+  visibility: visible;
 }
 
 .tab .close-btn:hover {
@@ -235,10 +282,24 @@ body {
   box-shadow: 0 0 0 3px var(--ring);
 }
 
+/* サイト種別アイコン(https=鍵 / それ以外=検索) */
+#address-icon {
+  display: flex;
+  align-items: center;
+  margin-left: 12px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+#address-icon svg {
+  width: 13px;
+  height: 13px;
+}
+
 #address-bar {
   flex: 1;
   height: 100%;
-  padding: 0 14px;
+  padding: 0 10px;
   border: none;
   border-radius: 10px;
   background: transparent;
@@ -249,6 +310,9 @@ body {
 }
 
 #star-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 26px;
   height: 26px;
   flex-shrink: 0;
@@ -256,7 +320,6 @@ body {
   border-radius: 7px;
   background: transparent;
   color: var(--text-dim);
-  font-size: 15px;
   cursor: pointer;
 }
 
@@ -264,8 +327,21 @@ body {
   background: var(--hover);
 }
 
+#star-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
 #star-btn.bookmarked {
   color: #ffc857;
+}
+
+#star-btn.bookmarked svg {
+  fill: #ffc857;
+}
+
+#star-btn:disabled {
+  visibility: hidden;
 }
 
 #zoom-label {

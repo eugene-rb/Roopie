@@ -76,7 +76,15 @@ function createWindow() {
     minWidth: 500,
     minHeight: 300,
     title: 'Roopie',
-    backgroundColor: '#1e1f24',
+    backgroundColor: '#16181d',
+    // ネイティブのタイトルバーを外し、タブバーをタイトルバーとして使う
+    // (ウィンドウ操作ボタンはOS標準のオーバーレイを右上に重ねる)
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      color: '#16181d',
+      symbolColor: '#e5e7eb',
+      height: 40,
+    },
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload', 'preload.js'),
       contextIsolation: true,

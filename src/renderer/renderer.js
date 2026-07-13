@@ -40,6 +40,12 @@ function renderTabs() {
       icon.className = 'favicon';
       icon.src = tab.favicon;
       tabEl.appendChild(icon);
+    } else {
+      // faviconがないタブは頭文字で代替
+      const letter = document.createElement('span');
+      letter.className = 'favicon-letter';
+      letter.textContent = (tab.title[0] || '·').toUpperCase();
+      tabEl.appendChild(letter);
     }
 
     const title = document.createElement('span');
@@ -75,9 +81,13 @@ function renderToolbar() {
   backBtn.disabled = !tab?.canGoBack;
   forwardBtn.disabled = !tab?.canGoForward;
 
-  starBtn.textContent = tab?.isBookmarked ? '★' : '☆';
   starBtn.classList.toggle('bookmarked', !!tab?.isBookmarked);
   starBtn.disabled = !!tab?.isInternal;
+
+  // アドレスバーのアイコン: httpsなら鍵、それ以外は検索
+  const isSecure = (tab?.url ?? '').startsWith('https://');
+  document.getElementById('icon-lock').classList.toggle('hidden', !isSecure);
+  document.getElementById('icon-search').classList.toggle('hidden', isSecure);
 
   // ズーム率(Chromiumのzoomレベルは1段階=1.2倍)
   const percent = Math.round(1.2 ** (tab?.zoomLevel ?? 0) * 100);
