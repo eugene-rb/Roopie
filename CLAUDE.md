@@ -29,7 +29,8 @@ Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP
 | Phase 3: プロファイル機能 + 設定画面 | ✅ 完了 |
 | Googleアカウントのプロファイル別管理 | ✅ 完了 |
 | Phase 2: 拡張機能対応 | ⏸ 後回し(ユーザー判断) |
-| Phase 4: マウスジェスチャー・サイドパネル | ⬜ 未着手 |
+| Phase 4: マウスジェスチャー(GUIカスタム対応) | ✅ 完了 |
+| Phase 4: サイドパネル | ⬜ 未着手 |
 | Phase 5: デザイン作り込み(Tailwind + Preline / Bonjourr風) | ⬜ 未着手 |
 | Phase 6: パスワード保存・細部の作り込み | ⬜ 未着手 |
 
@@ -39,6 +40,7 @@ Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP
 - **データ**: ブックマーク(Ctrl+D、バー Ctrl+Shift+B、管理 Ctrl+Shift+O)、履歴(Ctrl+H)、ダウンロード(Ctrl+J)
 - **プロファイル**: ツールバーのボタンからプルダウンで切り替え。設定画面(Ctrl+,)で追加・名前変更・削除、共有トグル
 - **Googleアカウント**: ブラウザ全体に登録し、プロファイルごとに有効化+プライマリ選択
+- **マウスジェスチャー**: 右クリック+ドラッグ(軌跡+アクション名を表示)。既定: ←戻る / →進む / ↓新しいタブ / ↓→タブを閉じる / ↑↓再読み込み。設定画面のGUIで自由に追加・変更・削除でき、共有トグルで全プロファイル共通にもできる
 
 ### 既知の制約・未対応
 
@@ -52,19 +54,16 @@ Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP
 優先順は「プロファイルの影響を受ける機能(先)→ 影響を受けないUI機能(後)」。
 プロファイル基盤が固まったので、以降は独立性の高い機能から着手できる。
 
-1. **Phase 4: マウスジェスチャー**(右クリック+ドラッグで戻る/進む/タブを閉じる)
-   - 設定はプロファイル単位。設定画面の共有トグル「マウスジェスチャー」を有効化する
-   - 実装場所: 各タブの `WebContentsView` にジェスチャー検出用のpreloadを注入するか、`before-input-event` で拾う
-2. **Phase 4: サイドパネル**(Webパネル / メモ / ブックマーク・履歴クイックアクセス)
+1. **Phase 4: サイドパネル**(Webパネル / メモ / ブックマーク・履歴クイックアクセス)
    - Webパネルは `WebContentsView` を右側に配置し、プロファイルのセッションを共有する
    - ドロップダウン類は既存の**オーバーレイView**の仕組みに乗せる
-3. **Phase 5: デザイン作り込み**(Tailwind CSS + Preline UI、スタートページはBonjourr風)
+2. **Phase 5: デザイン作り込み**(Tailwind CSS + Preline UI、スタートページはBonjourr風)
    - テーマ/カスタムCSS機能もここ。設定画面の共有トグル「テーマ」を有効化する
-4. **Phase 2(後回し分): 拡張機能対応の検証**(`electron-chrome-web-store` で uBlock Origin が動くか)
+3. **Phase 2(後回し分): 拡張機能対応の検証**(`electron-chrome-web-store` で uBlock Origin が動くか)
    - 動かない場合は方針転換の判断が必要な重要マイルストーン
-5. **Phase 6: パスワード保存**(`safeStorage` で暗号化。プロファイル単位、共有トグル「保存パスワード」を有効化)
-6. **Phase 6: 残りのChrome機能**(タブのドラッグ並べ替え、複数ウィンドウ、シークレットモード)
-7. 画面分割・メディアプレイヤー(要件定義書 4.3 / 4.4)
+4. **Phase 6: パスワード保存**(`safeStorage` で暗号化。プロファイル単位、共有トグル「保存パスワード」を有効化)
+5. **Phase 6: 残りのChrome機能**(タブのドラッグ並べ替え、複数ウィンドウ、シークレットモード)
+6. 画面分割・メディアプレイヤー(要件定義書 4.3 / 4.4)
 
 ## 進捗記録
 
@@ -159,6 +158,28 @@ Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP
   - 非表示時は `setVisible(false)` にしておけば入力を奪わない。表示中は全面を覆うので、外側クリック=メニューを閉じる、として扱える
 - 今後のドロップダウン(サイドパネルのメニュー等)もこのオーバーレイViewに乗せれば同じ問題を回避できる
 - 検証: ボタンクリック→メニュー表示→現在プロファイルにチェック→別プロファイル選択で切り替え→自動クローズ、までCDPで確認済み
+
+### 2026-07-14: Phase 4 マウスジェスチャー(GUIカスタム対応)
+
+- 右クリック+ドラッグで実行。ドラッグ中は青い軌跡と「← 戻る」のようなラベルを表示する
+- パターンは U/D/L/R の並び(最大8方向)→ アクションIDの対応表として保存(`gestures.json`)
+  - 既定: `L=back, R=forward, UD=reload, DR=closeTab, D=newTab`
+  - アクション: 戻る/進む/再読み込み/タブを閉じる/新しいタブ/次のタブ/前のタブ/ページの先頭へ/末尾へ
+- 設定画面(`roopie://settings`)にカスタムGUIを追加:
+  - 有効/無効トグル、割り当て一覧(アクションはその場でプルダウン変更・削除可)
+  - 方向ボタン(←↑↓→)でパターンを組み立てて「追加」(登録済みパターンは上書きの注意書きを表示)
+  - 「既定の割り当てに戻す」ボタン
+- プロファイル単位の設定。共有トグル「マウスジェスチャー」を有効化した(`SHARABLE_KEYS` に `gestures` を追加)
+- 追加/変更ファイル:
+  - `src/main/gestures.js` — 設定の管理(検証・既定値・リセット)
+  - `src/preload/gesture-preload.js` — ジェスチャー検出+軌跡描画。**`session.registerPreloadScript({ type: 'frame' })` でセッション全体に注入**するため、通常タブ・内部ページの両方で動く(webPreferences.preload と併用される)。ページには何もAPIを公開しない
+  - `src/main/main.js` — `registerGesturePreload(session)`(プロファイル切り替え時も呼ぶ)、IPC(`gestures:config/set/reset/perform`)。アクションは `e.sender` のタブに対して実行
+- 技術メモ(ハマりどころ):
+  - ジェスチャー後の右クリックメニュー抑止は、preloadのcaptureリスナーで `contextmenu` を `preventDefault` する(Windowsではcontextmenuはmouseupの後に発火)。ページがpreventDefaultするとElectronの `context-menu` イベント自体が発火しない
+  - 軌跡はcanvasをページDOMに一時挿入して描く。ページのCSPに関わらず効くよう、スタイルは `el.style.x = y`(CSSOM)で設定
+  - オーバーレイView(`roopie://menu`)ではジェスチャーを無効化(URLで判定)
+  - **CDP検証の注意**: `Runtime.evaluate` で `location.href` を変えると user activation なしのナビゲーションになり、Chromiumの履歴介入で `canGoBack()` が false になる(戻るジェスチャーが効かないように見える)。`userGesture: true` を付ければ実利用と同じ挙動になる
+- 検証: CDPで D(新しいタブ)/ DR(タブを閉じる)/ L(戻る)/ 無効化 / リセット / 設定GUIでの追加・変更・削除・共有トグル表示を確認済み
 
 ### 開発の進め方(ツール)
 

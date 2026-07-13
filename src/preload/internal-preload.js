@@ -45,6 +45,11 @@ if (location.protocol === 'roopie:') {
     getSettings: () => ipcRenderer.invoke('settings:get'),
     setSetting: (key, value) => ipcRenderer.send('settings:set', key, value),
 
+    getGestures: () => ipcRenderer.invoke('gestures:config'),
+    setGestures: (config) => ipcRenderer.send('gestures:set', config),
+    resetGestures: () => ipcRenderer.send('gestures:reset'),
+    onGesturesState: (cb) => ipcRenderer.on('gestures:state', (_e, s) => cb(s)),
+
     // プルダウンメニュー(オーバーレイ)用
     onMenuShow: (cb) => ipcRenderer.on('menu:show', (_e, payload) => cb(payload)),
     closeMenu: () => ipcRenderer.send('menu:close'),

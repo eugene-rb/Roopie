@@ -6,13 +6,14 @@ const Store = require('./store');
 
 // プロファイルごとに「共有する/しない」を選べる項目。
 // Cookie・ログインセッションはプロファイル機能の本質なので常に分離する(トグルなし)。
-const SHARABLE_KEYS = ['bookmarks', 'history', 'downloads', 'settings'];
+const SHARABLE_KEYS = ['bookmarks', 'history', 'downloads', 'settings', 'gestures'];
 
 const DEFAULT_SHARED = {
   bookmarks: false,
   history: false,
   downloads: false,
   settings: false,
+  gestures: false,
 };
 
 const COLORS = ['#6c8cff', '#4bbf8a', '#ffb454', '#e5709b', '#a78bfa', '#4dc4d9'];

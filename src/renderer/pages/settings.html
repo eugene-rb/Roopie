@@ -35,6 +35,39 @@
       <div id="accounts" class="list" style="margin-top: 14px"></div>
     </div>
 
+    <h2 class="section-title">マウスジェスチャー</h2>
+    <div class="card">
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">マウスジェスチャーを有効にする</div>
+          <div class="setting-desc">右クリックしたままマウスを動かし、ボタンを離すと実行されます</div>
+        </div>
+        <label class="switch">
+          <input id="gesture-enabled" type="checkbox" />
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div id="gesture-list" class="list"></div>
+
+      <div class="gesture-add">
+        <div class="gesture-arrows">
+          <button class="btn gesture-dir" data-dir="L" title="左">←</button>
+          <button class="btn gesture-dir" data-dir="U" title="上">↑</button>
+          <button class="btn gesture-dir" data-dir="D" title="下">↓</button>
+          <button class="btn gesture-dir" data-dir="R" title="右">→</button>
+        </div>
+        <div id="gesture-new-pattern" class="gesture-pattern empty">方向ボタンでジェスチャーを作成</div>
+        <button id="gesture-backspace" class="btn" title="1つ戻す">⌫</button>
+        <select id="gesture-action" class="gesture-select"></select>
+        <button id="gesture-add-btn" class="btn">追加</button>
+      </div>
+
+      <div class="gesture-footer">
+        <button id="gesture-reset" class="btn">既定の割り当てに戻す</button>
+      </div>
+    </div>
+
     <h2 class="section-title">ブラウザ設定</h2>
     <div class="card">
       <div class="setting-row">

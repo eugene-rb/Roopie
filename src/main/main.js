@@ -7,6 +7,7 @@ const Bookmarks = require('./bookmarks');
 const Downloads = require('./downloads');
 const Profiles = require('./profiles');
 const GoogleAccounts = require('./google-accounts');
+const Gestures = require('./gestures');
 const Store = require('./store');
 
 const PAGES_DIR = path.join(__dirname, '..', 'renderer', 'pages');
@@ -20,6 +21,7 @@ let history = null;
 let bookmarks = null;
 let downloads = null;
 let settings = null;
+let gestures = null;
 
 // 内部ページ用スキーム(roopie://newtab など)。app.ready前に宣言する必要がある。
 protocol.registerSchemesAsPrivileged([
@@ -45,6 +47,18 @@ function handleInternalRequest(request) {
 function registerInternalProtocol(session) {
   if (session.protocol.isProtocolHandled('roopie')) return;
   session.protocol.handle('roopie', handleInternalRequest);
+}
+
+// マウスジェスチャー検出用のpreloadをセッション内の全ページに注入する
+// (webPreferences.preload と併用できるので、内部ページでもジェスチャーが効く)
+const gesturePreloadSessions = new WeakSet();
+function registerGesturePreload(session) {
+  if (gesturePreloadSessions.has(session)) return;
+  gesturePreloadSessions.add(session);
+  session.registerPreloadScript({
+    type: 'frame',
+    filePath: path.join(__dirname, '..', 'preload', 'gesture-preload.js'),
+  });
 }
 
 function createWindow() {
@@ -76,9 +90,11 @@ function createWindow() {
   bookmarks = new Bookmarks(store(profile, 'bookmarks', []), () => sendBookmarks());
   downloads = new Downloads(store(profile, 'downloads', []), () => sendDownloads());
   settings = store(profile, 'settings', { ...DEFAULT_SETTINGS });
+  gestures = new Gestures(store(profile, 'gestures', Gestures.defaults()));
 
   const session = profiles.sessionFor(profile);
   registerInternalProtocol(session);
+  registerGesturePreload(session);
   downloads.attachSession(session);
 
   tabManager = new TabManager(mainWindow, { history, bookmarks, session });
@@ -139,9 +155,11 @@ function applyActiveProfile({ recreateTabs } = {}) {
   downloads.setStore(store(profile, 'downloads', []));
   settings.flush();
   settings = store(profile, 'settings', { ...DEFAULT_SETTINGS });
+  gestures.setStore(store(profile, 'gestures', Gestures.defaults()));
 
   const session = profiles.sessionFor(profile);
   registerInternalProtocol(session);
+  registerGesturePreload(session);
   downloads.attachSession(session);
   if (recreateTabs) tabManager.switchSession(session);
 
@@ -196,9 +214,20 @@ function sendSettings() {
   broadcast('ui:settings', settings.data);
 }
 
+function sendGestures() {
+  if (!gestures) return;
+  const config = gestures.config();
+  broadcast('gestures:state', config); // 設定画面(内部ページ)向け
+  // 各タブのジェスチャーpreload向け(通常タブにも送る必要があるためbroadcastとは別)
+  for (const tab of tabManager?.tabs ?? []) {
+    if (!tab.view.webContents.isDestroyed()) tab.view.webContents.send('gestures:config', config);
+  }
+}
+
 function sendAll() {
   sendProfiles();
   sendSettings();
+  sendGestures();
   sendBookmarks();
   sendDownloads();
 }
@@ -431,6 +460,48 @@ ipcMain.on('google:signout', async (_e, profileId) => {
   sendProfiles();
 });
 
+// ---- マウスジェスチャー ----
+ipcMain.handle('gestures:config', () => gestures?.config() ?? null);
+ipcMain.on('gestures:set', (_e, config) => {
+  gestures?.update(config);
+  sendGestures();
+});
+ipcMain.on('gestures:reset', () => {
+  gestures?.reset();
+  sendGestures();
+});
+
+// ジェスチャーpreloadからのアクション実行要求(送信元のタブに対して実行する)
+ipcMain.on('gestures:perform', (e, action) => {
+  if (!gestures?.data.enabled || !tabManager) return;
+  const wc = e.sender;
+  switch (action) {
+    case 'back':
+      if (wc.navigationHistory.canGoBack()) wc.navigationHistory.goBack();
+      break;
+    case 'forward':
+      if (wc.navigationHistory.canGoForward()) wc.navigationHistory.goForward();
+      break;
+    case 'reload':
+      wc.reload();
+      break;
+    case 'closeTab': {
+      const tab = tabManager.tabs.find((t) => t.view.webContents === wc);
+      if (tab) tabManager.closeTab(tab.id);
+      break;
+    }
+    case 'newTab':
+      tabManager.createTab();
+      break;
+    case 'nextTab':
+      tabManager.switchRelative(1);
+      break;
+    case 'prevTab':
+      tabManager.switchRelative(-1);
+      break;
+  }
+});
+
 ipcMain.handle('settings:get', () => settings?.data ?? { ...DEFAULT_SETTINGS });
 ipcMain.on('settings:set', (_e, key, value) => {
   if (!settings || !(key in DEFAULT_SETTINGS)) return;
@@ -452,6 +523,7 @@ app.on('before-quit', () => {
   bookmarks?.store.flush();
   downloads?.store.flush();
   settings?.flush();
+  gestures?.store.flush();
 });
 
 app.on('activate', () => {

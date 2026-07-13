@@ -12,12 +12,12 @@ const SHARABLE = [
   { key: 'history', name: '閲覧履歴', desc: '全プロファイルで同じ履歴を使う' },
   { key: 'downloads', name: 'ダウンロード履歴', desc: '全プロファイルで同じダウンロード履歴を使う' },
   { key: 'settings', name: 'ブラウザ設定', desc: 'ブックマークバーの表示などの設定を共通にする' },
+  { key: 'gestures', name: 'マウスジェスチャー', desc: 'ジェスチャーの割り当てを全プロファイルで共通にする' },
 ];
 
 // 今後のフェーズで対応する項目(UIだけ先に用意)
 const PLANNED = [
   { name: '保存パスワード', desc: 'Phase 6 で対応予定' },
-  { name: 'マウスジェスチャー', desc: 'Phase 4 で対応予定' },
   { name: 'テーマ・カスタムCSS', desc: 'Phase 5 で対応予定' },
   { name: '拡張機能', desc: '拡張機能対応後に実装' },
 ];
@@ -367,6 +367,153 @@ bookmarkBarToggle.addEventListener('change', () =>
   window.roopieInternal.setSetting('showBookmarkBar', bookmarkBarToggle.checked)
 );
 
+// ---- マウスジェスチャー ----
+const gestureEnabledEl = document.getElementById('gesture-enabled');
+const gestureListEl = document.getElementById('gesture-list');
+const gestureNewPatternEl = document.getElementById('gesture-new-pattern');
+const gestureActionEl = document.getElementById('gesture-action');
+const gestureAddBtn = document.getElementById('gesture-add-btn');
+
+const ARROWS = { U: '↑', D: '↓', L: '←', R: '→' };
+const MAX_PATTERN = 8;
+
+let gestureState = { enabled: false, mappings: {}, actions: [] };
+let newPattern = '';
+
+function toArrows(pattern) {
+  return [...pattern].map((d) => ARROWS[d]).join(' ');
+}
+
+function saveGestures(mappings = gestureState.mappings) {
+  window.roopieInternal.setGestures({ enabled: gestureEnabledEl.checked, mappings });
+}
+
+function renderGestures() {
+  gestureEnabledEl.checked = !!gestureState.enabled;
+
+  // アクションの選択肢(追加フォーム用)
+  const selected = gestureActionEl.value;
+  gestureActionEl.textContent = '';
+  for (const action of gestureState.actions) {
+    const option = document.createElement('option');
+    option.value = action.id;
+    option.textContent = action.label;
+    gestureActionEl.appendChild(option);
+  }
+  if (gestureState.actions.some((a) => a.id === selected)) gestureActionEl.value = selected;
+
+  // 割り当て一覧
+  gestureListEl.textContent = '';
+  const patterns = Object.keys(gestureState.mappings);
+  if (patterns.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-inline';
+    empty.textContent = 'ジェスチャーが登録されていません。下のボタンから追加できます';
+    gestureListEl.appendChild(empty);
+  }
+
+  for (const pattern of patterns) {
+    const row = document.createElement('div');
+    row.className = 'row';
+
+    const arrows = document.createElement('div');
+    arrows.className = 'gesture-row-pattern';
+    arrows.textContent = toArrows(pattern);
+    row.appendChild(arrows);
+
+    // アクションはその場でプルダウン変更できる
+    const select = document.createElement('select');
+    select.className = 'gesture-select';
+    for (const action of gestureState.actions) {
+      const option = document.createElement('option');
+      option.value = action.id;
+      option.textContent = action.label;
+      select.appendChild(option);
+    }
+    select.value = gestureState.mappings[pattern];
+    select.addEventListener('change', () => {
+      saveGestures({ ...gestureState.mappings, [pattern]: select.value });
+    });
+    row.appendChild(select);
+
+    const spacer = document.createElement('div');
+    spacer.className = 'main';
+    row.appendChild(spacer);
+
+    const actions = document.createElement('div');
+    actions.className = 'row-actions';
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'row-btn';
+    removeBtn.textContent = '削除';
+    removeBtn.addEventListener('click', () => {
+      const mappings = { ...gestureState.mappings };
+      delete mappings[pattern];
+      saveGestures(mappings);
+    });
+    actions.appendChild(removeBtn);
+    row.appendChild(actions);
+
+    gestureListEl.appendChild(row);
+  }
+
+  renderNewPattern();
+}
+
+function renderNewPattern() {
+  if (!newPattern) {
+    gestureNewPatternEl.className = 'gesture-pattern empty';
+    gestureNewPatternEl.textContent = '方向ボタンでジェスチャーを作成';
+    gestureAddBtn.disabled = true;
+    return;
+  }
+  gestureNewPatternEl.className = 'gesture-pattern';
+  gestureNewPatternEl.textContent = toArrows(newPattern);
+  gestureAddBtn.disabled = false;
+
+  // 既存のジェスチャーと重複している場合は注意書きを出す(追加すると上書き)
+  if (gestureState.mappings[newPattern]) {
+    const note = document.createElement('span');
+    note.className = 'gesture-conflict';
+    note.textContent = ' (登録済み: 追加で上書き)';
+    gestureNewPatternEl.appendChild(note);
+  }
+}
+
+for (const btn of document.querySelectorAll('.gesture-dir')) {
+  btn.addEventListener('click', () => {
+    const dir = btn.dataset.dir;
+    // 同じ方向は連続できない(ドラッグでは検出されないため)
+    if (newPattern.length >= MAX_PATTERN || newPattern[newPattern.length - 1] === dir) return;
+    newPattern += dir;
+    renderNewPattern();
+  });
+}
+
+document.getElementById('gesture-backspace').addEventListener('click', () => {
+  newPattern = newPattern.slice(0, -1);
+  renderNewPattern();
+});
+
+gestureAddBtn.addEventListener('click', () => {
+  if (!newPattern) return;
+  saveGestures({ ...gestureState.mappings, [newPattern]: gestureActionEl.value });
+  newPattern = '';
+  renderNewPattern();
+});
+
+document.getElementById('gesture-reset').addEventListener('click', () => {
+  if (confirm('マウスジェスチャーの割り当てを既定に戻します。よろしいですか?')) {
+    window.roopieInternal.resetGestures();
+  }
+});
+
+gestureEnabledEl.addEventListener('change', () => saveGestures());
+
+window.roopieInternal.onGesturesState((next) => {
+  gestureState = next;
+  renderGestures();
+});
+
 window.roopieInternal.onProfilesState((next) => {
   const known = new Set(state.profiles.map((p) => p.id));
   state = next;
@@ -389,13 +536,16 @@ document.addEventListener('visibilitychange', () => {
 });
 
 (async () => {
-  const [profileState, accounts, settings] = await Promise.all([
+  const [profileState, accounts, settings, gestureConfig] = await Promise.all([
     window.roopieInternal.listProfiles(),
     window.roopieInternal.listGoogleAccounts(),
     window.roopieInternal.getSettings(),
+    window.roopieInternal.getGestures(),
   ]);
   state = { ...profileState, googleAccounts: accounts };
   bookmarkBarToggle.checked = !!settings.showBookmarkBar;
+  if (gestureConfig) gestureState = gestureConfig;
   render();
+  renderGestures();
   refreshSignedIn();
 })();
