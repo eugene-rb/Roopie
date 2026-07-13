@@ -6,6 +6,7 @@ const History = require('./history');
 const Bookmarks = require('./bookmarks');
 const Downloads = require('./downloads');
 const Profiles = require('./profiles');
+const GoogleAccounts = require('./google-accounts');
 const Store = require('./store');
 
 const PAGES_DIR = path.join(__dirname, '..', 'renderer', 'pages');
@@ -14,6 +15,7 @@ const DEFAULT_SETTINGS = { showBookmarkBar: true };
 let mainWindow = null;
 let tabManager = null;
 let profiles = null;
+let googleAccounts = null;
 let history = null;
 let bookmarks = null;
 let downloads = null;
@@ -64,6 +66,12 @@ function createWindow() {
   profiles = new Profiles();
   const profile = profiles.active();
 
+  // Googleアカウント一覧はプロファイル横断で共有する
+  googleAccounts = new GoogleAccounts(
+    new Store(path.join(app.getPath('userData'), 'google-accounts.json'), []),
+    () => sendProfiles()
+  );
+
   history = new History(store(profile, 'history', []));
   bookmarks = new Bookmarks(store(profile, 'bookmarks', []), () => sendBookmarks());
   downloads = new Downloads(store(profile, 'downloads', []), () => sendDownloads());
@@ -99,6 +107,7 @@ function createWindow() {
 function store(profile, key, defaultValue) {
   return new Store(profiles.dataFile(profile, key), defaultValue);
 }
+
 
 // ---- プロファイル ----
 
@@ -159,6 +168,7 @@ function sendProfiles() {
   broadcast('profiles:state', {
     profiles: profiles.list(),
     activeId: profiles.activeId,
+    googleAccounts: googleAccounts?.list() ?? [],
   });
 }
 
@@ -349,6 +359,47 @@ ipcMain.on('profiles:remove', (_e, id) => {
 ipcMain.on('profiles:switch', (_e, id) => switchProfile(id));
 ipcMain.on('profiles:set-shared', (_e, id, key, shared) => setShared(id, key, shared));
 
+// ---- Googleアカウント ----
+ipcMain.handle('google:list', () => googleAccounts?.list() ?? []);
+ipcMain.on('google:add', (_e, email, label) => googleAccounts?.add(email, label));
+ipcMain.on('google:remove', (_e, accountId) => {
+  profiles?.forgetAccount(accountId);
+  googleAccounts?.remove(accountId);
+  sendProfiles();
+});
+ipcMain.on('google:set-enabled', (_e, profileId, accountId, enabled) => {
+  profiles?.setGoogleEnabled(profileId, accountId, enabled);
+  sendProfiles();
+});
+ipcMain.on('google:set-primary', (_e, profileId, accountId) => {
+  profiles?.setGooglePrimary(profileId, accountId);
+  sendProfiles();
+});
+
+// 実際にログイン中のアカウントは、そのプロファイルのセッションのCookieから取得する
+ipcMain.handle('google:signed-in', async (_e, profileId) => {
+  const profile = profiles?.list().find((p) => p.id === profileId);
+  if (!profile) return [];
+  return GoogleAccounts.signedInAccounts(profiles.sessionFor(profile));
+});
+
+// ログインはそのプロファイルのセッションで行う必要があるので、必要なら先に切り替える
+ipcMain.on('google:login', (_e, profileId, accountId) => {
+  const profile = profiles?.list().find((p) => p.id === profileId);
+  if (!profile) return;
+  const target = accountId ?? profile.google.primaryId;
+  const account = target ? googleAccounts?.find(target) : null;
+  if (profileId !== profiles.activeId) switchProfile(profileId);
+  tabManager?.createTab(GoogleAccounts.loginUrl(account?.email));
+});
+
+ipcMain.on('google:signout', async (_e, profileId) => {
+  const profile = profiles?.list().find((p) => p.id === profileId);
+  if (!profile) return;
+  await GoogleAccounts.signOut(profiles.sessionFor(profile));
+  sendProfiles();
+});
+
 ipcMain.handle('settings:get', () => settings?.data ?? { ...DEFAULT_SETTINGS });
 ipcMain.on('settings:set', (_e, key, value) => {
   if (!settings || !(key in DEFAULT_SETTINGS)) return;
@@ -365,6 +416,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   profiles?.store.flush();
+  googleAccounts?.store.flush();
   history?.store.flush();
   bookmarks?.store.flush();
   downloads?.store.flush();

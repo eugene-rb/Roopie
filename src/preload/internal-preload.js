@@ -31,6 +31,17 @@ if (location.protocol === 'roopie:') {
     setProfileShared: (id, key, shared) =>
       ipcRenderer.send('profiles:set-shared', id, key, shared),
 
+    listGoogleAccounts: () => ipcRenderer.invoke('google:list'),
+    addGoogleAccount: (email, label) => ipcRenderer.send('google:add', email, label),
+    removeGoogleAccount: (accountId) => ipcRenderer.send('google:remove', accountId),
+    setGoogleEnabled: (profileId, accountId, enabled) =>
+      ipcRenderer.send('google:set-enabled', profileId, accountId, enabled),
+    setGooglePrimary: (profileId, accountId) =>
+      ipcRenderer.send('google:set-primary', profileId, accountId),
+    signedInGoogleAccounts: (profileId) => ipcRenderer.invoke('google:signed-in', profileId),
+    googleLogin: (profileId, accountId) => ipcRenderer.send('google:login', profileId, accountId),
+    googleSignOut: (profileId) => ipcRenderer.send('google:signout', profileId),
+
     getSettings: () => ipcRenderer.invoke('settings:get'),
     setSetting: (key, value) => ipcRenderer.send('settings:set', key, value),
 

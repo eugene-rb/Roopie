@@ -27,6 +27,13 @@ class Profiles {
       this.store.data = { profiles: [first], activeId: first.id };
       this.store.flush();
     }
+
+    // 古い形式のprofiles.jsonでも動くように、足りない項目を補う
+    for (const profile of this.profiles) {
+      profile.shared = { ...DEFAULT_SHARED, ...profile.shared };
+      profile.google = { enabled: [], primaryId: null, ...profile.google };
+      delete profile.googleAccount;
+    }
   }
 
   newProfile(name) {
@@ -36,6 +43,8 @@ class Profiles {
       name,
       color: COLORS[used % COLORS.length],
       shared: { ...DEFAULT_SHARED },
+      // このプロファイルで使うGoogleアカウント(IDは google-accounts.js の一覧を参照)
+      google: { enabled: [], primaryId: null },
       createdAt: Date.now(),
     };
   }
@@ -92,6 +101,41 @@ class Profiles {
     this.store.data.activeId = id;
     this.store.flush();
     return true;
+  }
+
+  // このプロファイルでGoogleアカウントを使うかどうか
+  setGoogleEnabled(profileId, accountId, enabled) {
+    const profile = this.profiles.find((p) => p.id === profileId);
+    if (!profile) return;
+    const google = profile.google;
+    const has = google.enabled.includes(accountId);
+
+    if (enabled && !has) {
+      google.enabled.push(accountId);
+      // 最初に有効化したアカウントを自動でプライマリにする
+      if (!google.primaryId) google.primaryId = accountId;
+    } else if (!enabled && has) {
+      google.enabled = google.enabled.filter((id) => id !== accountId);
+      if (google.primaryId === accountId) {
+        google.primaryId = google.enabled[0] ?? null;
+      }
+    }
+    this.store.save();
+  }
+
+  // プライマリ(既定でログインするアカウント)は有効なアカウントの中からしか選べない
+  setGooglePrimary(profileId, accountId) {
+    const profile = this.profiles.find((p) => p.id === profileId);
+    if (!profile || !profile.google.enabled.includes(accountId)) return;
+    profile.google.primaryId = accountId;
+    this.store.save();
+  }
+
+  // アカウント自体が削除されたら、全プロファイルの参照も外す
+  forgetAccount(accountId) {
+    for (const profile of this.profiles) {
+      this.setGoogleEnabled(profile.id, accountId, false);
+    }
   }
 
   setShared(id, key, shared) {

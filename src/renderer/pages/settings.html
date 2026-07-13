@@ -21,6 +21,20 @@
 
     <div id="profiles"></div>
 
+    <h2 class="section-title">Googleアカウント</h2>
+    <div class="card">
+      <p class="note" style="margin-bottom: 12px">
+        ブラウザに登録したアカウントを、各プロファイルで「使う/使わない」と「プライマリ(既定でログインするアカウント)」として選べます。
+        実際のログインは各プロファイルのセッションで一度行う必要があり、以降はそのプロファイル内でログイン状態が保持されます。
+      </p>
+      <div class="account-add">
+        <input id="account-email" class="search" type="email" placeholder="メールアドレス(例: you@gmail.com)" autocomplete="off" />
+        <input id="account-label" class="search" type="text" placeholder="表示名(任意)" autocomplete="off" />
+        <button id="account-add-btn" class="btn">登録</button>
+      </div>
+      <div id="accounts" class="list" style="margin-top: 14px"></div>
+    </div>
+
     <h2 class="section-title">ブラウザ設定</h2>
     <div class="card">
       <div class="setting-row">

@@ -61,6 +61,100 @@
   gap: 6px;
 }
 
+/* Googleアカウント */
+.account-add {
+  display: flex;
+  gap: 8px;
+}
+
+.account-add .search {
+  flex: 1;
+  width: auto;
+}
+
+.google-section {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.google-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.google-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+}
+
+.google-row input[type="checkbox"],
+.google-row input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.google-row input:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.google-email {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.google-email .label {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.tag {
+  padding: 2px 7px;
+  border-radius: 5px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.tag.primary {
+  background: rgba(108, 140, 255, 0.15);
+  color: var(--accent);
+}
+
+.tag.signed-in {
+  background: rgba(75, 191, 138, 0.15);
+  color: #4bbf8a;
+}
+
+.radio-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.empty-inline {
+  padding: 8px 0;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
 /* 共有トグル */
 .shared-list {
   display: grid;
