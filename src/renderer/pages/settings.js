@@ -13,12 +13,12 @@ const SHARABLE = [
   { key: 'downloads', name: 'ダウンロード履歴', desc: '全プロファイルで同じダウンロード履歴を使う' },
   { key: 'settings', name: 'ブラウザ設定', desc: 'ブックマークバーの表示などの設定を共通にする' },
   { key: 'gestures', name: 'マウスジェスチャー', desc: 'ジェスチャーの割り当てを全プロファイルで共通にする' },
+  { key: 'theme', name: 'テーマ', desc: 'アクセントカラーやカスタムCSSを全プロファイルで共通にする' },
 ];
 
 // 今後のフェーズで対応する項目(UIだけ先に用意)
 const PLANNED = [
   { name: '保存パスワード', desc: 'Phase 6 で対応予定' },
-  { name: 'テーマ・カスタムCSS', desc: 'Phase 5 で対応予定' },
   { name: '拡張機能', desc: '拡張機能対応後に実装' },
 ];
 
@@ -367,6 +367,46 @@ bookmarkBarToggle.addEventListener('change', () =>
   window.roopieInternal.setSetting('showBookmarkBar', bookmarkBarToggle.checked)
 );
 
+// ---- テーマ ----
+const ACCENT_PRESETS = ['#6c8cff', '#4bbf8a', '#ffb454', '#e5709b', '#a78bfa', '#4dc4d9', '#ff6b6b'];
+const accentSwatchesEl = document.getElementById('accent-swatches');
+const accentCustomEl = document.getElementById('accent-custom');
+const themeBgEl = document.getElementById('theme-bg');
+const customCssEl = document.getElementById('custom-css');
+
+let themeState = { accent: '#6c8cff', background: 'auto', customCss: '' };
+
+function renderTheme() {
+  accentSwatchesEl.textContent = '';
+  for (const color of ACCENT_PRESETS) {
+    const swatch = document.createElement('button');
+    swatch.className = 'swatch' + (color === themeState.accent ? ' active' : '');
+    swatch.style.background = color;
+    swatch.title = color;
+    swatch.addEventListener('click', () => window.roopieInternal.setTheme({ accent: color }));
+    accentSwatchesEl.appendChild(swatch);
+  }
+  accentCustomEl.value = themeState.accent;
+  themeBgEl.value = themeState.background;
+  // 編集中のカスタムCSSは上書きしない
+  if (document.activeElement !== customCssEl) customCssEl.value = themeState.customCss;
+}
+
+accentCustomEl.addEventListener('change', () =>
+  window.roopieInternal.setTheme({ accent: accentCustomEl.value })
+);
+themeBgEl.addEventListener('change', () =>
+  window.roopieInternal.setTheme({ background: themeBgEl.value })
+);
+document.getElementById('custom-css-apply').addEventListener('click', () =>
+  window.roopieInternal.setTheme({ customCss: customCssEl.value })
+);
+
+window.roopieInternal.onThemeState((next) => {
+  themeState = next;
+  renderTheme();
+});
+
 // ---- マウスジェスチャー ----
 const gestureEnabledEl = document.getElementById('gesture-enabled');
 const gestureListEl = document.getElementById('gesture-list');
@@ -536,16 +576,19 @@ document.addEventListener('visibilitychange', () => {
 });
 
 (async () => {
-  const [profileState, accounts, settings, gestureConfig] = await Promise.all([
+  const [profileState, accounts, settings, gestureConfig, themeConfig] = await Promise.all([
     window.roopieInternal.listProfiles(),
     window.roopieInternal.listGoogleAccounts(),
     window.roopieInternal.getSettings(),
     window.roopieInternal.getGestures(),
+    window.roopieInternal.getTheme(),
   ]);
   state = { ...profileState, googleAccounts: accounts };
   bookmarkBarToggle.checked = !!settings.showBookmarkBar;
   if (gestureConfig) gestureState = gestureConfig;
+  if (themeConfig) themeState = themeConfig;
   render();
   renderGestures();
+  renderTheme();
   refreshSignedIn();
 })();

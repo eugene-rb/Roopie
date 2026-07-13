@@ -155,6 +155,24 @@ window.roopie.onSettings((settings) => {
   reportChromeHeight();
 });
 
+// ---- テーマ ----
+// カスタムCSSはadoptedStyleSheets経由で適用する(CSPのstyle-srcに妨げられない)
+const customSheet = new CSSStyleSheet();
+
+function applyTheme(theme) {
+  if (!theme) return;
+  document.documentElement.style.setProperty('--accent', theme.accent);
+  try {
+    customSheet.replaceSync(theme.customCss || '');
+  } catch {
+    // 不正なCSSは無視
+  }
+  document.adoptedStyleSheets = [customSheet];
+}
+
+window.roopie.onThemeState(applyTheme);
+window.roopie.getTheme().then(applyTheme);
+
 // ---- ページ内検索 ----
 window.roopie.onOpenFind(() => {
   findBar.classList.remove('hidden');

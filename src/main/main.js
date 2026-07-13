@@ -14,6 +14,11 @@ const Store = require('./store');
 const PAGES_DIR = path.join(__dirname, '..', 'renderer', 'pages');
 const DEFAULT_SETTINGS = { showBookmarkBar: true };
 
+// テーマ(アクセントカラー / 新しいタブの背景 / カスタムCSS)
+const DEFAULT_THEME = { accent: '#6c8cff', background: 'auto', customCss: '' };
+const THEME_BACKGROUNDS = ['auto', 'dawn', 'day', 'dusk', 'night', 'plain'];
+const MAX_CUSTOM_CSS = 50000;
+
 let mainWindow = null;
 let tabManager = null;
 let profiles = null;
@@ -24,6 +29,7 @@ let downloads = null;
 let settings = null;
 let gestures = null;
 let sidePanel = null;
+let theme = null;
 
 // 内部ページ用スキーム(roopie://newtab など)。app.ready前に宣言する必要がある。
 protocol.registerSchemesAsPrivileged([
@@ -93,6 +99,7 @@ function createWindow() {
   downloads = new Downloads(store(profile, 'downloads', []), () => sendDownloads());
   settings = store(profile, 'settings', { ...DEFAULT_SETTINGS });
   gestures = new Gestures(store(profile, 'gestures', Gestures.defaults()));
+  theme = store(profile, 'theme', { ...DEFAULT_THEME });
 
   const session = profiles.sessionFor(profile);
   registerInternalProtocol(session);
@@ -168,6 +175,8 @@ function applyActiveProfile({ recreateTabs } = {}) {
   settings = store(profile, 'settings', { ...DEFAULT_SETTINGS });
   gestures.setStore(store(profile, 'gestures', Gestures.defaults()));
   sidePanel.setStore(store(profile, 'sidepanel', { webPanels: [], notes: '' }));
+  theme.flush();
+  theme = store(profile, 'theme', { ...DEFAULT_THEME });
 
   const session = profiles.sessionFor(profile);
   registerInternalProtocol(session);
@@ -245,6 +254,11 @@ function sendSidePanel() {
   broadcast('sidepanel:state', sidePanel.state());
 }
 
+function sendTheme() {
+  if (!theme) return;
+  broadcast('theme:state', theme.data);
+}
+
 function sendAll() {
   sendProfiles();
   sendSettings();
@@ -252,6 +266,7 @@ function sendAll() {
   sendBookmarks();
   sendDownloads();
   sendSidePanel();
+  sendTheme();
 }
 
 function toggleBookmarkBar() {
@@ -497,6 +512,23 @@ ipcMain.on('sidepanel:close-web', () => sidePanel?.closeWeb());
 ipcMain.on('sidepanel:reload-web', () => sidePanel?.reloadWeb());
 ipcMain.on('sidepanel:set-notes', (_e, text) => sidePanel?.setNotes(text));
 
+// ---- テーマ ----
+ipcMain.handle('theme:get', () => theme?.data ?? { ...DEFAULT_THEME });
+ipcMain.on('theme:set', (_e, patch) => {
+  if (!theme || !patch) return;
+  if (typeof patch.accent === 'string' && /^#[0-9a-fA-F]{6}$/.test(patch.accent)) {
+    theme.data.accent = patch.accent.toLowerCase();
+  }
+  if (THEME_BACKGROUNDS.includes(patch.background)) {
+    theme.data.background = patch.background;
+  }
+  if (typeof patch.customCss === 'string') {
+    theme.data.customCss = patch.customCss.slice(0, MAX_CUSTOM_CSS);
+  }
+  theme.save();
+  sendTheme();
+});
+
 // ---- マウスジェスチャー ----
 ipcMain.handle('gestures:config', () => gestures?.config() ?? null);
 ipcMain.on('gestures:set', (_e, config) => {
@@ -562,6 +594,7 @@ app.on('before-quit', () => {
   settings?.flush();
   gestures?.store.flush();
   sidePanel?.store.flush();
+  theme?.flush();
 });
 
 app.on('activate', () => {

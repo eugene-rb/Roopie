@@ -56,6 +56,11 @@ if (location.protocol === 'roopie:') {
     setSidePanelNotes: (text) => ipcRenderer.send('sidepanel:set-notes', text),
     onSidePanelState: (cb) => ipcRenderer.on('sidepanel:state', (_e, s) => cb(s)),
 
+    // テーマ
+    getTheme: () => ipcRenderer.invoke('theme:get'),
+    setTheme: (patch) => ipcRenderer.send('theme:set', patch),
+    onThemeState: (cb) => ipcRenderer.on('theme:state', (_e, t) => cb(t)),
+
     getGestures: () => ipcRenderer.invoke('gestures:config'),
     setGestures: (config) => ipcRenderer.send('gestures:set', config),
     resetGestures: () => ipcRenderer.send('gestures:reset'),

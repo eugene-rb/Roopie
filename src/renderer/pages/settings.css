@@ -306,6 +306,67 @@
   cursor: not-allowed;
 }
 
+/* テーマ */
+.swatches {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#accent-swatches {
+  display: flex;
+  gap: 6px;
+}
+
+.swatch {
+  width: 24px;
+  height: 24px;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  padding: 0;
+}
+
+.swatch.active {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25);
+}
+
+#accent-custom {
+  width: 30px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  cursor: pointer;
+}
+
+.theme-css {
+  margin-top: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#custom-css {
+  min-height: 110px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: 12px/1.6 Consolas, "Cascadia Mono", monospace;
+  outline: none;
+  resize: vertical;
+}
+
+#custom-css:focus {
+  border-color: var(--accent);
+}
+
 .gesture-conflict {
   font-size: 11px;
   color: #ffb454;

@@ -1,101 +1,243 @@
-/* 新しいタブページ(Bonjourr風のミニマルなデザインは Phase 5 で本格対応) */
+/* 新しいタブ(Bonjourr風: フルスクリーン背景+大きな時計+控えめな検索欄) */
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   display: flex;
   align-items: center;
   justify-content: center;
+  color: #fff;
 }
 
+/* ---- 背景(時間帯 or テーマ設定で切り替え) ---- */
+#bg {
+  position: fixed;
+  inset: -4%;
+  z-index: -2;
+  background: #1e1f24;
+  animation: bg-drift 80s ease-in-out infinite alternate;
+}
+
+@keyframes bg-drift {
+  from { transform: scale(1) translateY(0); }
+  to { transform: scale(1.06) translateY(-1.5%); }
+}
+
+body[data-bg="dawn"] #bg {
+  background:
+    radial-gradient(120% 80% at 50% 110%, rgba(255, 183, 130, 0.55) 0%, transparent 55%),
+    linear-gradient(168deg, #171632 0%, #453667 38%, #a45f7d 72%, #e29a76 100%);
+}
+
+body[data-bg="day"] #bg {
+  background:
+    radial-gradient(110% 70% at 50% -20%, rgba(255, 255, 255, 0.28) 0%, transparent 60%),
+    linear-gradient(172deg, #3a6ea8 0%, #6d9dce 52%, #a9c9e8 100%);
+}
+
+body[data-bg="dusk"] #bg {
+  background:
+    radial-gradient(120% 85% at 50% 115%, rgba(255, 140, 90, 0.6) 0%, transparent 58%),
+    linear-gradient(165deg, #241d3e 0%, #55356a 42%, #b25457 76%, #e59a5e 100%);
+}
+
+body[data-bg="night"] #bg {
+  background:
+    radial-gradient(100% 65% at 78% -10%, rgba(96, 118, 200, 0.35) 0%, transparent 60%),
+    linear-gradient(176deg, #0a0f24 0%, #16203f 55%, #26335c 100%);
+}
+
+body[data-bg="plain"] #bg {
+  background: var(--bg);
+  animation: none;
+}
+
+/* 周辺を少し落として中央の文字を読みやすくする */
+#vignette {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.3) 100%);
+  pointer-events: none;
+}
+
+body[data-bg="plain"] #vignette {
+  display: none;
+}
+
+/* ---- 中央のコンテンツ ---- */
 #newtab {
   display: flex;
   flex-direction: column;
   align-items: center;
   width: 100%;
-  max-width: 640px;
+  max-width: 680px;
   padding: 0 24px;
-  margin-top: -8vh;
+  margin-top: -6vh;
 }
 
 #clock {
   text-align: center;
-  margin-bottom: 36px;
+  margin-bottom: 40px;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.35);
 }
 
 #time {
-  font-size: 72px;
+  font-size: clamp(72px, 13vw, 124px);
   font-weight: 200;
-  letter-spacing: 2px;
-  line-height: 1.1;
+  letter-spacing: 0.01em;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+
+#date {
+  margin-top: 10px;
+  font-size: 16px;
+  font-weight: 300;
+  color: rgba(255, 255, 255, 0.85);
 }
 
 #greeting {
-  margin-top: 6px;
-  font-size: 15px;
-  color: var(--text-dim);
+  margin-top: 4px;
+  font-size: 14px;
+  font-weight: 300;
+  color: rgba(255, 255, 255, 0.65);
 }
 
+/* ---- 検索欄(すりガラスのピル) ---- */
 #search {
-  width: 100%;
-  height: 48px;
-  padding: 0 22px;
-  border: 1px solid var(--border);
-  border-radius: 24px;
-  background: var(--card);
-  color: var(--text);
+  width: min(560px, 100%);
+  height: 46px;
+  padding: 0 24px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 23px;
+  background: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(14px);
+  color: #fff;
   font-size: 15px;
+  text-align: center;
   outline: none;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+  transition: background 0.2s, border-color 0.2s;
+}
+
+#search::placeholder {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+#search:hover {
+  background: rgba(255, 255, 255, 0.18);
 }
 
 #search:focus {
+  background: rgba(255, 255, 255, 0.2);
   border-color: var(--accent);
+  text-align: left;
 }
 
+/* ---- クイックリンク(アイコンタイル) ---- */
 #quick-links {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 10px;
-  margin-top: 32px;
+  gap: 18px 14px;
+  margin-top: 44px;
+  max-width: 620px;
 }
 
 .quick-link {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  width: 84px;
-  padding: 12px 6px;
-  border-radius: 12px;
-  color: var(--text-dim);
+  gap: 7px;
+  width: 68px;
+  color: rgba(255, 255, 255, 0.8);
   text-decoration: none;
   font-size: 11px;
+  font-weight: 300;
   text-align: center;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.4);
 }
 
-.quick-link:hover {
-  background: var(--card);
-  color: var(--text);
-}
-
-.quick-link img,
-.quick-link .placeholder {
-  width: 28px;
-  height: 28px;
-}
-
-.quick-link .placeholder {
+.quick-link .tile {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
-  background: var(--card-hover);
-  color: var(--text);
-  font-size: 14px;
-  font-weight: 600;
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  transition: background 0.15s, transform 0.15s;
 }
 
-.quick-link span {
+.quick-link:hover .tile {
+  background: rgba(255, 255, 255, 0.24);
+  transform: translateY(-2px);
+}
+
+.quick-link img {
+  width: 24px;
+  height: 24px;
+}
+
+.quick-link .placeholder {
+  font-size: 18px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.quick-link span.label {
   width: 100%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ---- シンプル(単色)背景のときは従来のダークUIに寄せる ---- */
+body[data-bg="plain"] {
+  color: var(--text);
+}
+
+body[data-bg="plain"] #clock,
+body[data-bg="plain"] .quick-link {
+  text-shadow: none;
+}
+
+body[data-bg="plain"] #date,
+body[data-bg="plain"] #greeting {
+  color: var(--text-dim);
+}
+
+body[data-bg="plain"] #search {
+  background: var(--card);
+  border-color: var(--border);
+  backdrop-filter: none;
+  color: var(--text);
+  box-shadow: none;
+}
+
+body[data-bg="plain"] #search::placeholder {
+  color: var(--text-dim);
+}
+
+body[data-bg="plain"] .quick-link {
+  color: var(--text-dim);
+}
+
+body[data-bg="plain"] .quick-link .tile {
+  background: var(--card);
+  border-color: var(--border);
+  backdrop-filter: none;
+  box-shadow: none;
+}
+
+body[data-bg="plain"] .quick-link:hover .tile {
+  background: var(--card-hover);
 }

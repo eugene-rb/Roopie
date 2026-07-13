@@ -40,6 +40,8 @@ contextBridge.exposeInMainWorld('roopie', {
   onDownloadsState: (cb) => ipcRenderer.on('downloads:state', (_e, state) => cb(state)),
   onSettings: (cb) => ipcRenderer.on('ui:settings', (_e, s) => cb(s)),
   onSidePanelState: (cb) => ipcRenderer.on('sidepanel:state', (_e, s) => cb(s)),
+  getTheme: () => ipcRenderer.invoke('theme:get'),
+  onThemeState: (cb) => ipcRenderer.on('theme:state', (_e, t) => cb(t)),
   onFocusAddressBar: (cb) => ipcRenderer.on('ui:focus-address-bar', () => cb()),
   onOpenFind: (cb) => ipcRenderer.on('ui:open-find', () => cb()),
   onFindResult: (cb) => ipcRenderer.on('find:result', (_e, r) => cb(r)),
