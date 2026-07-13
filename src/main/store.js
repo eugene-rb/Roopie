@@ -1,16 +1,15 @@
-const { app } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
 const SAVE_DELAY = 300;
 
 /**
- * userData配下のJSONファイルにデータを永続化する簡易ストア。
- * 書き込みはデバウンスし、終了時に flush() で確実に保存する。
+ * JSONファイルにデータを永続化する簡易ストア。
+ * 書き込みはデバウンスし、終了時やプロファイル切り替え時に flush() で確実に保存する。
  */
 class Store {
-  constructor(filename, defaultValue) {
-    this.file = path.join(app.getPath('userData'), filename);
+  constructor(filePath, defaultValue) {
+    this.file = filePath;
     this.data = defaultValue;
     this.timer = null;
     this.load();
@@ -35,6 +34,7 @@ class Store {
       this.timer = null;
     }
     try {
+      fs.mkdirSync(path.dirname(this.file), { recursive: true });
       fs.writeFileSync(this.file, JSON.stringify(this.data, null, 2));
     } catch (err) {
       console.error(`保存に失敗しました: ${this.file}`, err.message);

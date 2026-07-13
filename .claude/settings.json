@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-Content *)",
+      "PowerShell(Get-Process *)",
+      "PowerShell(Get-ChildItem *)",
+      "PowerShell(Test-Path *)",
+      "PowerShell(Start-Sleep *)",
+      "PowerShell(git status *)",
+      "PowerShell(git log *)",
+      "PowerShell(git diff *)",
+      "PowerShell(git show *)",
+      "PowerShell(npm start)",
+      "PowerShell(npm run start:debug)",
+      "PowerShell(npm ls *)",
+      "PowerShell(npm view *)",
+      "Bash(npm start)",
+      "Bash(npm run start:debug)"
+    ]
+  }
+}

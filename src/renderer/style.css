@@ -222,6 +222,69 @@ body {
   color: var(--accent);
 }
 
+/* ---- プロファイル ---- */
+#profile-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  margin-left: 2px;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #14151a;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+#profile-bar {
+  display: flex;
+  align-items: center;
+  height: 38px;
+  padding: 0 10px;
+  gap: 6px;
+  background: var(--bg-bar);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.profile-chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 26px;
+  padding: 0 12px 0 6px;
+  border: 1px solid transparent;
+  border-radius: 13px;
+  background: var(--tab-inactive);
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.profile-chip:hover {
+  background: var(--tab-active);
+}
+
+.profile-chip.active {
+  border-color: var(--accent);
+}
+
+.profile-chip .dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  color: #14151a;
+  font-size: 10px;
+  font-weight: 700;
+}
+
 /* ---- ブックマークバー ---- */
 #bookmark-bar {
   display: flex;

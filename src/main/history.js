@@ -1,11 +1,16 @@
 const crypto = require('crypto');
-const Store = require('./store');
 
 const MAX_ENTRIES = 5000;
 
 class History {
-  constructor() {
-    this.store = new Store('history.json', []);
+  constructor(store) {
+    this.store = store;
+  }
+
+  // プロファイル切り替え時に保存先を差し替える
+  setStore(store) {
+    this.store?.flush();
+    this.store = store;
   }
 
   get entries() {

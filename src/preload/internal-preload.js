@@ -23,9 +23,23 @@ if (location.protocol === 'roopie:') {
     removeDownload: (id) => ipcRenderer.send('downloads:remove', id),
     clearDownloads: () => ipcRenderer.send('downloads:clear'),
 
+    listProfiles: () => ipcRenderer.invoke('profiles:list'),
+    createProfile: (name) => ipcRenderer.send('profiles:create', name),
+    renameProfile: (id, name) => ipcRenderer.send('profiles:rename', id, name),
+    removeProfile: (id) => ipcRenderer.send('profiles:remove', id),
+    switchProfile: (id) => ipcRenderer.send('profiles:switch', id),
+    setProfileShared: (id, key, shared) =>
+      ipcRenderer.send('profiles:set-shared', id, key, shared),
+
+    getSettings: () => ipcRenderer.invoke('settings:get'),
+    setSetting: (key, value) => ipcRenderer.send('settings:set', key, value),
+
     onDownloadsState: (cb) =>
       ipcRenderer.on('downloads:state', (_e, state) => cb(state)),
     onBookmarksState: (cb) =>
       ipcRenderer.on('bookmarks:state', (_e, items) => cb(items)),
+    onProfilesState: (cb) =>
+      ipcRenderer.on('profiles:state', (_e, state) => cb(state)),
+    onSettings: (cb) => ipcRenderer.on('ui:settings', (_e, s) => cb(s)),
   });
 }

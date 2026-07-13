@@ -1,25 +1,41 @@
 const crypto = require('crypto');
 const { shell } = require('electron');
 const fs = require('fs');
-const Store = require('./store');
 
 /**
  * ダウンロードの管理。
  * 履歴はJSONに永続化し、進行中のDownloadItemは中断/再開のためメモリ上に保持する。
  */
 class Downloads {
-  constructor(session, onChange) {
-    this.store = new Store('downloads.json', []);
+  constructor(store, onChange) {
     this.onChange = onChange;
     this.active = new Map(); // id -> DownloadItem
+    this.attachedSessions = new Set();
+    this.store = store;
+    this.markStaleAsInterrupted();
+  }
 
-    // 前回終了時に進行中だったものは復元できないので中断扱いにする
+  // プロファイル切り替え時に保存先を差し替える
+  setStore(store) {
+    this.store.flush();
+    this.store = store;
+    this.markStaleAsInterrupted();
+    this.onChange?.();
+  }
+
+  // 前回終了時に進行中だったものは復元できないので中断扱いにする
+  markStaleAsInterrupted() {
     for (const item of this.items) {
       if (item.state === 'progressing' || item.state === 'paused') {
         item.state = 'interrupted';
       }
     }
+  }
 
+  // プロファイルごとにセッションが変わるため、セッション単位で監視を張る
+  attachSession(session) {
+    if (this.attachedSessions.has(session)) return;
+    this.attachedSessions.add(session);
     session.on('will-download', (_event, item) => this.track(item));
   }
 

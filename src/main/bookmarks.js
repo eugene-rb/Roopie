@@ -1,10 +1,16 @@
 const crypto = require('crypto');
-const Store = require('./store');
 
 class Bookmarks {
-  constructor(onChange) {
-    this.store = new Store('bookmarks.json', []);
+  constructor(store, onChange) {
+    this.store = store;
     this.onChange = onChange;
+  }
+
+  // プロファイル切り替え時に保存先を差し替える
+  setStore(store) {
+    this.store?.flush();
+    this.store = store;
+    this.onChange?.();
   }
 
   get items() {

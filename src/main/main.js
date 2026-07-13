@@ -1,16 +1,19 @@
-const { app, BrowserWindow, ipcMain, Menu, protocol, net, session } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, protocol, net } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
 const TabManager = require('./tab-manager');
 const History = require('./history');
 const Bookmarks = require('./bookmarks');
 const Downloads = require('./downloads');
+const Profiles = require('./profiles');
 const Store = require('./store');
 
 const PAGES_DIR = path.join(__dirname, '..', 'renderer', 'pages');
+const DEFAULT_SETTINGS = { showBookmarkBar: true };
 
 let mainWindow = null;
 let tabManager = null;
+let profiles = null;
 let history = null;
 let bookmarks = null;
 let downloads = null;
@@ -25,17 +28,21 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 // roopie://<host>/<path> を src/renderer/pages 配下のファイルへ解決する
-function registerInternalProtocol() {
-  protocol.handle('roopie', (request) => {
-    const { host, pathname } = new URL(request.url);
-    const relative = pathname === '/' ? `${host}.html` : pathname.slice(1);
-    const filePath = path.join(PAGES_DIR, relative);
-    // ディレクトリ外への参照を防ぐ
-    if (!filePath.startsWith(PAGES_DIR)) {
-      return new Response('Forbidden', { status: 403 });
-    }
-    return net.fetch(pathToFileURL(filePath).toString());
-  });
+function handleInternalRequest(request) {
+  const { host, pathname } = new URL(request.url);
+  const relative = pathname === '/' ? `${host}.html` : pathname.slice(1);
+  const filePath = path.join(PAGES_DIR, relative);
+  // ディレクトリ外への参照を防ぐ
+  if (!filePath.startsWith(PAGES_DIR)) {
+    return new Response('Forbidden', { status: 403 });
+  }
+  return net.fetch(pathToFileURL(filePath).toString());
+}
+
+// protocol.handle はセッションごとに必要(プロファイルごとにセッションが分かれるため)
+function registerInternalProtocol(session) {
+  if (session.protocol.isProtocolHandled('roopie')) return;
+  session.protocol.handle('roopie', handleInternalRequest);
 }
 
 function createWindow() {
@@ -54,19 +61,24 @@ function createWindow() {
     },
   });
 
-  history = new History();
-  bookmarks = new Bookmarks(() => sendBookmarks());
-  downloads = new Downloads(session.defaultSession, () => sendDownloads());
-  settings = new Store('settings.json', { showBookmarkBar: true });
+  profiles = new Profiles();
+  const profile = profiles.active();
 
-  tabManager = new TabManager(mainWindow, { history, bookmarks });
+  history = new History(store(profile, 'history', []));
+  bookmarks = new Bookmarks(store(profile, 'bookmarks', []), () => sendBookmarks());
+  downloads = new Downloads(store(profile, 'downloads', []), () => sendDownloads());
+  settings = store(profile, 'settings', { ...DEFAULT_SETTINGS });
+
+  const session = profiles.sessionFor(profile);
+  registerInternalProtocol(session);
+  downloads.attachSession(session);
+
+  tabManager = new TabManager(mainWindow, { history, bookmarks, session });
 
   mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
 
   mainWindow.webContents.once('did-finish-load', () => {
-    mainWindow.webContents.send('ui:settings', settings.data);
-    sendBookmarks();
-    sendDownloads();
+    sendAll();
     tabManager.createTab();
   });
 
@@ -84,25 +96,88 @@ function createWindow() {
   setupMenu();
 }
 
-function sendBookmarks() {
+function store(profile, key, defaultValue) {
+  return new Store(profiles.dataFile(profile, key), defaultValue);
+}
+
+// ---- プロファイル ----
+
+// アクティブなプロファイルのデータ/セッションを各機能へ適用する
+function applyActiveProfile({ recreateTabs } = {}) {
+  const profile = profiles.active();
+
+  history.setStore(store(profile, 'history', []));
+  bookmarks.setStore(store(profile, 'bookmarks', []));
+  downloads.setStore(store(profile, 'downloads', []));
+  settings.flush();
+  settings = store(profile, 'settings', { ...DEFAULT_SETTINGS });
+
+  const session = profiles.sessionFor(profile);
+  registerInternalProtocol(session);
+  downloads.attachSession(session);
+  if (recreateTabs) tabManager.switchSession(session);
+
+  sendAll();
+}
+
+function switchProfile(id) {
+  if (!profiles.switchTo(id)) return;
+  applyActiveProfile({ recreateTabs: true });
+}
+
+// 共有トグルの変更は、そのプロファイルがアクティブなときだけ保存先の切り替えが必要
+function setShared(id, key, shared) {
+  profiles.setShared(id, key, shared);
+  if (id === profiles.activeId) applyActiveProfile();
+  else sendProfiles();
+}
+
+// ---- レンダラーへの状態送信 ----
+function broadcast(channel, payload) {
+  // 起動直後(ウィンドウ生成中)に呼ばれることがあるので存在確認する
   if (!mainWindow || mainWindow.isDestroyed()) return;
-  const items = bookmarks.list();
-  mainWindow.webContents.send('bookmarks:state', items);
-  tabManager?.broadcastToInternal('bookmarks:state', items);
+  mainWindow.webContents.send(channel, payload);
+  tabManager?.broadcastToInternal(channel, payload);
+}
+
+function sendBookmarks() {
+  if (!bookmarks) return;
+  broadcast('bookmarks:state', bookmarks.list());
   tabManager?.sendState(); // スターボタンの状態を更新
 }
 
 function sendDownloads() {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  const state = { items: downloads.list(), hasActive: downloads.hasActive() };
-  mainWindow.webContents.send('downloads:state', state);
-  tabManager?.broadcastToInternal('downloads:state', state);
+  if (!downloads) return;
+  broadcast('downloads:state', {
+    items: downloads.list(),
+    hasActive: downloads.hasActive(),
+  });
+}
+
+function sendProfiles() {
+  if (!profiles) return;
+  broadcast('profiles:state', {
+    profiles: profiles.list(),
+    activeId: profiles.activeId,
+  });
+}
+
+function sendSettings() {
+  if (!settings) return;
+  broadcast('ui:settings', settings.data);
+}
+
+function sendAll() {
+  sendProfiles();
+  sendSettings();
+  sendBookmarks();
+  sendDownloads();
 }
 
 function toggleBookmarkBar() {
   settings.data.showBookmarkBar = !settings.data.showBookmarkBar;
   settings.save();
-  mainWindow?.webContents.send('ui:settings', settings.data);
+  sendSettings();
 }
 
 // キーボードショートカット(Chrome準拠)をメニューで定義
@@ -205,6 +280,16 @@ function setupMenu() {
         },
       ],
     },
+    {
+      label: 'プロファイル',
+      submenu: [
+        {
+          label: 'プロファイルと設定',
+          accelerator: 'CmdOrCtrl+,',
+          click: () => tabManager?.createTab('roopie://settings'),
+        },
+      ],
+    },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
@@ -244,16 +329,42 @@ ipcMain.on('downloads:cancel', (_e, id) => downloads?.cancel(id));
 ipcMain.on('downloads:remove', (_e, id) => downloads?.remove(id));
 ipcMain.on('downloads:clear', () => downloads?.clear());
 
-app.whenReady().then(() => {
-  registerInternalProtocol();
-  createWindow();
+ipcMain.handle('profiles:list', () => ({
+  profiles: profiles?.list() ?? [],
+  activeId: profiles?.activeId ?? null,
+}));
+ipcMain.on('profiles:create', (_e, name) => {
+  profiles?.create(name);
+  sendProfiles();
 });
+ipcMain.on('profiles:rename', (_e, id, name) => {
+  profiles?.rename(id, name);
+  sendProfiles();
+});
+ipcMain.on('profiles:remove', (_e, id) => {
+  const wasActive = profiles?.activeId === id;
+  // 使用中のプロファイルを消した場合だけ、別プロファイルへ切り替えてタブを作り直す
+  if (profiles?.remove(id)) applyActiveProfile({ recreateTabs: wasActive });
+});
+ipcMain.on('profiles:switch', (_e, id) => switchProfile(id));
+ipcMain.on('profiles:set-shared', (_e, id, key, shared) => setShared(id, key, shared));
+
+ipcMain.handle('settings:get', () => settings?.data ?? { ...DEFAULT_SETTINGS });
+ipcMain.on('settings:set', (_e, key, value) => {
+  if (!settings || !(key in DEFAULT_SETTINGS)) return;
+  settings.data[key] = value;
+  settings.save();
+  sendSettings();
+});
+
+app.whenReady().then(createWindow);
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
 app.on('before-quit', () => {
+  profiles?.store.flush();
   history?.store.flush();
   bookmarks?.store.flush();
   downloads?.store.flush();

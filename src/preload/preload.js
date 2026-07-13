@@ -28,9 +28,13 @@ contextBridge.exposeInMainWorld('roopie', {
   // ダウンロード
   openDownload: (id) => ipcRenderer.send('downloads:open', id),
 
+  // プロファイル
+  switchProfile: (id) => ipcRenderer.send('profiles:switch', id),
+
   // メインプロセスからの通知
   onTabsState: (cb) => ipcRenderer.on('tabs:state', (_e, state) => cb(state)),
   onBookmarksState: (cb) => ipcRenderer.on('bookmarks:state', (_e, items) => cb(items)),
+  onProfilesState: (cb) => ipcRenderer.on('profiles:state', (_e, state) => cb(state)),
   onDownloadsState: (cb) => ipcRenderer.on('downloads:state', (_e, state) => cb(state)),
   onSettings: (cb) => ipcRenderer.on('ui:settings', (_e, s) => cb(s)),
   onFocusAddressBar: (cb) => ipcRenderer.on('ui:focus-address-bar', () => cb()),

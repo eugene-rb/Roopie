@@ -17,10 +17,11 @@ let nextTabId = 1;
  * アクティブなタブだけを表示する。
  */
 class TabManager {
-  constructor(window, { history, bookmarks }) {
+  constructor(window, { history, bookmarks, session }) {
     this.window = window;
     this.history = history;
     this.bookmarks = bookmarks;
+    this.session = session; // アクティブなプロファイルのセッション
     this.tabs = []; // { id, view, isInternal, favicon }
     this.activeTabId = null;
     this.chromeHeight = DEFAULT_CHROME_HEIGHT;
@@ -37,6 +38,7 @@ class TabManager {
       webPreferences: {
         // 通常のWebページにはpreloadを渡さない(内部ページのみIPCを使える)
         preload: isInternal ? INTERNAL_PRELOAD : undefined,
+        session: this.session,
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
@@ -123,7 +125,8 @@ class TabManager {
     tab.view.webContents.close();
 
     if (this.tabs.length === 0) {
-      this.window.close();
+      // プロファイル切り替え中は、全タブを閉じた直後に新しいタブを開くので閉じない
+      if (!this.isSwitchingProfile) this.window.close();
       return;
     }
 
@@ -233,6 +236,17 @@ class TabManager {
     const url = wc.getURL();
     if (!url) return;
     this.bookmarks.toggle(url, wc.getTitle() || url, tab.favicon);
+  }
+
+  // プロファイル切り替え: セッションが変わるので全タブを作り直す
+  switchSession(session) {
+    this.isSwitchingProfile = true;
+    this.session = session;
+    for (const id of this.tabs.map((t) => t.id)) {
+      this.closeTab(id);
+    }
+    this.isSwitchingProfile = false;
+    this.createTab();
   }
 
   setChromeHeight(height) {
