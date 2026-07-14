@@ -3,6 +3,7 @@ const windows = require('./windows');
 const browser = require('./browser');
 const GoogleAccounts = require('./google-accounts');
 const Passwords = require('./passwords');
+const { showTabMenu } = require('./tab-context-menu');
 
 // IPCは「送信元のウィンドウ」に対して処理する
 const ctxOf = (e) => windows.contextFor(e.sender);
@@ -21,6 +22,15 @@ function registerIpc() {
   ipcMain.on('tabs:reload', (e) => tabsOf(e)?.reload());
   ipcMain.on('tabs:stop', (e) => tabsOf(e)?.stop());
   ipcMain.on('tabs:zoom', (e, direction) => tabsOf(e)?.zoom(direction));
+  ipcMain.on('tabs:context-menu', (e, id) => {
+    const tabManager = tabsOf(e);
+    if (tabManager) showTabMenu(tabManager, id);
+  });
+
+  // ---- 画面分割 ----
+  ipcMain.on('tabs:split-with', (e, id, direction) => tabsOf(e)?.splitWith(id, direction));
+  ipcMain.on('tabs:split-toggle-direction', (e) => tabsOf(e)?.toggleSplitDirection());
+  ipcMain.on('tabs:split-close', (e) => tabsOf(e)?.closeSplit());
 
   // ---- ウィンドウ ----
   ipcMain.on('window:new', () => browser.createWindow());

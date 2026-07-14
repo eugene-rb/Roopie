@@ -28,6 +28,8 @@ class TabManager {
     this.session = session; // アクティブなプロファイルのセッション
     this.tabs = []; // { id, view, isInternal, favicon }
     this.activeTabId = null;
+    this.splitTabId = null; // 画面分割で並べて表示しているタブ(nullなら分割なし)
+    this.splitDirection = 'row'; // 'row'(左右) | 'column'(上下)
     this.chromeHeight = DEFAULT_CHROME_HEIGHT;
     this.overlay = null; // メニュー等を表示する、常にタブより手前のView
 
@@ -155,6 +157,8 @@ class TabManager {
     const index = this.tabs.findIndex((t) => t.id === id);
     if (index === -1) return;
 
+    if (id === this.splitTabId) this.splitTabId = null;
+
     const [tab] = this.tabs.splice(index, 1);
     this.window.contentView.removeChildView(tab.view);
     tab.view.webContents.close();
@@ -166,9 +170,18 @@ class TabManager {
     }
 
     if (this.activeTabId === id) {
-      const next = this.tabs[Math.min(index, this.tabs.length - 1)];
-      this.switchTab(next.id);
+      if (this.splitTabId && this.getTab(this.splitTabId)) {
+        // 分割中に主ペインを閉じた場合は、相方のペインを主ペインへ昇格させる
+        const promoted = this.splitTabId;
+        this.splitTabId = null;
+        this.switchTab(promoted);
+      } else {
+        const next = this.tabs[Math.min(index, this.tabs.length - 1)];
+        this.switchTab(next.id);
+      }
     } else {
+      this.updateVisibility();
+      this.layout();
       this.sendState();
     }
   }
@@ -180,13 +193,46 @@ class TabManager {
   switchTab(id) {
     const tab = this.getTab(id);
     if (!tab) return;
+    // 分割相手のタブをそのままアクティブにした場合は、同じ内容が重複するので分割を解除する
+    if (id === this.splitTabId) this.splitTabId = null;
     this.activeTabId = id;
-    for (const t of this.tabs) {
-      t.view.setVisible(t.id === id);
-    }
+    this.updateVisibility();
     this.layout();
     tab.view.webContents.focus();
     this.onTabSelected?.(tab);
+    this.sendState();
+  }
+
+  updateVisibility() {
+    for (const t of this.tabs) {
+      t.view.setVisible(t.id === this.activeTabId || t.id === this.splitTabId);
+    }
+  }
+
+  // ---- 画面分割 ----
+
+  // アクティブなタブの隣に、別のタブを並べて表示する
+  splitWith(id, direction) {
+    if (id === this.activeTabId || !this.getTab(id)) return;
+    this.splitTabId = id;
+    this.splitDirection = direction === 'column' ? 'column' : 'row';
+    this.updateVisibility();
+    this.layout();
+    this.sendState();
+  }
+
+  toggleSplitDirection() {
+    if (!this.splitTabId) return;
+    this.splitDirection = this.splitDirection === 'row' ? 'column' : 'row';
+    this.layout();
+    this.sendState();
+  }
+
+  closeSplit() {
+    if (!this.splitTabId) return;
+    this.splitTabId = null;
+    this.updateVisibility();
+    this.layout();
     this.sendState();
   }
 
@@ -289,6 +335,7 @@ class TabManager {
   switchSession(session) {
     this.isSwitchingProfile = true;
     this.session = session;
+    this.splitTabId = null;
     for (const id of this.tabs.map((t) => t.id)) {
       this.closeTab(id);
     }
@@ -322,16 +369,38 @@ class TabManager {
     const panelWidth = this.sidePanel?.widthFor(areaWidth) ?? 0;
     // パネルがあるときは、ページとの間にも余白を入れて2枚のカードに見せる
     const gap = panelWidth ? m : 0;
+    const pageAreaWidth = Math.max(0, areaWidth - panelWidth - gap);
 
-    const page = this.getTab(this.activeTabId)?.view;
-    if (page) {
-      page.setBounds({
-        x: areaX,
-        y: areaY,
-        width: Math.max(0, areaWidth - panelWidth - gap),
-        height: areaHeight,
-      });
-      page.setBorderRadius(radius);
+    const activeView = this.getTab(this.activeTabId)?.view;
+    const splitView = this.splitTabId ? this.getTab(this.splitTabId)?.view : null;
+
+    if (activeView) {
+      if (splitView) {
+        // 2ペインの間にも余白を入れて、それぞれ独立したカードに見せる
+        if (this.splitDirection === 'column') {
+          const paneHeight = Math.max(0, (areaHeight - m) / 2);
+          activeView.setBounds({ x: areaX, y: areaY, width: pageAreaWidth, height: paneHeight });
+          splitView.setBounds({
+            x: areaX,
+            y: areaY + paneHeight + m,
+            width: pageAreaWidth,
+            height: Math.max(0, areaHeight - paneHeight - m),
+          });
+        } else {
+          const paneWidth = Math.max(0, (pageAreaWidth - m) / 2);
+          activeView.setBounds({ x: areaX, y: areaY, width: paneWidth, height: areaHeight });
+          splitView.setBounds({
+            x: areaX + paneWidth + m,
+            y: areaY,
+            width: Math.max(0, pageAreaWidth - paneWidth - m),
+            height: areaHeight,
+          });
+        }
+        splitView.setBorderRadius(radius);
+      } else {
+        activeView.setBounds({ x: areaX, y: areaY, width: pageAreaWidth, height: areaHeight });
+      }
+      activeView.setBorderRadius(radius);
     }
 
     // オーバーレイ(メニュー)は余白も含めた全域を覆う(外側クリックで閉じるため)
@@ -375,6 +444,8 @@ class TabManager {
     if (this.window.isDestroyed()) return;
     const state = {
       activeTabId: this.activeTabId,
+      splitTabId: this.splitTabId,
+      splitDirection: this.splitDirection,
       tabs: this.tabs.map((t) => {
         const wc = t.view.webContents;
         const url = wc.getURL();

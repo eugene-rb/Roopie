@@ -239,6 +239,11 @@ body {
   right: -3px;
 }
 
+/* 画面分割中の2タブに付ける、ペアだと分かる強調表示 */
+.tab.split {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
 .tab .favicon {
   width: 16px;
   height: 16px;
@@ -423,6 +428,12 @@ body {
 #sidepanel-btn.active {
   color: var(--accent);
   background: var(--hover);
+}
+
+/* 画面分割コントロール */
+#split-controls {
+  display: flex;
+  gap: 2px;
 }
 
 /* ---- プロファイルボタン ---- */

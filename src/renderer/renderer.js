@@ -33,7 +33,15 @@ function renderTabs() {
     tabEl.draggable = true;
     tabEl.dataset.id = String(tab.id);
     tabEl.dataset.index = String(index);
+    // 画面分割中は、並んでいる2枚のタブに同じ強調表示を付けてペアだと分かるようにする
+    if (tabState.splitTabId && (tab.id === tabState.activeTabId || tab.id === tabState.splitTabId)) {
+      tabEl.classList.add('split');
+    }
     attachTabDrag(tabEl, tab);
+    tabEl.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      window.roopie.tabContextMenu(tab.id);
+    });
 
     if (tab.isLoading) {
       const spinner = document.createElement('div');
@@ -150,6 +158,12 @@ function renderToolbar() {
   // ズーム率(Chromiumのzoomレベルは1段階=1.2倍)
   const percent = Math.round(1.2 ** (tab?.zoomLevel ?? 0) * 100);
   zoomLabel.textContent = `${percent}%`;
+
+  // 画面分割のコントロール(分割中だけ表示)
+  const splitControls = $('split-controls');
+  splitControls.classList.toggle('hidden', !tabState.splitTabId);
+  $('icon-split-row').classList.toggle('hidden', tabState.splitDirection === 'column');
+  $('icon-split-column').classList.toggle('hidden', tabState.splitDirection !== 'column');
 
   // 入力中はアドレスバーを上書きしない
   if (tab && document.activeElement !== addressBar) {
@@ -338,6 +352,8 @@ $('zoom-in-btn').addEventListener('click', () => window.roopie.zoom(1));
 $('zoom-out-btn').addEventListener('click', () => window.roopie.zoom(-1));
 zoomLabel.addEventListener('click', () => window.roopie.zoom(0));
 downloadsBtn.addEventListener('click', () => window.roopie.newTab('roopie://downloads'));
+$('split-direction-btn').addEventListener('click', () => window.roopie.toggleSplitDirection());
+$('split-close-btn').addEventListener('click', () => window.roopie.closeSplit());
 $('history-btn').addEventListener('click', () => window.roopie.newTab('roopie://history'));
 
 // ---- サイドパネル ----

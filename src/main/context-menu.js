@@ -69,22 +69,31 @@ function attachContextMenu(webContents, tabManager) {
     }
 
     // ページ全体(リンクや選択がないとき)
+    // 画面分割で非アクティブなペインに出す場合もあるため、tabManagerの「アクティブタブ」ではなく
+    // このメニューを開いた webContents 自身に対して操作する
     if (!params.linkURL && !params.selectionText && !params.isEditable) {
       add({
         label: '戻る',
         enabled: webContents.navigationHistory.canGoBack(),
-        click: () => tabManager.goBack(),
+        click: () => webContents.navigationHistory.goBack(),
       });
       add({
         label: '進む',
         enabled: webContents.navigationHistory.canGoForward(),
-        click: () => tabManager.goForward(),
+        click: () => webContents.navigationHistory.goForward(),
       });
-      add({ label: '再読み込み', click: () => tabManager.reload() });
+      add({ label: '再読み込み', click: () => webContents.reload() });
       add({ type: 'separator' });
       add({
         label: 'このページをブックマーク',
-        click: () => tabManager.toggleBookmarkForActiveTab(),
+        click: () => {
+          const tab = tabManager.tabs.find((t) => t.view.webContents === webContents);
+          tabManager.bookmarks.toggle(
+            webContents.getURL(),
+            webContents.getTitle() || webContents.getURL(),
+            tab?.favicon ?? null
+          );
+        },
       });
       add({
         label: '既定のブラウザで開く',
