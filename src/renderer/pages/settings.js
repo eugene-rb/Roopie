@@ -27,7 +27,6 @@ const DEFAULT_EMOJI = [
   '🌸', '🌵', '🍀', '🔥', '⚡', '🌙',
   '🎮', '🎧', '📚', '☕', '🚀', '🎨',
 ];
-const AVATAR_SIZE = 128; // アップロード画像はこのサイズの正方形に縮小する
 
 let state = { profiles: [], activeId: null, googleAccounts: [] };
 // プロファイルID -> 実際にGoogleにログイン中のメールアドレス一覧
@@ -128,16 +127,11 @@ function toggleIconPicker(profile, anchorEl) {
   fileInput.type = 'file';
   fileInput.accept = 'image/*';
   fileInput.className = 'hidden';
-  fileInput.addEventListener('change', async () => {
+  fileInput.addEventListener('change', () => {
     const file = fileInput.files?.[0];
     if (!file) return;
-    try {
-      const dataUrl = await squareImageToDataUrl(file, AVATAR_SIZE);
-      window.roopieInternal.setProfileIcon(profile.id, { type: 'image', value: dataUrl });
-    } catch {
-      // 画像として読み込めなかった場合は何もしない
-    }
     closeIconPicker();
+    openCropModal(file, profile.id);
   });
   panel.appendChild(fileInput);
 
@@ -167,29 +161,161 @@ document.addEventListener('mousedown', (e) => {
   }
 });
 
-// 画像を中央基準の正方形に切り抜き、指定サイズへ縮小してdata URLにする
-function squareImageToDataUrl(file, size) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = size;
-        canvas.height = size;
-        const ctx = canvas.getContext('2d');
-        const side = Math.min(img.width, img.height);
-        const sx = (img.width - side) / 2;
-        const sy = (img.height - side) / 2;
-        ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
-        resolve(canvas.toDataURL('image/png'));
-      };
-      img.onerror = () => reject(new Error('画像を読み込めませんでした'));
-      img.src = reader.result;
+// ---- 画像のGUIクロップ ----
+// ドラッグで位置調整、スライダー/ホイールでズームできる円形のクロップモーダル
+function openCropModal(file, profileId) {
+  const VS = 240; // クロップ表示のビューポートサイズ(px)
+  const OUTPUT = 160; // 書き出す画像の一辺(px)
+  const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'crop-backdrop';
+
+  const modal = document.createElement('div');
+  modal.className = 'crop-modal';
+
+  const hint = document.createElement('div');
+  hint.className = 'hint';
+  hint.textContent = 'ドラッグで位置を調整、スライダー(またはホイール)で拡大縮小できます';
+  modal.appendChild(hint);
+
+  const viewport = document.createElement('div');
+  viewport.className = 'crop-viewport';
+  const img = document.createElement('img');
+  img.draggable = false;
+  viewport.appendChild(img);
+  modal.appendChild(viewport);
+
+  const zoomInput = document.createElement('input');
+  zoomInput.type = 'range';
+  zoomInput.className = 'crop-zoom';
+  zoomInput.min = '0';
+  zoomInput.max = '100';
+  zoomInput.value = '0';
+  modal.appendChild(zoomInput);
+
+  const actions = document.createElement('div');
+  actions.className = 'crop-actions';
+  const applyBtn = button('アイコンに設定', apply);
+  applyBtn.classList.add('primary');
+  actions.append(button('キャンセル', close), applyBtn);
+  modal.appendChild(actions);
+
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
+
+  let nw = 0;
+  let nh = 0;
+  let baseScale = 1;
+  let scale = 1;
+  let offsetX = 0;
+  let offsetY = 0;
+
+  function currentZoomedScale() {
+    const z = 1 + (Number(zoomInput.value) / 100) * 2; // 1倍〜3倍
+    return baseScale * z;
+  }
+
+  function applyTransform() {
+    scale = currentZoomedScale();
+    const dw = nw * scale;
+    const dh = nh * scale;
+    offsetX = clamp(offsetX, VS - dw, 0);
+    offsetY = clamp(offsetY, VS - dh, 0);
+    img.style.width = `${dw}px`;
+    img.style.height = `${dh}px`;
+    img.style.left = `${offsetX}px`;
+    img.style.top = `${offsetY}px`;
+  }
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    img.onload = () => {
+      nw = img.naturalWidth;
+      nh = img.naturalHeight;
+      baseScale = VS / Math.min(nw, nh); // 短辺がビューポートを覆う倍率(zoom=1相当)
+      offsetX = (VS - nw * baseScale) / 2;
+      offsetY = (VS - nh * baseScale) / 2;
+      applyTransform();
     };
-    reader.onerror = () => reject(new Error('ファイルを読み込めませんでした'));
-    reader.readAsDataURL(file);
+    img.onerror = close;
+    img.src = reader.result;
+  };
+  reader.onerror = close;
+  reader.readAsDataURL(file);
+
+  // ドラッグで位置調整(pointer captureで、ビューポート外に出ても追従する)
+  let dragging = false;
+  let startX = 0;
+  let startY = 0;
+  let startOffsetX = 0;
+  let startOffsetY = 0;
+
+  viewport.addEventListener('pointerdown', (e) => {
+    dragging = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    startOffsetX = offsetX;
+    startOffsetY = offsetY;
+    viewport.setPointerCapture(e.pointerId);
   });
+  viewport.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    offsetX = startOffsetX + (e.clientX - startX);
+    offsetY = startOffsetY + (e.clientY - startY);
+    applyTransform();
+  });
+  viewport.addEventListener('pointerup', () => {
+    dragging = false;
+  });
+  viewport.addEventListener('pointercancel', () => {
+    dragging = false;
+  });
+
+  // ズームはビューポート中心を保ったまま拡大縮小する
+  zoomInput.addEventListener('input', () => {
+    const oldScale = scale;
+    const newScale = currentZoomedScale();
+    const cx = (VS / 2 - offsetX) / oldScale;
+    const cy = (VS / 2 - offsetY) / oldScale;
+    offsetX = VS / 2 - cx * newScale;
+    offsetY = VS / 2 - cy * newScale;
+    applyTransform();
+  });
+
+  viewport.addEventListener(
+    'wheel',
+    (e) => {
+      e.preventDefault();
+      zoomInput.value = String(clamp(Number(zoomInput.value) + (e.deltaY > 0 ? -4 : 4), 0, 100));
+      zoomInput.dispatchEvent(new Event('input'));
+    },
+    { passive: false }
+  );
+
+  function onKeydown(e) {
+    if (e.key === 'Escape') close();
+  }
+  document.addEventListener('keydown', onKeydown);
+
+  function close() {
+    document.removeEventListener('keydown', onKeydown);
+    backdrop.remove();
+  }
+
+  function apply() {
+    if (!nw) return; // 画像がまだ読み込めていない
+    const canvas = document.createElement('canvas');
+    canvas.width = OUTPUT;
+    canvas.height = OUTPUT;
+    const ctx = canvas.getContext('2d');
+    const srcSize = VS / scale;
+    const srcX = clamp(-offsetX / scale, 0, nw - srcSize);
+    const srcY = clamp(-offsetY / scale, 0, nh - srcSize);
+    ctx.drawImage(img, srcX, srcY, srcSize, srcSize, 0, 0, OUTPUT, OUTPUT);
+    window.roopieInternal.setProfileIcon(profileId, { type: 'image', value: canvas.toDataURL('image/png') });
+    close();
+  }
 }
 
 function createProfileCard(profile) {

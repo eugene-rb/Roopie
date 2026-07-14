@@ -918,6 +918,85 @@ body {
   font-size: 12px;
 }
 
+/* 画像アップロード用のプライマリボタン(共通の.btnに色を足す) */
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #14151a;
+  font-weight: 600;
+}
+
+.btn.primary:hover {
+  filter: brightness(1.1);
+}
+
+/* 画像アイコンのGUIクロップ */
+.crop-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.crop-modal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: 288px;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--card);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.crop-modal .hint {
+  text-align: center;
+}
+
+.crop-viewport {
+  position: relative;
+  width: 240px;
+  height: 240px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #000;
+  cursor: grab;
+  touch-action: none;
+}
+
+.crop-viewport:active {
+  cursor: grabbing;
+}
+
+.crop-viewport img {
+  position: absolute;
+  max-width: none;
+  user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: none;
+}
+
+.crop-zoom {
+  width: 240px;
+  accent-color: var(--accent);
+}
+
+.crop-actions {
+  display: flex;
+  gap: 8px;
+  align-self: stretch;
+}
+
+.crop-actions .btn {
+  flex: 1;
+}
+
 .profile-name {
   flex: 1;
   min-width: 0;
