@@ -209,11 +209,18 @@ function registerIpc() {
     const profile = browser.profiles.active();
     const session = browser.profiles.sessionFor(profile);
     const ext = await browser.extensions.install(session, profile.id, extensionId);
+    browser.sendExtensions();
     return { id: ext.id, name: ext.name, version: ext.version };
   });
   ipcMain.handle('extensions:list', () =>
     browser.extensions.list(browser.profiles.sessionFor(browser.profiles.active()))
   );
+  ipcMain.on('extensions:remove', async (_e, extensionId) => {
+    const profile = browser.profiles.active();
+    const session = browser.profiles.sessionFor(profile);
+    await browser.extensions.remove(session, profile.id, extensionId);
+    browser.sendExtensions();
+  });
 
   // ---- テーマ ----
   ipcMain.handle('theme:get', () => browser.theme?.data ?? { ...browser.DEFAULT_THEME });

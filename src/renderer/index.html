@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https: data:; style-src 'self'" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https: data: crx:; style-src 'self'" />
   <title>Roopie</title>
   <link rel="stylesheet" href="pages/app.css" />
 </head>
@@ -72,6 +72,12 @@
           <svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
         </button>
       </div>
+
+      <!-- インストール済み拡張機能のツールバーアイコン(ポップアップも含めライブラリが管理)。
+           <browser-action-list> はDOM接続時のpartitionでしか更新を購読しないため、
+           プロファイル確定後に renderer.js がこの中へ要素を生成する -->
+      <div id="extensions-area"></div>
+
       <button id="profile-btn" title="プロファイルを切り替え"><span id="profile-avatar" class="avatar"></span></button>
       <button id="settings-btn" class="icon-btn" title="プロファイルと設定 (Ctrl+,)">
         <svg viewBox="0 0 24 24"><path d="M20 7h-9M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>

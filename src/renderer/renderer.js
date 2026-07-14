@@ -212,7 +212,25 @@ window.roopie.onProfilesState((state) => {
   if (!active) return;
   renderAvatar(profileAvatar, active);
   profileBtn.title = `プロファイル: ${active.name}(クリックで切り替え)`;
+  renderExtensionActions(active.partition);
 });
+
+// 拡張機能アイコンをアクティブなプロファイルのセッションに向ける。
+// <browser-action-list> はDOM接続時のpartitionでしか更新を購読しないため、
+// partitionが変わったら要素ごと作り直す(シークレットでは拡張機能が無効なので出さない)
+function renderExtensionActions(partition) {
+  const area = $('extensions-area');
+  if (isIncognito) {
+    area.replaceChildren();
+    return;
+  }
+  if (area.firstElementChild?.getAttribute('partition') === partition) return;
+  const list = document.createElement('browser-action-list');
+  list.id = 'extensions-list';
+  list.setAttribute('alignment', 'top right');
+  list.setAttribute('partition', partition);
+  area.replaceChildren(list);
+}
 
 // プロファイルのアイコン(文字/絵文字/画像)を1つの.avatar要素に反映する
 function renderAvatar(el, profile) {
@@ -282,9 +300,12 @@ window.roopie.onToggleCompact(() => {
 });
 
 // ---- ウィンドウ種別(シークレットかどうか) ----
+let isIncognito = false;
 window.roopie.onWindowInfo(({ incognito }) => {
+  isIncognito = !!incognito;
   document.body.classList.toggle('incognito', !!incognito);
   if (incognito) {
+    $('extensions-area').replaceChildren();
     // シークレットでは履歴・パスワード関連のUIを出さない
     $('history-btn').classList.add('hidden');
     starBtn.title = 'このページをブックマーク (Ctrl+D)';

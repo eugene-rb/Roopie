@@ -79,6 +79,8 @@ if (location.protocol === 'roopie:') {
     // 拡張機能
     installExtension: (extensionId) => ipcRenderer.invoke('extensions:install', extensionId),
     listExtensions: () => ipcRenderer.invoke('extensions:list'),
+    removeExtension: (extensionId) => ipcRenderer.send('extensions:remove', extensionId),
+    onExtensionsState: (cb) => ipcRenderer.on('extensions:state', (_e, items) => cb(items)),
 
     // テーマ
     getTheme: () => ipcRenderer.invoke('theme:get'),

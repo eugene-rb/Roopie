@@ -436,6 +436,27 @@ body {
   gap: 2px;
 }
 
+/* 拡張機能アイコン(electron-chrome-extensions のWeb Component) */
+#extensions-area {
+  display: contents;
+}
+
+#extensions-list {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+#extensions-list::part(action) {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+}
+
+#extensions-list::part(action):hover {
+  background: var(--hover);
+}
+
 /* ---- プロファイルボタン ---- */
 #profile-btn {
   display: flex;

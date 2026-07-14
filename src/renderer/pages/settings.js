@@ -18,7 +18,7 @@ const SHARABLE = [
 ];
 
 // 今後のフェーズで対応する項目(UIだけ先に用意)
-const PLANNED = [{ name: '拡張機能', desc: '拡張機能の管理UI実装後に対応' }];
+const PLANNED = [];
 
 // アイコン選択の初期候補(絵文字はここになければ直接入力もできる)
 const DEFAULT_EMOJI = [
@@ -648,6 +648,87 @@ adblockToggle.addEventListener('change', () =>
   window.roopieInternal.setSetting('adblock', adblockToggle.checked)
 );
 
+// ---- 拡張機能 ----
+const extensionIdEl = document.getElementById('extension-id');
+const extensionInstallBtn = document.getElementById('extension-install-btn');
+const extensionsListEl = document.getElementById('extensions-list');
+
+function renderExtensions(items) {
+  extensionsListEl.textContent = '';
+  if (!items.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-inline';
+    empty.textContent = 'インストール済みの拡張機能はありません';
+    extensionsListEl.appendChild(empty);
+    return;
+  }
+
+  for (const ext of items) {
+    const row = document.createElement('div');
+    row.className = 'row';
+
+    if (ext.icon) {
+      const icon = document.createElement('img');
+      icon.className = 'favicon';
+      icon.src = ext.icon;
+      row.appendChild(icon);
+    }
+
+    const main = document.createElement('div');
+    main.className = 'main';
+    const title = document.createElement('span');
+    title.className = 'title';
+    title.textContent = `${ext.name}(v${ext.version})`;
+    main.appendChild(title);
+    if (ext.description) {
+      const sub = document.createElement('span');
+      sub.className = 'sub';
+      sub.textContent = ext.description;
+      main.appendChild(sub);
+    }
+    row.appendChild(main);
+
+    const actions = document.createElement('div');
+    actions.className = 'row-actions';
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'row-btn';
+    removeBtn.textContent = '削除';
+    removeBtn.addEventListener('click', () => {
+      if (confirm(`「${ext.name}」を削除します。よろしいですか?`)) {
+        window.roopieInternal.removeExtension(ext.id);
+      }
+    });
+    actions.appendChild(removeBtn);
+    row.appendChild(actions);
+
+    extensionsListEl.appendChild(row);
+  }
+}
+
+async function installExtensionFromInput() {
+  const id = extensionIdEl.value.trim();
+  if (!/^[a-p]{32}$/.test(id)) {
+    alert('拡張機能IDの形式が正しくありません(a〜pの32文字)');
+    return;
+  }
+  extensionInstallBtn.disabled = true;
+  try {
+    await window.roopieInternal.installExtension(id);
+    extensionIdEl.value = '';
+  } catch (err) {
+    alert(`インストールに失敗しました: ${err.message ?? err}`);
+  } finally {
+    extensionInstallBtn.disabled = false;
+  }
+}
+
+extensionInstallBtn.addEventListener('click', installExtensionFromInput);
+extensionIdEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') installExtensionFromInput();
+});
+
+window.roopieInternal.onExtensionsState((items) => renderExtensions(items));
+
 // ---- 保存したパスワード ----
 const savePasswordsToggle = document.getElementById('save-passwords');
 const passwordsListEl = document.getElementById('passwords-list');
@@ -943,13 +1024,15 @@ document.addEventListener('visibilitychange', () => {
 });
 
 (async () => {
-  const [profileState, accounts, settings, gestureConfig, themeConfig] = await Promise.all([
+  const [profileState, accounts, settings, gestureConfig, themeConfig, extensions] = await Promise.all([
     window.roopieInternal.listProfiles(),
     window.roopieInternal.listGoogleAccounts(),
     window.roopieInternal.getSettings(),
     window.roopieInternal.getGestures(),
     window.roopieInternal.getTheme(),
+    window.roopieInternal.listExtensions(),
   ]);
+  renderExtensions(extensions);
   state = { ...profileState, googleAccounts: accounts };
   bookmarkBarToggle.checked = !!settings.showBookmarkBar;
   adblockToggle.checked = settings.adblock !== false;

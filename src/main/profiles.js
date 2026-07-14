@@ -194,6 +194,10 @@ class Profiles {
   sessionFor(profile) {
     return session.fromPartition(partitionFor(profile.id));
   }
+
+  partitionFor(profile) {
+    return partitionFor(profile.id);
+  }
 }
 
 function partitionFor(id) {
@@ -202,3 +206,4 @@ function partitionFor(id) {
 
 module.exports = Profiles;
 module.exports.SHARABLE_KEYS = SHARABLE_KEYS;
+module.exports.partitionFor = partitionFor;

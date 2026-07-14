@@ -34,6 +34,20 @@
       <div id="accounts" class="list" style="margin-top: 14px"></div>
     </div>
 
+    <h2 class="section-title">拡張機能</h2>
+    <div class="card">
+      <p class="note" style="margin-bottom: 12px">
+        Chromeウェブストアの拡張機能ID(URLの <code>chrome.google.com/webstore/detail/.../<b>ここ</b></code> の部分)を指定してインストールできます。
+        拡張機能は使用中のプロファイルに保存されます。<br />
+        ⚠ Electronの制約上、<b>uBlock Originなどのブロッキング型拡張機能は動作しません</b>(広告ブロックは内蔵機能をご利用ください)。Dark Readerなどコンテンツスクリプト型の拡張機能は動作します。
+      </p>
+      <div class="account-add">
+        <input id="extension-id" class="search" type="text" placeholder="拡張機能ID(32文字の英字)" autocomplete="off" style="flex: 1; width: auto" />
+        <button id="extension-install-btn" class="btn">インストール</button>
+      </div>
+      <div id="extensions-list" class="list" style="margin-top: 14px"></div>
+    </div>
+
     <h2 class="section-title">マウスジェスチャー</h2>
     <div class="card">
       <div class="setting-row">

@@ -1,7 +1,7 @@
 const path = require('path');
-const { app } = require('electron');
+const { app, session: electronSession, nativeImage } = require('electron');
 const { ElectronChromeExtensions } = require('electron-chrome-extensions');
-const { installChromeWebStore, installExtension } = require('electron-chrome-web-store');
+const { installChromeWebStore, installExtension, uninstallExtension } = require('electron-chrome-web-store');
 
 /**
  * Chrome拡張機能サポート(electron-chrome-extensions + electron-chrome-web-store)。
@@ -34,6 +34,12 @@ class ExtensionSupport {
   // セッションに拡張機能サポートを取り付け、保存済み拡張を読み込む
   async attach(session, profileId) {
     if (this.bySession.has(session)) return;
+
+    // crx://<id>/... のアイコン配信(ツールバーの <browser-action-list> 用)。
+    // アイコンURLは ?partition= で対象セッションを自前解決するため、
+    // <browser-action-list> を表示するメインUI(デフォルトセッション)側への登録が必須
+    ElectronChromeExtensions.handleCRXProtocol(session);
+    ElectronChromeExtensions.handleCRXProtocol(electronSession.defaultSession);
 
     const extensions = new ElectronChromeExtensions({
       license: 'GPL-3.0',
@@ -84,13 +90,41 @@ class ExtensionSupport {
     });
   }
 
-  // インストール済み拡張の一覧
+  // インストール済み拡張の一覧(管理画面用)。
+  // アイコンは chrome-extension:// だと web_accessible_resources 制限で
+  // 通常ページから読めないため、ファイルから読んでdata URIにして渡す
   list(session) {
     return (session.extensions?.getAllExtensions() ?? []).map((e) => ({
       id: e.id,
       name: e.name,
       version: e.version,
+      description: e.manifest?.description ?? '',
+      icon: iconDataFor(e),
     }));
+  }
+
+  async remove(session, profileId, extensionId) {
+    await uninstallExtension(extensionId, { session, extensionsPath: this.extensionsDir(profileId) });
+  }
+}
+
+// manifestのicons定義から一番大きいものを選び、64pxのdata URIにする
+function iconDataFor(extension) {
+  const icons = extension.manifest?.icons;
+  if (!icons || typeof icons !== 'object') return null;
+  const sizes = Object.keys(icons)
+    .map(Number)
+    .filter((n) => !Number.isNaN(n))
+    .sort((a, b) => b - a);
+  const largest = sizes[0];
+  const iconPath = largest ? icons[largest] : Object.values(icons)[0];
+  if (!iconPath) return null;
+  try {
+    const image = nativeImage.createFromPath(path.join(extension.path, iconPath));
+    if (image.isEmpty()) return null;
+    return (image.getSize().width > 64 ? image.resize({ width: 64 }) : image).toDataURL();
+  } catch {
+    return null;
   }
 }
 

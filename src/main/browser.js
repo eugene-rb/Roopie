@@ -367,7 +367,9 @@ function broadcast(channel, payload) {
 
 function profilesPayload() {
   return {
-    profiles: browser.profiles.list(),
+    // 拡張機能アイコン(<browser-action-list>)がプロファイルごとのセッションを
+    // 指し示せるよう、partition名も一緒に送る
+    profiles: browser.profiles.list().map((p) => ({ ...p, partition: browser.profiles.partitionFor(p) })),
     activeId: browser.profiles.activeId,
     googleAccounts: browser.googleAccounts?.list() ?? [],
   };
@@ -426,6 +428,12 @@ browser.sendPasswords = () => {
   broadcast('passwords:state', browser.passwords.list());
 };
 
+browser.sendExtensions = () => {
+  if (!browser.profiles) return;
+  const session = browser.profiles.sessionFor(browser.profiles.active());
+  broadcast('extensions:state', browser.extensions.list(session));
+};
+
 // メディア再生状態はウィンドウごとに異なる。フローティングプレイヤーとサイドパネルの
 // 「再生中」セクションの両方へ届ける(サイドパネルはsendToContext経由で自動的に届く)
 browser.sendMedia = (ctx) => {
@@ -448,6 +456,7 @@ browser.sendAll = () => {
   browser.sendDownloads();
   browser.sendTheme();
   browser.sendPasswords();
+  browser.sendExtensions();
   for (const ctx of windows.all()) browser.sendSidePanel(ctx);
 };
 
