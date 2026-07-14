@@ -9,10 +9,12 @@ const Profiles = require('./profiles');
 const GoogleAccounts = require('./google-accounts');
 const Gestures = require('./gestures');
 const SidePanel = require('./side-panel');
+const ExtensionSupport = require('./extension-support');
+const AdBlock = require('./adblock');
 const Store = require('./store');
 
 const PAGES_DIR = path.join(__dirname, '..', 'renderer', 'pages');
-const DEFAULT_SETTINGS = { showBookmarkBar: true };
+const DEFAULT_SETTINGS = { showBookmarkBar: true, adblock: true };
 
 // テーマ(アクセントカラー / 新しいタブの背景 / カスタムCSS)
 const DEFAULT_THEME = { accent: '#6c8cff', background: 'auto', customCss: '' };
@@ -30,6 +32,17 @@ let settings = null;
 let gestures = null;
 let sidePanel = null;
 let theme = null;
+const extensionSupport = new ExtensionSupport();
+const adblock = new AdBlock();
+
+// アクティブなプロファイルのセッションに、設定に応じて広告ブロックを適用する
+function applyAdblock() {
+  if (!profiles || !settings) return;
+  const session = profiles.sessionFor(profiles.active());
+  adblock.apply(session, settings.data.adblock !== false).catch((err) => {
+    console.error('広告ブロックの適用に失敗:', err);
+  });
+}
 
 // 内部ページ用スキーム(roopie://newtab など)。app.ready前に宣言する必要がある。
 protocol.registerSchemesAsPrivileged([
@@ -125,6 +138,15 @@ function createWindow() {
   });
   tabManager.setSidePanel(sidePanel);
 
+  // 拡張機能サポート(uBlock Origin等)。失敗してもブラウザ本体は動かす
+  extensionSupport.setBrowser({ tabManager, window: mainWindow });
+  tabManager.onTabCreated = (tab) => extensionSupport.addTab(tab.view.webContents);
+  tabManager.onTabSelected = (tab) => extensionSupport.selectTab(tab.view.webContents);
+  extensionSupport
+    .attach(session, profile.id)
+    .catch((err) => console.error('拡張機能サポートの初期化に失敗:', err));
+  applyAdblock();
+
   mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
 
   mainWindow.webContents.once('did-finish-load', () => {
@@ -190,6 +212,10 @@ function applyActiveProfile({ recreateTabs } = {}) {
   registerInternalProtocol(session);
   registerGesturePreload(session);
   downloads.attachSession(session);
+  extensionSupport
+    .attach(session, profile.id)
+    .catch((err) => console.error('拡張機能サポートの初期化に失敗:', err));
+  applyAdblock();
   if (recreateTabs) {
     tabManager.switchSession(session);
     sidePanel.switchSession(session);
@@ -520,6 +546,16 @@ ipcMain.on('sidepanel:close-web', () => sidePanel?.closeWeb());
 ipcMain.on('sidepanel:reload-web', () => sidePanel?.reloadWeb());
 ipcMain.on('sidepanel:set-notes', (_e, text) => sidePanel?.setNotes(text));
 
+// ---- 拡張機能 ----
+ipcMain.handle('extensions:install', async (_e, extensionId) => {
+  const profile = profiles.active();
+  const ext = await extensionSupport.install(profiles.sessionFor(profile), profile.id, extensionId);
+  return { id: ext.id, name: ext.name, version: ext.version };
+});
+ipcMain.handle('extensions:list', () =>
+  extensionSupport.list(profiles.sessionFor(profiles.active()))
+);
+
 // ---- テーマ ----
 ipcMain.handle('theme:get', () => theme?.data ?? { ...DEFAULT_THEME });
 ipcMain.on('theme:set', (_e, patch) => {
@@ -584,6 +620,7 @@ ipcMain.on('settings:set', (_e, key, value) => {
   if (!settings || !(key in DEFAULT_SETTINGS)) return;
   settings.data[key] = value;
   settings.save();
+  if (key === 'adblock') applyAdblock();
   sendSettings();
 });
 

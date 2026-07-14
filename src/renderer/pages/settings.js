@@ -367,6 +367,11 @@ bookmarkBarToggle.addEventListener('change', () =>
   window.roopieInternal.setSetting('showBookmarkBar', bookmarkBarToggle.checked)
 );
 
+const adblockToggle = document.getElementById('adblock-toggle');
+adblockToggle.addEventListener('change', () =>
+  window.roopieInternal.setSetting('adblock', adblockToggle.checked)
+);
+
 // ---- テーマ ----
 const ACCENT_PRESETS = ['#6c8cff', '#4bbf8a', '#ffb454', '#e5709b', '#a78bfa', '#4dc4d9', '#ff6b6b'];
 const accentSwatchesEl = document.getElementById('accent-swatches');
@@ -568,6 +573,7 @@ window.roopieInternal.onProfilesState((next) => {
 });
 window.roopieInternal.onSettings((settings) => {
   bookmarkBarToggle.checked = !!settings.showBookmarkBar;
+  adblockToggle.checked = settings.adblock !== false;
 });
 
 // 別タブでログインして戻ってきたときに「ログイン中」表示を更新する
@@ -585,6 +591,7 @@ document.addEventListener('visibilitychange', () => {
   ]);
   state = { ...profileState, googleAccounts: accounts };
   bookmarkBarToggle.checked = !!settings.showBookmarkBar;
+  adblockToggle.checked = settings.adblock !== false;
   if (gestureConfig) gestureState = gestureConfig;
   if (themeConfig) themeState = themeConfig;
   render();

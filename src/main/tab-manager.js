@@ -52,6 +52,7 @@ class TabManager {
     this.window.contentView.addChildView(view);
 
     this.attachEvents(tab);
+    this.onTabCreated?.(tab); // 拡張機能システム等への通知
     view.webContents.loadURL(url);
     this.switchTab(id);
     this.raiseOverlay(); // 新しいタブを載せた後もメニューが手前に来るようにする
@@ -181,6 +182,7 @@ class TabManager {
     }
     this.layout();
     tab.view.webContents.focus();
+    this.onTabSelected?.(tab);
     this.sendState();
   }
 

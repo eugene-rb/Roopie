@@ -56,6 +56,10 @@ if (location.protocol === 'roopie:') {
     setSidePanelNotes: (text) => ipcRenderer.send('sidepanel:set-notes', text),
     onSidePanelState: (cb) => ipcRenderer.on('sidepanel:state', (_e, s) => cb(s)),
 
+    // 拡張機能
+    installExtension: (extensionId) => ipcRenderer.invoke('extensions:install', extensionId),
+    listExtensions: () => ipcRenderer.invoke('extensions:list'),
+
     // テーマ
     getTheme: () => ipcRenderer.invoke('theme:get'),
     setTheme: (patch) => ipcRenderer.send('theme:set', patch),

@@ -28,7 +28,7 @@ Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP
 | Chrome同等の基本機能 | ✅ 完了 |
 | Phase 3: プロファイル機能 + 設定画面 | ✅ 完了 |
 | Googleアカウントのプロファイル別管理 | ✅ 完了 |
-| Phase 2: 拡張機能対応 | ⏸ 後回し(ユーザー判断) |
+| Phase 2: 拡張機能対応の検証 | ✅ 完了(結論: uBOは不可 → 内蔵広告ブロックで代替。コンテンツスクリプト型拡張は動く) |
 | Phase 4: マウスジェスチャー(GUIカスタム対応) | ✅ 完了 |
 | Phase 4: サイドパネル(ブックマーク/履歴/メモ/Webパネル) | ✅ 完了 |
 | Phase 5: テーマ機能 + Bonjourr風スタートページ | ✅ 完了 |
@@ -44,6 +44,8 @@ Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP
 - **Googleアカウント**: ブラウザ全体に登録し、プロファイルごとに有効化+プライマリ選択
 - **マウスジェスチャー**: 右クリック+ドラッグ(軌跡+アクション名を表示)。既定: ←戻る / →進む / ↓新しいタブ / ↓→タブを閉じる / ↑↓再読み込み。設定画面のGUIで自由に追加・変更・削除でき、共有トグルで全プロファイル共通にもできる
 - **サイドパネル**(Ctrl+Shift+S / ツールバーの◨ボタン): ブックマーク・履歴クイックアクセス、自動保存メモ、Webパネル(任意サイトの常駐表示・複数登録・ヘッダーのアイコンで切り替え)。データはプロファイル単位
+- **広告ブロック(内蔵)**: EasyList等のフィルタで広告・トラッカーを遮断(@ghostery/adblocker-electron)。設定画面のトグルでON/OFF(既定ON、プロファイル単位)
+- **Chrome拡張機能(部分対応)**: Chromeウェブストアからのインストールと、コンテンツスクリプト型拡張(Dark Reader等)が動く。uBlock Origin等のブロッキング型は不可(下記Phase 2検証を参照)
 - **テーマ**(設定画面): アクセントカラー(プリセット+カラーピッカー)、新しいタブの背景(自動/固定)、カスタムCSS(UIと内部ページに適用)。プロファイル単位+共有トグル対応
 - **スタートページ**: Bonjourr風。時間帯で変わるグラデーション背景(夜明け5-8時/昼8-16時/夕暮れ16-19時/夜)、大きな時計+日付+挨拶、すりガラスの検索欄、アイコンタイルのクイックリンク
 
@@ -59,11 +61,10 @@ Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP
 優先順は「プロファイルの影響を受ける機能(先)→ 影響を受けないUI機能(後)」。
 プロファイル基盤が固まったので、以降は独立性の高い機能から着手できる。
 
-1. **Phase 2(後回し分): 拡張機能対応の検証**(`electron-chrome-web-store` で uBlock Origin が動くか)
-   - 動かない場合は方針転換の判断が必要な重要マイルストーン
-2. **Phase 6: パスワード保存**(`safeStorage` で暗号化。プロファイル単位、共有トグル「保存パスワード」を有効化)
-3. **Phase 6: 残りのChrome機能**(タブのドラッグ並べ替え、複数ウィンドウ、シークレットモード)
-4. 画面分割・メディアプレイヤー(要件定義書 4.3 / 4.4)
+1. **Phase 6: パスワード保存**(`safeStorage` で暗号化。プロファイル単位、共有トグル「保存パスワード」を有効化)
+2. **Phase 6: 残りのChrome機能**(タブのドラッグ並べ替え、複数ウィンドウ、シークレットモード)
+3. 画面分割・メディアプレイヤー(要件定義書 4.3 / 4.4)
+4. 拡張機能の管理UI(設定画面に一覧・削除、ツールバーの拡張ボタン=`electron-chrome-extensions` の browser-action UI)
 5. デザインの継続改善(Preline UIのコンポーネントパターン適用を広げる)
 
 ## 進捗記録
@@ -239,6 +240,25 @@ Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP
 - **SVGアイコン化**: ツールバー・タブバー・検索バー・サイドパネルの文字記号(←↻⚙など)を全てlucide風のインラインSVG(stroke: currentColor)に置き換え。`.icon-btn svg` 等で共通スタイル
 - その他: アドレスバー左にサイト種別アイコン(https=鍵 / それ以外=検索)、タブの閉じるボタンはホバー/アクティブ時のみ表示、faviconがないタブは頭文字表示、ブックマーク済みの星は塗りつぶし(スターはJSでtextContentを書き換えない方式に変更)
 - 検証: スクリーンショットでツールバー/タブ/サイドパネルの描画、env()による右上余白(145px)、実キーCtrl+Tでタブ作成を確認済み
+
+### 2026-07-14: Phase 2 拡張機能対応の検証 → 内蔵広告ブロックへ方針転換
+
+**検証結果(重要)**:
+- `electron-chrome-extensions`(GPL-3.0。**配布時はGPL条件が適用される**点に注意)+ `electron-chrome-web-store` を導入し、ウェブストアからのインストール自体は成功
+- **uBlock Origin (MV2) は動かない**: インストール・バックグラウンドページ起動までは成功するが、`chrome.webRequest.onBeforeRequest` にアクセスすると undefined。バックグラウンドページのログに `No source for require(webRequestEvent)` — **ElectronはwebRequestブロッキングの拡張機能バインディングを実装していない**(公式ドキュメントの「対応」記載は名前空間のみで、イベントは使えない)。electron-browser-shell も webRequest ブロッキングは「検討中」段階
+- **uBlock Origin Lite (MV3) も不可**: `chrome.declarativeNetRequest` が undefined
+- **コンテンツスクリプト型の拡張は動く**: Dark Reader 4.9.128 をインストール → example.com が実際にダーク化されるのを確認済み
+- 検証用にインストールしたuBO/Dark Readerは削除済み(拡張の保存先: `profiles/<id>/extensions/`)
+
+**方針転換: 内蔵広告ブロックを実装**(`@ghostery/adblocker-electron`)
+- `src/main/adblock.js` — EasyList等のプリセットフィルタをダウンロードして `adblock-engine.bin` にキャッシュ(オフライン時は前回分)。ElectronのwebRequestでリクエスト遮断
+- 設定 `adblock`(既定ON)を `DEFAULT_SETTINGS` に追加。設定画面「ブラウザ設定」にトグル。切り替え時は `applyAdblock()` がアクティブプロファイルのセッションへ適用/解除
+- 検証: googlesyndication / doubleclick への fetch が blocked、通常サイトは loaded。トグルOFF→loaded、再ON→blocked を確認済み
+
+**拡張機能サポートの実装**(残してある。コンテンツスクリプト型拡張が使えるため):
+- `src/main/extension-support.js` — セッションごとに `ElectronChromeExtensions`(license: 'GPL-3.0')+ `installChromeWebStore` を取り付け。拡張はプロファイル別に保存・自動読み込み
+- TabManagerに `onTabCreated` / `onTabSelected` フックを追加して chrome.tabs API と連動
+- IPC: `extensions:install`(ウェブストアID指定)/ `extensions:list`。管理UI・ツールバーの拡張ボタン(browser-action)は未実装(今後の計画に記載)
 
 ### 開発の進め方(ツール)
 
