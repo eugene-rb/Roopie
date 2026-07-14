@@ -67,6 +67,24 @@
       </div>
     </div>
 
+    <h2 class="section-title">保存したパスワード</h2>
+    <div class="card">
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">パスワードの保存と自動入力</div>
+          <div class="setting-desc" id="passwords-desc">ログイン時に保存を確認し、次回から自動入力します(OSの暗号化で保護)</div>
+        </div>
+        <label class="switch">
+          <input id="save-passwords" type="checkbox" />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div id="passwords-list" class="list" style="margin-top: 8px"></div>
+      <div class="gesture-footer">
+        <button id="passwords-clear" class="btn danger">すべて削除</button>
+      </div>
+    </div>
+
     <h2 class="section-title">テーマ</h2>
     <div class="card">
       <div class="setting-row">

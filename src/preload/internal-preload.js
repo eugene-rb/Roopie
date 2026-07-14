@@ -56,6 +56,14 @@ if (location.protocol === 'roopie:') {
     setSidePanelNotes: (text) => ipcRenderer.send('sidepanel:set-notes', text),
     onSidePanelState: (cb) => ipcRenderer.on('sidepanel:state', (_e, s) => cb(s)),
 
+    // 保存パスワード(管理画面用)
+    listPasswords: () => ipcRenderer.invoke('passwords:list'),
+    revealPassword: (id) => ipcRenderer.invoke('passwords:reveal', id),
+    passwordsAvailable: () => ipcRenderer.invoke('passwords:available'),
+    removePassword: (id) => ipcRenderer.send('passwords:remove', id),
+    clearPasswords: () => ipcRenderer.send('passwords:clear'),
+    onPasswordsState: (cb) => ipcRenderer.on('passwords:state', (_e, items) => cb(items)),
+
     // 拡張機能
     installExtension: (extensionId) => ipcRenderer.invoke('extensions:install', extensionId),
     listExtensions: () => ipcRenderer.invoke('extensions:list'),

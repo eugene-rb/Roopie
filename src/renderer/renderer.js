@@ -183,6 +183,33 @@ function applyTheme(theme) {
 window.roopie.onThemeState(applyTheme);
 window.roopie.getTheme().then(applyTheme);
 
+// ---- パスワード保存の確認バー ----
+const passwordBar = $('password-bar');
+const passwordText = $('password-text');
+
+window.roopie.onPasswordPrompt(({ origin, username, isUpdate }) => {
+  const host = origin.replace(/^https?:\/\//, '');
+  passwordText.textContent = isUpdate
+    ? `${host} の「${username}」のパスワードを更新しますか?`
+    : `${host} のパスワードを保存しますか?(${username})`;
+  passwordBar.classList.remove('hidden');
+  reportChromeHeight();
+});
+
+function closePasswordBar() {
+  passwordBar.classList.add('hidden');
+  reportChromeHeight();
+}
+
+$('password-save').addEventListener('click', () => {
+  window.roopie.savePassword();
+  closePasswordBar();
+});
+$('password-dismiss').addEventListener('click', () => {
+  window.roopie.dismissPassword();
+  closePasswordBar();
+});
+
 // ---- ページ内検索 ----
 window.roopie.onOpenFind(() => {
   findBar.classList.remove('hidden');

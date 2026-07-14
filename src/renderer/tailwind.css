@@ -425,6 +425,63 @@ body {
   text-overflow: ellipsis;
 }
 
+/* ---- パスワード保存の確認バー ---- */
+#password-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 12px;
+  background: var(--bg-toolbar);
+  border-bottom: 1px solid var(--border);
+}
+
+#password-bar .pw-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#password-text {
+  flex: 1;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bar-btn {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.bar-btn:hover {
+  background: var(--hover);
+}
+
+.bar-btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #14151a;
+  font-weight: 600;
+}
+
+.bar-btn.primary:hover {
+  filter: brightness(1.1);
+}
+
 /* ---- ページ内検索バー ---- */
 #find-bar {
   display: flex;
@@ -957,6 +1014,18 @@ body {
 .gesture-conflict {
   font-size: 11px;
   color: #ffb454;
+}
+
+/* 保存したパスワード */
+.password-value {
+  min-width: 130px;
+  font: 12px/1 Consolas, "Cascadia Mono", monospace;
+  color: var(--text-dim);
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
 }
 
 /* テーマ */

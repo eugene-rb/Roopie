@@ -11,10 +11,14 @@ const Gestures = require('./gestures');
 const SidePanel = require('./side-panel');
 const ExtensionSupport = require('./extension-support');
 const AdBlock = require('./adblock');
+const Passwords = require('./passwords');
 const Store = require('./store');
 
 const PAGES_DIR = path.join(__dirname, '..', 'renderer', 'pages');
-const DEFAULT_SETTINGS = { showBookmarkBar: true, adblock: true };
+const DEFAULT_SETTINGS = { showBookmarkBar: true, adblock: true, savePasswords: true };
+
+// 保存確認バーで「保存する」が押されるまで、平文パスワードをここに一時保持する
+let pendingPassword = null;
 
 // テーマ(アクセントカラー / 新しいタブの背景 / カスタムCSS)
 const DEFAULT_THEME = { accent: '#6c8cff', background: 'auto', customCss: '' };
@@ -32,6 +36,7 @@ let settings = null;
 let gestures = null;
 let sidePanel = null;
 let theme = null;
+let passwords = null;
 const extensionSupport = new ExtensionSupport();
 const adblock = new AdBlock();
 
@@ -70,16 +75,18 @@ function registerInternalProtocol(session) {
   session.protocol.handle('roopie', handleInternalRequest);
 }
 
-// マウスジェスチャー検出用のpreloadをセッション内の全ページに注入する
+// マウスジェスチャー / パスワード検出用のpreloadをセッション内の全ページに注入する
 // (webPreferences.preload と併用できるので、内部ページでもジェスチャーが効く)
-const gesturePreloadSessions = new WeakSet();
+const pagePreloadSessions = new WeakSet();
 function registerGesturePreload(session) {
-  if (gesturePreloadSessions.has(session)) return;
-  gesturePreloadSessions.add(session);
-  session.registerPreloadScript({
-    type: 'frame',
-    filePath: path.join(__dirname, '..', 'preload', 'gesture-preload.js'),
-  });
+  if (pagePreloadSessions.has(session)) return;
+  pagePreloadSessions.add(session);
+  for (const name of ['gesture-preload.js', 'password-preload.js']) {
+    session.registerPreloadScript({
+      type: 'frame',
+      filePath: path.join(__dirname, '..', 'preload', name),
+    });
+  }
 }
 
 function createWindow() {
@@ -121,6 +128,7 @@ function createWindow() {
   settings = store(profile, 'settings', { ...DEFAULT_SETTINGS });
   gestures = new Gestures(store(profile, 'gestures', Gestures.defaults()));
   theme = store(profile, 'theme', { ...DEFAULT_THEME });
+  passwords = new Passwords(store(profile, 'passwords', []));
 
   const session = profiles.sessionFor(profile);
   registerInternalProtocol(session);
@@ -207,6 +215,7 @@ function applyActiveProfile({ recreateTabs } = {}) {
   sidePanel.setStore(store(profile, 'sidepanel', { webPanels: [], notes: '' }));
   theme.flush();
   theme = store(profile, 'theme', { ...DEFAULT_THEME });
+  passwords.setStore(store(profile, 'passwords', []));
 
   const session = profiles.sessionFor(profile);
   registerInternalProtocol(session);
@@ -291,6 +300,11 @@ function sendSidePanel() {
 function sendTheme() {
   if (!theme) return;
   broadcast('theme:state', theme.data);
+}
+
+function sendPasswords() {
+  if (!passwords) return;
+  broadcast('passwords:state', passwords.list());
 }
 
 function sendAll() {
@@ -546,6 +560,52 @@ ipcMain.on('sidepanel:close-web', () => sidePanel?.closeWeb());
 ipcMain.on('sidepanel:reload-web', () => sidePanel?.reloadWeb());
 ipcMain.on('sidepanel:set-notes', (_e, text) => sidePanel?.setNotes(text));
 
+// ---- パスワード ----
+// ページのpreloadがログイン送信を検出したら、未保存のときだけUIに確認バーを出す
+ipcMain.on('passwords:captured', (_e, { origin, username, password } = {}) => {
+  if (!passwords || !origin || !username || !password) return;
+  if (settings?.data.savePasswords === false) return;
+  if (!Passwords.available()) return;
+  if (passwords.matches(origin, username, password)) return; // 同じ内容なら何も出さない
+
+  const existing = passwords.find(origin, username);
+  pendingPassword = { origin, username, password };
+  mainWindow?.webContents.send('passwords:prompt', {
+    origin,
+    username,
+    isUpdate: !!existing, // 既存の別パスワード = 更新の確認
+  });
+});
+
+// 保存確認バーの「保存する」
+ipcMain.on('passwords:confirm-save', () => {
+  if (!pendingPassword) return;
+  const { origin, username, password } = pendingPassword;
+  pendingPassword = null;
+  passwords?.save(origin, username, password);
+  sendPasswords();
+});
+ipcMain.on('passwords:dismiss', () => {
+  pendingPassword = null;
+});
+
+ipcMain.handle('passwords:for-origin', (_e, origin) => {
+  if (settings?.data.savePasswords === false) return [];
+  return passwords?.forOrigin(origin) ?? [];
+});
+
+ipcMain.handle('passwords:list', () => passwords?.list() ?? []);
+ipcMain.handle('passwords:reveal', (_e, id) => passwords?.reveal(id) ?? null);
+ipcMain.handle('passwords:available', () => Passwords.available());
+ipcMain.on('passwords:remove', (_e, id) => {
+  passwords?.remove(id);
+  sendPasswords();
+});
+ipcMain.on('passwords:clear', () => {
+  passwords?.clear();
+  sendPasswords();
+});
+
 // ---- 拡張機能 ----
 ipcMain.handle('extensions:install', async (_e, extensionId) => {
   const profile = profiles.active();
@@ -640,6 +700,7 @@ app.on('before-quit', () => {
   gestures?.store.flush();
   sidePanel?.store.flush();
   theme?.flush();
+  passwords?.store.flush();
 });
 
 app.on('activate', () => {

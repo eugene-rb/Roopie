@@ -14,13 +14,11 @@ const SHARABLE = [
   { key: 'settings', name: 'ブラウザ設定', desc: 'ブックマークバーの表示などの設定を共通にする' },
   { key: 'gestures', name: 'マウスジェスチャー', desc: 'ジェスチャーの割り当てを全プロファイルで共通にする' },
   { key: 'theme', name: 'テーマ', desc: 'アクセントカラーやカスタムCSSを全プロファイルで共通にする' },
+  { key: 'passwords', name: '保存パスワード', desc: '保存したパスワードを全プロファイルで共通にする' },
 ];
 
 // 今後のフェーズで対応する項目(UIだけ先に用意)
-const PLANNED = [
-  { name: '保存パスワード', desc: 'Phase 6 で対応予定' },
-  { name: '拡張機能', desc: '拡張機能対応後に実装' },
-];
+const PLANNED = [{ name: '拡張機能', desc: '拡張機能の管理UI実装後に対応' }];
 
 let state = { profiles: [], activeId: null, googleAccounts: [] };
 // プロファイルID -> 実際にGoogleにログイン中のメールアドレス一覧
@@ -372,6 +370,90 @@ adblockToggle.addEventListener('change', () =>
   window.roopieInternal.setSetting('adblock', adblockToggle.checked)
 );
 
+// ---- 保存したパスワード ----
+const savePasswordsToggle = document.getElementById('save-passwords');
+const passwordsListEl = document.getElementById('passwords-list');
+const passwordsDescEl = document.getElementById('passwords-desc');
+
+// パスワードは既定で伏せ字。「表示」を押したものだけ復号して見せる
+const revealed = new Map();
+
+function renderPasswords(items) {
+  passwordsListEl.textContent = '';
+  if (!items.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-inline';
+    empty.textContent = '保存されたパスワードはありません';
+    passwordsListEl.appendChild(empty);
+    return;
+  }
+
+  for (const item of items) {
+    const row = document.createElement('div');
+    row.className = 'row';
+
+    const main = document.createElement('div');
+    main.className = 'main';
+    const title = document.createElement('span');
+    title.className = 'title';
+    title.textContent = item.origin.replace(/^https?:\/\//, '');
+    main.appendChild(title);
+    const sub = document.createElement('span');
+    sub.className = 'sub';
+    sub.textContent = item.username;
+    main.appendChild(sub);
+    row.appendChild(main);
+
+    const secret = document.createElement('span');
+    secret.className = 'password-value';
+    secret.textContent = revealed.get(item.id) ?? '••••••••';
+    row.appendChild(secret);
+
+    const actions = document.createElement('div');
+    actions.className = 'row-actions';
+
+    const revealBtn = document.createElement('button');
+    revealBtn.className = 'row-btn';
+    revealBtn.textContent = revealed.has(item.id) ? '隠す' : '表示';
+    revealBtn.addEventListener('click', async () => {
+      if (revealed.has(item.id)) {
+        revealed.delete(item.id);
+      } else {
+        const value = await window.roopieInternal.revealPassword(item.id);
+        revealed.set(item.id, value ?? '(復号できません)');
+      }
+      refreshPasswords();
+    });
+    actions.appendChild(revealBtn);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'row-btn';
+    removeBtn.textContent = '削除';
+    removeBtn.addEventListener('click', () => window.roopieInternal.removePassword(item.id));
+    actions.appendChild(removeBtn);
+
+    row.appendChild(actions);
+    passwordsListEl.appendChild(row);
+  }
+}
+
+async function refreshPasswords() {
+  renderPasswords(await window.roopieInternal.listPasswords());
+}
+
+savePasswordsToggle.addEventListener('change', () =>
+  window.roopieInternal.setSetting('savePasswords', savePasswordsToggle.checked)
+);
+
+document.getElementById('passwords-clear').addEventListener('click', () => {
+  if (confirm('保存したパスワードをすべて削除します。よろしいですか?')) {
+    revealed.clear();
+    window.roopieInternal.clearPasswords();
+  }
+});
+
+window.roopieInternal.onPasswordsState((items) => renderPasswords(items));
+
 // ---- テーマ ----
 const ACCENT_PRESETS = ['#6c8cff', '#4bbf8a', '#ffb454', '#e5709b', '#a78bfa', '#4dc4d9', '#ff6b6b'];
 const accentSwatchesEl = document.getElementById('accent-swatches');
@@ -574,6 +656,7 @@ window.roopieInternal.onProfilesState((next) => {
 window.roopieInternal.onSettings((settings) => {
   bookmarkBarToggle.checked = !!settings.showBookmarkBar;
   adblockToggle.checked = settings.adblock !== false;
+  savePasswordsToggle.checked = settings.savePasswords !== false;
 });
 
 // 別タブでログインして戻ってきたときに「ログイン中」表示を更新する
@@ -592,10 +675,19 @@ document.addEventListener('visibilitychange', () => {
   state = { ...profileState, googleAccounts: accounts };
   bookmarkBarToggle.checked = !!settings.showBookmarkBar;
   adblockToggle.checked = settings.adblock !== false;
+  savePasswordsToggle.checked = settings.savePasswords !== false;
   if (gestureConfig) gestureState = gestureConfig;
   if (themeConfig) themeState = themeConfig;
   render();
   renderGestures();
   renderTheme();
   refreshSignedIn();
+
+  // OSの暗号化が使えない環境では保存機能自体を無効にする
+  if (!(await window.roopieInternal.passwordsAvailable())) {
+    savePasswordsToggle.disabled = true;
+    passwordsDescEl.textContent =
+      'この環境ではOSの暗号化が利用できないため、パスワードを保存できません';
+  }
+  refreshPasswords();
 })();

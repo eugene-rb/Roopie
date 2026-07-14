@@ -42,6 +42,11 @@ contextBridge.exposeInMainWorld('roopie', {
   onSidePanelState: (cb) => ipcRenderer.on('sidepanel:state', (_e, s) => cb(s)),
   getTheme: () => ipcRenderer.invoke('theme:get'),
   onThemeState: (cb) => ipcRenderer.on('theme:state', (_e, t) => cb(t)),
+
+  // パスワード保存の確認バー
+  onPasswordPrompt: (cb) => ipcRenderer.on('passwords:prompt', (_e, p) => cb(p)),
+  savePassword: () => ipcRenderer.send('passwords:confirm-save'),
+  dismissPassword: () => ipcRenderer.send('passwords:dismiss'),
   onFocusAddressBar: (cb) => ipcRenderer.on('ui:focus-address-bar', () => cb()),
   onOpenFind: (cb) => ipcRenderer.on('ui:open-find', () => cb()),
   onFindResult: (cb) => ipcRenderer.on('find:result', (_e, r) => cb(r)),

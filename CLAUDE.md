@@ -34,7 +34,8 @@ Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP
 | Phase 5: テーマ機能 + Bonjourr風スタートページ | ✅ 完了 |
 | Phase 5: Tailwind CSS v4 + Preline UI 導入 | ✅ 完了 |
 | Phase 5: UI改善(フレームレス化・SVGアイコン) | ✅ 完了 |
-| Phase 6: パスワード保存・細部の作り込み | ⬜ 未着手 |
+| Phase 6: パスワード保存 | ✅ 完了 |
+| Phase 6: 細部の作り込み(残りのChrome機能) | ⬜ 未着手 |
 
 ### 動く機能(一覧)
 
@@ -46,12 +47,13 @@ Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP
 - **サイドパネル**(Ctrl+Shift+S / ツールバーの◨ボタン): ブックマーク・履歴クイックアクセス、自動保存メモ、Webパネル(任意サイトの常駐表示・複数登録・ヘッダーのアイコンで切り替え)。データはプロファイル単位
 - **広告ブロック(内蔵)**: EasyList等のフィルタで広告・トラッカーを遮断(@ghostery/adblocker-electron)。設定画面のトグルでON/OFF(既定ON、プロファイル単位)
 - **Chrome拡張機能(部分対応)**: Chromeウェブストアからのインストールと、コンテンツスクリプト型拡張(Dark Reader等)が動く。uBlock Origin等のブロッキング型は不可(下記Phase 2検証を参照)
+- **パスワード保存・自動入力**: ログイン送信を検出して保存確認バーを表示。次回以降は自動入力。safeStorage(OSの資格情報ストア)で暗号化。設定画面で一覧・表示・削除、トグルでON/OFF
 - **テーマ**(設定画面): アクセントカラー(プリセット+カラーピッカー)、新しいタブの背景(自動/固定)、カスタムCSS(UIと内部ページに適用)。プロファイル単位+共有トグル対応
 - **スタートページ**: Bonjourr風。時間帯で変わるグラデーション背景(夜明け5-8時/昼8-16時/夕暮れ16-19時/夜)、大きな時計+日付+挨拶、すりガラスの検索欄、アイコンタイルのクイックリンク
 
 ### 既知の制約・未対応
 
-- Googleの**パスワード自動入力はなし**(各プロファイルで初回のみ手動ログイン。以降はCookieで保持)
+- **uBlock Originなどのブロッキング型拡張は動かない**(Electronの制約。内蔵広告ブロックで代替済み。詳細は下の Phase 2 検証記録)
 - 拡張機能、マウスジェスチャー、サイドパネル、テーマ/カスタムCSS、画面分割、メディアプレイヤーは未実装
 - Chrome機能の残り: タブのドラッグ並べ替え、複数ウィンドウ、シークレットモード
 - 起動ログの `blink.mojom.WidgetHost` エラーはChromiumの無害なノイズ(対応不要)
@@ -61,8 +63,7 @@ Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP
 優先順は「プロファイルの影響を受ける機能(先)→ 影響を受けないUI機能(後)」。
 プロファイル基盤が固まったので、以降は独立性の高い機能から着手できる。
 
-1. **Phase 6: パスワード保存**(`safeStorage` で暗号化。プロファイル単位、共有トグル「保存パスワード」を有効化)
-2. **Phase 6: 残りのChrome機能**(タブのドラッグ並べ替え、複数ウィンドウ、シークレットモード)
+1. **Phase 6: 残りのChrome機能**(タブのドラッグ並べ替え、複数ウィンドウ、シークレットモード)
 3. 画面分割・メディアプレイヤー(要件定義書 4.3 / 4.4)
 4. 拡張機能の管理UI(設定画面に一覧・削除、ツールバーの拡張ボタン=`electron-chrome-extensions` の browser-action UI)
 5. デザインの継続改善(Preline UIのコンポーネントパターン適用を広げる)
@@ -259,6 +260,22 @@ Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP
 - `src/main/extension-support.js` — セッションごとに `ElectronChromeExtensions`(license: 'GPL-3.0')+ `installChromeWebStore` を取り付け。拡張はプロファイル別に保存・自動読み込み
 - TabManagerに `onTabCreated` / `onTabSelected` フックを追加して chrome.tabs API と連動
 - IPC: `extensions:install`(ウェブストアID指定)/ `extensions:list`。管理UI・ツールバーの拡張ボタン(browser-action)は未実装(今後の計画に記載)
+
+### 2026-07-14: Phase 6 パスワード保存・自動入力
+
+- **保存**: ページのpreloadがログイン送信(submit / ボタンクリック / Enter)を検出 → 画面遷移時にメインへ通知 → **未保存のときだけ**ツールバー下に保存確認バーを表示。「保存する」で保存
+- **自動入力**: 次回以降、同じオリジンのログインフォームにユーザー名・パスワードを自動入力(Reactにも効くようネイティブsetter経由で値を入れる)
+- **暗号化**: `safeStorage.encryptString`(OSの資格情報ストアの鍵)でパスワードを暗号化し、base64でJSONに保存。**ディスク上に平文は残らない**(検証済み)。復号は自動入力/表示のときだけ
+- **管理**: 設定画面「保存したパスワード」に一覧(パスワードは伏せ字、「表示」で復号)・個別削除・すべて削除・ON/OFFトグル。共有トグル「保存パスワード」も有効化
+- 追加/変更ファイル:
+  - `src/main/passwords.js` — 暗号化・保存・検索・復号(保存単位は オリジン + ユーザー名)
+  - `src/preload/password-preload.js` — 検出と自動入力。ジェスチャー用と同様に `session.registerPreloadScript` でセッション全体へ注入(**ページにAPIは公開しない**)
+  - `src/main/main.js` — IPC(`passwords:captured / confirm-save / dismiss / for-origin / list / reveal / remove / clear / available`)。平文は `pendingPassword` に一時保持し、保存 or 却下で破棄
+  - `src/renderer/index.html` + `renderer.js` — 保存確認バー(UI領域なので `reportChromeHeight()` で高さを通知)
+- 技術メモ:
+  - `safeStorage.isEncryptionAvailable()` が false の環境(Linuxで鍵ストアなし等)では保存機能自体を無効化し、設定画面にその旨を表示する
+  - 復号できないデータ(別マシン/別OSユーザーで作られた)は一覧から自動的に除外される
+- 検証: safeStorage利用可否 / 保存バー表示 / 保存 / 復号 / 自動入力 / 同一パスワード時にバーを出さない / 一覧APIとディスクのJSONに平文が含まれない、をCDPで確認済み
 
 ### 開発の進め方(ツール)
 
