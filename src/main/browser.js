@@ -1,4 +1,5 @@
 const { app, BrowserWindow, WebContentsView, protocol, net, session: electronSession } = require('electron');
+const crypto = require('crypto');
 const path = require('path');
 const { pathToFileURL } = require('url');
 const TabManager = require('./tab-manager');
@@ -25,10 +26,14 @@ const DEFAULT_SETTINGS = {
   savePasswords: true,
   mediaDocked: false,
   mediaCorner: 'bottom-right',
+  downloadPath: '', // 空ならOS既定(session.setDownloadPathを呼ばない)
+  tabBarPosition: 'top', // 'top' | 'left'
 };
-const DEFAULT_THEME = { accent: '#6c8cff', background: 'auto', customCss: '' };
-const THEME_BACKGROUNDS = ['auto', 'dawn', 'day', 'dusk', 'night', 'plain'];
+const DEFAULT_THEME = { accent: '#6c8cff', background: 'auto', backgroundImage: '', customCss: '' };
+const THEME_BACKGROUNDS = ['auto', 'dawn', 'day', 'dusk', 'night', 'plain', 'image'];
 const MAX_CUSTOM_CSS = 50000;
+const MAX_BACKGROUND_IMAGE = 4_000_000; // data URIとして保存するため大きめに許容(4MB程度)
+const TAB_BAR_WIDTH = 220; // 縦タブ表示時のタブバー幅(tailwind.cssの#tab-barの幅と一致させる)
 
 // ウィンドウの背景色(ページの周囲に見える「額縁」の色)
 const FRAME_COLOR = '#16181d';
@@ -165,7 +170,9 @@ function memoryStore(defaultValue) {
   return { data: defaultValue, save() {}, flush() {} };
 }
 
-browser.createWindow = ({ incognito = false } = {}) => {
+// url を指定すると、そのURLのタブ1枚だけで開く(タブのドラッグ切り離し用)。
+// x/yはタブを離した画面座標(ドラッグ切り離し時、その位置に新しいウィンドウを出すため)
+browser.createWindow = ({ incognito = false, url, x, y } = {}) => {
   const profile = browser.profiles.active();
   const session = incognito ? createIncognitoSession() : browser.profiles.sessionFor(profile);
   const frameColor = incognito ? FRAME_COLOR_INCOGNITO : FRAME_COLOR;
@@ -175,6 +182,7 @@ browser.createWindow = ({ incognito = false } = {}) => {
     height: 800,
     minWidth: 500,
     minHeight: 300,
+    ...(Number.isFinite(x) && Number.isFinite(y) ? { x: Math.round(x - 100), y: Math.round(y - 20) } : {}),
     title: incognito ? 'Roopie(シークレット)' : 'Roopie',
     // ページの周囲の余白から透けて見える色。UIと同色にして「額縁」に見せる
     backgroundColor: frameColor,
@@ -193,6 +201,7 @@ browser.createWindow = ({ incognito = false } = {}) => {
   registerPagePreloads(session);
   if (!incognito) browser.downloads.attachSession(session);
   browser.applyAdblock(session);
+  browser.applyDownloadPath(session);
 
   const tabManager = new TabManager(window, {
     history: incognito ? NULL_HISTORY : browser.history,
@@ -200,6 +209,7 @@ browser.createWindow = ({ incognito = false } = {}) => {
     session,
   });
   tabManager.setOverlay(createOverlayView(session));
+  tabManager.setChromeLeft(browser.settings.data.tabBarPosition === 'left' ? TAB_BAR_WIDTH : 0);
 
   const sidePanel = new SidePanel(window, {
     session,
@@ -233,6 +243,9 @@ browser.createWindow = ({ incognito = false } = {}) => {
     }
   };
 
+  // Googleにログインした可能性のあるタイミングでアカウントを自動検出する(シークレットでは行わない)
+  if (!incognito) tabManager.onGoogleDomainVisit = (s) => browser.checkGoogleAutoRegister(s);
+
   // 拡張機能はシークレット(非永続セッション)では動かないので取り付けない
   if (!incognito) {
     browser.extensions.setBrowser({ tabManager, window });
@@ -248,7 +261,7 @@ browser.createWindow = ({ incognito = false } = {}) => {
   window.webContents.once('did-finish-load', () => {
     window.webContents.send('ui:window', { incognito });
     browser.sendAllTo(ctx);
-    tabManager.createTab();
+    tabManager.createTab(url || undefined);
   });
 
   // マウスの戻る/進むボタン
@@ -296,10 +309,117 @@ browser.applyAdblock = (session) => {
   }
 };
 
+// ---- テーマ ----
+
+// パッチを検証してthemeストアへ適用する(実際に書き込むのはこの関数のみ)
+browser.applyThemePatch = (themeStore, patch) => {
+  if (!themeStore || !patch) return;
+  if (typeof patch.accent === 'string' && /^#[0-9a-fA-F]{6}$/.test(patch.accent)) {
+    themeStore.data.accent = patch.accent.toLowerCase();
+  }
+  if (browser.THEME_BACKGROUNDS.includes(patch.background)) {
+    themeStore.data.background = patch.background;
+  }
+  if (typeof patch.backgroundImage === 'string' && patch.backgroundImage.length <= MAX_BACKGROUND_IMAGE) {
+    if (patch.backgroundImage === '' || patch.backgroundImage.startsWith('data:image/')) {
+      themeStore.data.backgroundImage = patch.backgroundImage;
+    }
+  }
+  if (typeof patch.customCss === 'string') {
+    themeStore.data.customCss = patch.customCss.slice(0, browser.MAX_CUSTOM_CSS);
+  }
+  themeStore.save();
+};
+
+// 任意のプロファイルのテーマを読む(アクティブでなくてもよい。設定画面のプロファイルカード用)
+browser.themeFor = (profileId) => {
+  const profile = browser.profiles.list().find((p) => p.id === profileId);
+  if (!profile) return { ...DEFAULT_THEME };
+  if (profile.id === browser.profiles.activeId) return browser.theme.data;
+  const s = store(profile, 'theme', { ...DEFAULT_THEME });
+  const data = { ...s.data };
+  s.flush();
+  return data;
+};
+
+// 任意のプロファイルのテーマを書く(アクティブなら即座にUIへ反映、そうでなければディスクにのみ保存)
+browser.setThemeFor = (profileId, patch) => {
+  const profile = browser.profiles.list().find((p) => p.id === profileId);
+  if (!profile) return;
+  if (profile.id === browser.profiles.activeId) {
+    browser.applyThemePatch(browser.theme, patch);
+    browser.sendTheme();
+    return;
+  }
+  const s = store(profile, 'theme', { ...DEFAULT_THEME });
+  browser.applyThemePatch(s, patch);
+  s.flush();
+};
+
+// ---- Googleアカウントの自動検出 ----
+
+// プロファイルID -> 直近に自動検出チェックした時刻(google.comへのナビゲーションの連打で
+// 何度もListAccountsを叩かないようにする)
+const googleCheckedAt = new Map();
+
+// ログイン中なのに未登録のアカウントを見つけたら自動登録し、そのプロファイルで有効化する
+browser.autoRegisterGoogleAccounts = async (profile) => {
+  if (!browser.googleAccounts) return;
+  const session = browser.profiles.sessionFor(profile);
+  const detected = await GoogleAccounts.fetchSignedIn(session);
+  let changed = false;
+
+  for (const { email, name } of detected) {
+    let account = browser.googleAccounts.findByEmail(email);
+    if (!account) {
+      account = browser.googleAccounts.add(email, name);
+      changed = true;
+    }
+    if (!profile.google.enabled.includes(account.id)) {
+      browser.profiles.setGoogleEnabled(profile.id, account.id, true);
+      changed = true;
+    }
+    if (!profile.google.primaryId) {
+      browser.profiles.setGooglePrimary(profile.id, account.id);
+      changed = true;
+    }
+  }
+  if (changed) browser.sendProfiles();
+};
+
+// タブがgoogle.com系ドメインへナビゲートしたときの自動検出(5秒スロットル)
+browser.checkGoogleAutoRegister = (session) => {
+  const profile = browser.profiles?.list().find((p) => browser.profiles.sessionFor(p) === session);
+  if (!profile) return;
+  const last = googleCheckedAt.get(profile.id) ?? 0;
+  if (Date.now() - last < 5000) return;
+  googleCheckedAt.set(profile.id, Date.now());
+  browser.autoRegisterGoogleAccounts(profile).catch((err) => console.error('Googleアカウントの自動検出に失敗:', err));
+};
+
+// ---- ダウンロード先 ----
+
+// 設定に応じて、指定セッション(省略時は全ウィンドウ)へダウンロード先を適用する
+browser.applyDownloadPath = (session) => {
+  const dir = browser.settings?.data.downloadPath;
+  if (!dir) return; // 空ならElectronのOS既定のままにする
+  const targets = session ? [session] : windows.all().map((c) => c.session);
+  for (const target of targets) target.setDownloadPath(dir);
+};
+
+// ---- タブバーの位置(上部/左側) ----
+
+// 設定に応じて、指定セッション(省略時は全ウィンドウ)のタブバーレイアウトを切り替える
+browser.applyTabBarPosition = (session) => {
+  const left = browser.settings?.data.tabBarPosition === 'left' ? TAB_BAR_WIDTH : 0;
+  const targets = session ? windows.all().filter((c) => c.session === session) : windows.all();
+  for (const ctx of targets) ctx.tabManager.setChromeLeft(left);
+};
+
 // ---- プロファイル ----
 
 // アクティブなプロファイルのデータ/セッションを各機能へ適用する
-browser.applyActiveProfile = ({ recreateTabs } = {}) => {
+browser.applyActiveProfile = ({ recreateTabs, previousProfileId } = {}) => {
   const profile = browser.profiles.active();
 
   browser.history.setStore(store(profile, 'history', []));
@@ -320,22 +440,43 @@ browser.applyActiveProfile = ({ recreateTabs } = {}) => {
     .attach(session, profile.id)
     .catch((err) => console.error('拡張機能サポートの初期化に失敗:', err));
 
+  const normalWindows = windows.normal();
+
+  // 離れるプロファイルの各ウィンドウのタブ構成を保存する。
+  // Edgeのワークスペースのように、次に戻ってきたときに同じタブ構成で再開できるようにする
+  if (recreateTabs && previousProfileId && previousProfileId !== profile.id) {
+    const previousProfile = browser.profiles.list().find((p) => p.id === previousProfileId);
+    if (previousProfile) {
+      const snapshot = normalWindows.map((ctx) => ctx.tabManager.snapshotTabs());
+      const s = store(previousProfile, 'session-tabs', []);
+      s.data = snapshot;
+      s.flush();
+    }
+  }
+  const incomingTabs = recreateTabs ? store(profile, 'session-tabs', []).data : null;
+
   // プロファイルの切り替えはシークレット以外の全ウィンドウに適用する
-  for (const ctx of windows.normal()) {
+  for (const [index, ctx] of normalWindows.entries()) {
     ctx.session = session;
     ctx.sidePanel.setStore(store(profile, 'sidepanel', { webPanels: [], notes: '' }));
     if (recreateTabs) {
       ctx.tabManager.switchSession(session);
+      const saved = incomingTabs?.[index]?.tabs;
+      if (saved?.length) ctx.tabManager.restoreTabs(saved);
+      else ctx.tabManager.createTab();
       ctx.sidePanel.switchSession(session);
     }
   }
   browser.applyAdblock();
+  browser.applyDownloadPath();
+  browser.applyTabBarPosition();
   browser.sendAll();
 };
 
 browser.switchProfile = (id) => {
+  const previousProfileId = browser.profiles.activeId;
   if (!browser.profiles.switchTo(id)) return;
-  browser.applyActiveProfile({ recreateTabs: true });
+  browser.applyActiveProfile({ recreateTabs: true, previousProfileId });
 };
 
 // 共有トグルの変更は、そのプロファイルがアクティブなときだけ保存先の切り替えが必要

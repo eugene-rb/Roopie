@@ -65,21 +65,28 @@ class GoogleAccounts {
 }
 
 /**
- * 指定セッションで実際にGoogleにログイン中のメールアドレスを返す。
+ * 指定セッションで実際にGoogleにログイン中のアカウント(メール+表示名)を返す。
  * 先頭がGoogleの言う「既定のアカウント(authuser=0)」。
  */
-async function signedInAccounts(session) {
+async function fetchSignedIn(session) {
   try {
     const response = await net.fetch(LIST_ACCOUNTS_URL, { session });
     if (!response.ok) return [];
     const data = JSON.parse(await response.text());
     // ["gaia.l.a.r", [["gaia.l.a", index, name, email, ...], ...]]
     const rows = Array.isArray(data?.[1]) ? data[1] : [];
-    return rows.map((row) => row[3]).filter((email) => typeof email === 'string' && email.includes('@'));
+    return rows
+      .map((row) => ({ email: row[3], name: row[2] }))
+      .filter((a) => typeof a.email === 'string' && a.email.includes('@'));
   } catch {
     // 未ログイン・オフライン・仕様変更時は「取得できなかった」として扱う
     return [];
   }
+}
+
+// メールアドレスの一覧だけが欲しい場合(設定画面の「ログイン中」表示用)
+async function signedInAccounts(session) {
+  return (await fetchSignedIn(session)).map((a) => a.email);
 }
 
 // セッションからGoogleのログイン情報(Cookie)を削除する = ログアウト
@@ -108,6 +115,7 @@ function normalizeEmail(email) {
 
 module.exports = GoogleAccounts;
 module.exports.signedInAccounts = signedInAccounts;
+module.exports.fetchSignedIn = fetchSignedIn;
 module.exports.signOut = signOut;
 module.exports.loginUrl = loginUrl;
 module.exports.normalizeEmail = normalizeEmail;

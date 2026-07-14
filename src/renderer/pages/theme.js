@@ -14,7 +14,10 @@
       // 不正なCSSは無視(パースできた分だけ反映される)
     }
     document.adoptedStyleSheets = [customSheet];
-    // ページ固有の追随処理(新しいタブの背景など)
+    // ページ固有の追随処理(新しいタブの背景など)。
+    // newtab.js側のスクリプト読み込みより先にこのPromiseが解決した場合に備えて
+    // 直近のテーマを保持しておき、フック登録後すぐに拾えるようにする
+    window.__roopieLastTheme = theme;
     window.onRoopieTheme?.(theme);
   }
 

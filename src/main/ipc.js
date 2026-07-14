@@ -1,4 +1,4 @@
-const { ipcMain } = require('electron');
+const { ipcMain, dialog, shell } = require('electron');
 const windows = require('./windows');
 const browser = require('./browser');
 const GoogleAccounts = require('./google-accounts');
@@ -16,6 +16,16 @@ function registerIpc() {
   ipcMain.on('tabs:close', (e, id) => tabsOf(e)?.closeTab(id));
   ipcMain.on('tabs:switch', (e, id) => tabsOf(e)?.switchTab(id));
   ipcMain.on('tabs:move', (e, id, toIndex) => tabsOf(e)?.moveTab(id, toIndex));
+
+  // タブをドラッグして新しいウィンドウへ切り離す(最後の1枚は切り離さない)
+  ipcMain.on('tabs:detach', (e, id, pos) => {
+    const tabManager = tabsOf(e);
+    const tab = tabManager?.getTab(id);
+    if (!tabManager || !tab || tabManager.tabs.length <= 1) return;
+    const url = tab.view.webContents.getURL();
+    tabManager.closeTab(id);
+    browser.createWindow({ url, x: pos?.screenX, y: pos?.screenY });
+  });
   ipcMain.on('tabs:navigate', (e, input) => tabsOf(e)?.navigate(input));
   ipcMain.on('tabs:back', (e) => tabsOf(e)?.goBack());
   ipcMain.on('tabs:forward', (e) => tabsOf(e)?.goForward());
@@ -61,6 +71,15 @@ function registerIpc() {
   ipcMain.on('bookmarks:remove', (_e, id) => browser.bookmarks?.remove(id));
   ipcMain.on('bookmarks:rename', (_e, id, title) => browser.bookmarks?.rename(id, title));
   ipcMain.handle('bookmarks:list', () => browser.bookmarks?.list() ?? []);
+
+  // ---- スタート画面のショートカット(bookmarksの中の "start" フォルダ以下) ----
+  ipcMain.handle('bookmarks:start-pages', () => browser.bookmarks?.startPages() ?? []);
+  ipcMain.handle('bookmarks:start-page-add', (_e, title) => browser.bookmarks?.addStartPage(title) ?? null);
+  ipcMain.handle('bookmarks:children', (_e, folderId) => browser.bookmarks?.children(folderId) ?? []);
+  ipcMain.handle('bookmarks:add-shortcut', (_e, folderId, payload) =>
+    browser.bookmarks?.addShortcut(folderId, payload ?? {})
+  );
+  ipcMain.on('bookmarks:update-item', (_e, id, patch) => browser.bookmarks?.updateItem(id, patch));
 
   // ---- 履歴(シークレットウィンドウからは参照させない)----
   ipcMain.handle('history:list', (e, query) =>
@@ -121,10 +140,12 @@ function registerIpc() {
     browser.sendProfiles();
   });
 
-  // 実際にログイン中のアカウントは、そのプロファイルのセッションのCookieから取得する
+  // 実際にログイン中のアカウントは、そのプロファイルのセッションのCookieから取得する。
+  // 未登録のアカウントがあれば自動登録・有効化もあわせて行う
   ipcMain.handle('google:signed-in', async (_e, profileId) => {
     const profile = browser.profiles?.list().find((p) => p.id === profileId);
     if (!profile) return [];
+    await browser.autoRegisterGoogleAccounts(profile);
     return GoogleAccounts.signedInAccounts(browser.profiles.sessionFor(profile));
   });
 
@@ -225,20 +246,14 @@ function registerIpc() {
   // ---- テーマ ----
   ipcMain.handle('theme:get', () => browser.theme?.data ?? { ...browser.DEFAULT_THEME });
   ipcMain.on('theme:set', (_e, patch) => {
-    const theme = browser.theme;
-    if (!theme || !patch) return;
-    if (typeof patch.accent === 'string' && /^#[0-9a-fA-F]{6}$/.test(patch.accent)) {
-      theme.data.accent = patch.accent.toLowerCase();
-    }
-    if (browser.THEME_BACKGROUNDS.includes(patch.background)) {
-      theme.data.background = patch.background;
-    }
-    if (typeof patch.customCss === 'string') {
-      theme.data.customCss = patch.customCss.slice(0, browser.MAX_CUSTOM_CSS);
-    }
-    theme.save();
+    if (!browser.theme) return;
+    browser.applyThemePatch(browser.theme, patch);
     browser.sendTheme();
   });
+
+  // プロファイルを切り替えずに、そのプロファイルのテーマを読み書きする(設定画面のプロファイルカード用)
+  ipcMain.handle('theme:get-for', (_e, profileId) => browser.themeFor(profileId));
+  ipcMain.on('theme:set-for', (_e, profileId, patch) => browser.setThemeFor(profileId, patch));
 
   // ---- マウスジェスチャー ----
   ipcMain.handle('gestures:config', () => browser.gestures?.config() ?? null);
@@ -283,6 +298,17 @@ function registerIpc() {
     }
   });
 
+  // フォルダ選択ダイアログ・フォルダを開く(スタート画面のショートカット等で使う汎用IPC)
+  ipcMain.handle('fs:pick-folder', async (e) => {
+    const window = ctxOf(e)?.window;
+    if (!window) return null;
+    const result = await dialog.showOpenDialog(window, { properties: ['openDirectory'] });
+    return result.canceled ? null : result.filePaths[0];
+  });
+  ipcMain.on('fs:open-folder', (_e, folderPath) => {
+    if (typeof folderPath === 'string' && folderPath) shell.openPath(folderPath);
+  });
+
   // ---- 設定 ----
   ipcMain.handle('settings:get', () => browser.settings?.data ?? { ...browser.DEFAULT_SETTINGS });
   ipcMain.on('settings:set', (_e, key, value) => {
@@ -292,6 +318,8 @@ function registerIpc() {
     settings.save();
     if (key === 'adblock') browser.applyAdblock();
     if (key === 'mediaDocked') browser.applyMediaDocked();
+    if (key === 'downloadPath') browser.applyDownloadPath();
+    if (key === 'tabBarPosition') browser.applyTabBarPosition();
     browser.sendSettings();
   });
 

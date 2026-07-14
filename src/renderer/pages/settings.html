@@ -144,7 +144,18 @@
           <option value="dusk">夕暮れ</option>
           <option value="night">夜</option>
           <option value="plain">シンプル(単色)</option>
+          <option value="image">画像</option>
         </select>
+      </div>
+      <div class="setting-row" id="bg-image-row">
+        <div>
+          <div class="setting-name">背景画像</div>
+          <div class="setting-desc">「画像」を選んでいるときに使われます</div>
+        </div>
+        <div class="profile-actions">
+          <button id="bg-image-upload" class="btn">画像をアップロード</button>
+          <button id="bg-image-clear" class="btn danger">画像を削除</button>
+        </div>
       </div>
       <div class="theme-css">
         <div class="setting-name">カスタムCSS(上級者向け)</div>
@@ -177,6 +188,16 @@
           <input id="adblock-toggle" type="checkbox" />
           <span class="slider"></span>
         </label>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">ダウンロード先</div>
+          <div class="setting-desc" id="download-path-desc">OSの既定のダウンロードフォルダ</div>
+        </div>
+        <div class="profile-actions">
+          <button id="download-path-change" class="btn">変更</button>
+          <button id="download-path-reset" class="btn">既定に戻す</button>
+        </div>
       </div>
     </div>
     </section>

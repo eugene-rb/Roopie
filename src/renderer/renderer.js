@@ -87,6 +87,7 @@ function renderTabs() {
 // ---- タブのドラッグ並べ替え ----
 // ドラッグ中は挿入位置のタブに .drop-before / .drop-after を付けて目印にする
 let draggingId = null;
+const DETACH_THRESHOLD = 40; // タブバーの下端からこれだけ離れたら切り離しと判定
 
 function attachTabDrag(tabEl, tab) {
   tabEl.addEventListener('dragstart', (e) => {
@@ -97,10 +98,19 @@ function attachTabDrag(tabEl, tab) {
     e.dataTransfer.setData('text/plain', String(tab.id));
   });
 
-  tabEl.addEventListener('dragend', () => {
+  tabEl.addEventListener('dragend', (e) => {
+    const reordered = e.dataTransfer.dropEffect === 'move';
     draggingId = null;
     clearDropMarkers();
     tabEl.classList.remove('dragging');
+
+    // タブバーの外(下方向にしきい値を超えて)にドロップしたら新しいウィンドウへ切り離す
+    if (!reordered && tabState.tabs.length > 1) {
+      const barBottom = tabsEl.getBoundingClientRect().bottom;
+      if (e.clientY > barBottom + DETACH_THRESHOLD) {
+        window.roopie.detachTab(tab.id, { screenX: e.screenX, screenY: e.screenY });
+      }
+    }
   });
 
   tabEl.addEventListener('dragover', (e) => {
@@ -272,10 +282,19 @@ window.roopie.onDownloadsState((state) => {
   downloadsBtn.classList.toggle('active', state.hasActive);
 });
 
-// ---- 設定(ブックマークバーの表示切替) ----
+// ---- 設定(ブックマークバーの表示切替・タブバーの位置) ----
+let tabBarPosition = 'top';
+
 window.roopie.onSettings((settings) => {
   bookmarkBarEl.classList.toggle('hidden', !settings.showBookmarkBar);
+  tabBarPosition = settings.tabBarPosition || 'top';
+  document.body.classList.toggle('vertical-tabs', tabBarPosition === 'left');
+  $('tab-bar-position-btn').classList.toggle('active', tabBarPosition === 'left');
   reportChromeHeight();
+});
+
+$('tab-bar-position-btn').addEventListener('click', () => {
+  window.roopie.setSetting('tabBarPosition', tabBarPosition === 'left' ? 'top' : 'left');
 });
 
 // ---- テーマ ----

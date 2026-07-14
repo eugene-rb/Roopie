@@ -10,6 +10,16 @@ if (location.protocol === 'roopie:') {
     removeBookmark: (id) => ipcRenderer.send('bookmarks:remove', id),
     renameBookmark: (id, title) => ipcRenderer.send('bookmarks:rename', id, title),
 
+    // スタート画面のショートカット(bookmarksの中の "start" フォルダ以下。ページ=サブフォルダ)
+    listStartPages: () => ipcRenderer.invoke('bookmarks:start-pages'),
+    addStartPage: (title) => ipcRenderer.invoke('bookmarks:start-page-add', title),
+    listShortcuts: (pageId) => ipcRenderer.invoke('bookmarks:children', pageId),
+    addShortcut: (pageId, payload) => ipcRenderer.invoke('bookmarks:add-shortcut', pageId, payload),
+    updateShortcut: (id, patch) => ipcRenderer.send('bookmarks:update-item', id, patch),
+    removeShortcut: (id) => ipcRenderer.send('bookmarks:remove', id),
+    pickShortcutFolder: () => ipcRenderer.invoke('fs:pick-folder'),
+    openShortcutFolder: (folderPath) => ipcRenderer.send('fs:open-folder', folderPath),
+
     listHistory: (query) => ipcRenderer.invoke('history:list', query),
     removeHistory: (id) => ipcRenderer.send('history:remove', id),
     clearHistory: () => ipcRenderer.send('history:clear'),
@@ -45,6 +55,7 @@ if (location.protocol === 'roopie:') {
 
     getSettings: () => ipcRenderer.invoke('settings:get'),
     setSetting: (key, value) => ipcRenderer.send('settings:set', key, value),
+    pickDownloadFolder: () => ipcRenderer.invoke('fs:pick-folder'),
 
     // メディアプレイヤー
     onMediaState: (cb) => ipcRenderer.on('media:state', (_e, state) => cb(state)),
@@ -86,6 +97,8 @@ if (location.protocol === 'roopie:') {
     getTheme: () => ipcRenderer.invoke('theme:get'),
     setTheme: (patch) => ipcRenderer.send('theme:set', patch),
     onThemeState: (cb) => ipcRenderer.on('theme:state', (_e, t) => cb(t)),
+    getThemeFor: (profileId) => ipcRenderer.invoke('theme:get-for', profileId),
+    setThemeFor: (profileId, patch) => ipcRenderer.send('theme:set-for', profileId, patch),
 
     getGestures: () => ipcRenderer.invoke('gestures:config'),
     setGestures: (config) => ipcRenderer.send('gestures:set', config),

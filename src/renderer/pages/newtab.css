@@ -56,6 +56,13 @@ body[data-bg="plain"] #bg {
   animation: none;
 }
 
+/* 背景画像(アップロードした画像。background-imageはJSでインラインスタイルとして設定) */
+body[data-bg="image"] #bg {
+  background-color: #1e1f24;
+  background-size: cover;
+  background-position: center;
+}
+
 /* 周辺を少し落として中央の文字を読みやすくする */
 #vignette {
   position: fixed;
@@ -198,6 +205,194 @@ body[data-bg="plain"] #vignette {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.quick-link {
+  position: relative;
+  border: none;
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.folder-icon {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* 編集ボタン(ホバー時のみ表示) */
+.quick-link-edit {
+  position: absolute;
+  top: -4px;
+  right: 6px;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-size: 10px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.quick-link:hover .quick-link-edit {
+  opacity: 1;
+}
+
+/* 追加タイル */
+.quick-link-add .tile {
+  background: rgba(255, 255, 255, 0.06);
+  border-style: dashed;
+}
+
+.quick-link-add .plus {
+  font-size: 22px;
+  font-weight: 300;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+body[data-bg="plain"] .quick-link-add .tile {
+  background: var(--card);
+}
+
+/* ---- ページ切り替え(ショートカットの複数ページ) ---- */
+#shortcut-pages {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.page-dot {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+  transition: background 0.15s, transform 0.15s;
+}
+
+.page-dot:hover {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.page-dot.active {
+  background: #fff;
+  transform: scale(1.3);
+}
+
+.page-dot-add {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.page-dot-add:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+body[data-bg="plain"] .page-dot {
+  background: var(--border);
+}
+
+body[data-bg="plain"] .page-dot.active {
+  background: var(--accent);
+}
+
+body[data-bg="plain"] .page-dot-add {
+  background: var(--card);
+  color: var(--text-dim);
+}
+
+/* ---- ショートカット追加/編集モーダル ---- */
+.shortcut-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.shortcut-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 320px;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--card);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  color: var(--text);
+  text-align: left;
+}
+
+.shortcut-modal h3 {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.shortcut-modal .search {
+  width: 100%;
+}
+
+.shortcut-kind-row {
+  display: flex;
+  gap: 16px;
+}
+
+.shortcut-kind-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.shortcut-folder-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.shortcut-folder-path {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shortcut-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.shortcut-actions .spacer {
+  flex: 1;
 }
 
 /* ---- シンプル(単色)背景のときは従来のダークUIに寄せる ---- */

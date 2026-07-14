@@ -55,6 +55,16 @@ const DEFAULT_EMOJI = [
 let state = { profiles: [], activeId: null, googleAccounts: [] };
 // プロファイルID -> 実際にGoogleにログイン中のメールアドレス一覧
 let signedIn = {};
+// プロファイルID -> そのプロファイルのテーマ({ accent, background, ... })
+let themeByProfile = {};
+
+async function refreshProfileThemes() {
+  const results = await Promise.all(
+    state.profiles.map(async (p) => [p.id, await window.roopieInternal.getThemeFor(p.id)])
+  );
+  themeByProfile = Object.fromEntries(results);
+  render();
+}
 // 追加直後のプロファイルは、そのまま名前を編集できるようにする
 let pendingCreate = false;
 let renameOnRenderId = null;
@@ -94,6 +104,35 @@ function buildAvatar(profile) {
     el.textContent = (profile.name[0] || '?').toUpperCase();
   }
   return el;
+}
+
+// プロファイルを切り替えなくても、そのプロファイルのテーマカラーを選べる小さなスウォッチ列
+function buildAccentPicker(profile) {
+  const wrap = document.createElement('div');
+  wrap.className = 'card-accent';
+
+  const label = document.createElement('span');
+  label.className = 'card-accent-label';
+  label.textContent = 'テーマカラー';
+  wrap.appendChild(label);
+
+  const swatches = document.createElement('div');
+  swatches.className = 'card-accent-swatches';
+  const current = themeByProfile[profile.id]?.accent;
+  for (const color of ACCENT_PRESETS) {
+    const swatch = document.createElement('button');
+    swatch.className = 'swatch swatch-sm' + (color === current ? ' active' : '');
+    swatch.style.background = color;
+    swatch.title = color;
+    swatch.addEventListener('click', () => {
+      window.roopieInternal.setThemeFor(profile.id, { accent: color });
+      themeByProfile[profile.id] = { ...(themeByProfile[profile.id] ?? {}), accent: color };
+      render();
+    });
+    swatches.appendChild(swatch);
+  }
+  wrap.appendChild(swatches);
+  return wrap;
 }
 
 // ---- アイコン選択ポップオーバー ----
@@ -394,6 +433,7 @@ function createProfileCard(profile) {
 
   head.appendChild(actions);
   card.appendChild(head);
+  card.appendChild(buildAccentPicker(profile));
 
   // 共有トグル
   const list = document.createElement('div');
@@ -672,6 +712,28 @@ adblockToggle.addEventListener('change', () =>
   window.roopieInternal.setSetting('adblock', adblockToggle.checked)
 );
 
+// ---- ダウンロード先 ----
+const downloadPathDesc = document.getElementById('download-path-desc');
+const downloadPathChangeBtn = document.getElementById('download-path-change');
+const downloadPathResetBtn = document.getElementById('download-path-reset');
+
+function renderDownloadPath(path) {
+  downloadPathDesc.textContent = path || 'OSの既定のダウンロードフォルダ';
+}
+
+downloadPathChangeBtn.addEventListener('click', async () => {
+  const picked = await window.roopieInternal.pickDownloadFolder();
+  if (picked) {
+    window.roopieInternal.setSetting('downloadPath', picked);
+    renderDownloadPath(picked);
+  }
+});
+
+downloadPathResetBtn.addEventListener('click', () => {
+  window.roopieInternal.setSetting('downloadPath', '');
+  renderDownloadPath('');
+});
+
 // ---- 拡張機能 ----
 const extensionIdEl = document.getElementById('extension-id');
 const extensionInstallBtn = document.getElementById('extension-install-btn');
@@ -872,6 +934,7 @@ function renderTheme() {
   themeBgEl.value = themeState.background;
   // 編集中のカスタムCSSは上書きしない
   if (document.activeElement !== customCssEl) customCssEl.value = themeState.customCss;
+  bgImageRowEl.classList.toggle('hidden', themeState.background !== 'image');
 }
 
 accentCustomEl.addEventListener('change', () =>
@@ -883,6 +946,51 @@ themeBgEl.addEventListener('change', () =>
 document.getElementById('custom-css-apply').addEventListener('click', () =>
   window.roopieInternal.setTheme({ customCss: customCssEl.value })
 );
+
+// ---- 新しいタブの背景画像 ----
+const bgImageRowEl = document.getElementById('bg-image-row');
+const bgImageInput = document.createElement('input');
+bgImageInput.type = 'file';
+bgImageInput.accept = 'image/*';
+bgImageInput.id = 'bg-image-file-input';
+bgImageInput.className = 'hidden';
+document.body.appendChild(bgImageInput);
+
+// 大きな画像でもdata URIが肥大化しないよう、長辺1920pxまでに縮小してJPEGへ変換する
+async function resizeImageForBackground(file) {
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  const img = await new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = dataUrl;
+  });
+  const MAX_DIM = 1920;
+  const scale = Math.min(1, MAX_DIM / Math.max(img.width, img.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(img.width * scale);
+  canvas.height = Math.round(img.height * scale);
+  canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', 0.85);
+}
+
+bgImageInput.addEventListener('change', async () => {
+  const file = bgImageInput.files?.[0];
+  bgImageInput.value = '';
+  if (!file) return;
+  const dataUrl = await resizeImageForBackground(file);
+  window.roopieInternal.setTheme({ background: 'image', backgroundImage: dataUrl });
+});
+
+document.getElementById('bg-image-upload').addEventListener('click', () => bgImageInput.click());
+document.getElementById('bg-image-clear').addEventListener('click', () => {
+  window.roopieInternal.setTheme({ background: 'auto', backgroundImage: '' });
+});
 
 window.roopieInternal.onThemeState((next) => {
   themeState = next;
@@ -1046,12 +1154,18 @@ window.roopieInternal.onProfilesState((next) => {
       pendingCreate = false;
     }
   }
-  render();
+  // プロファイルの増減があれば、テーマカラーも読み直す
+  if (state.profiles.some((p) => !known.has(p.id)) || known.size !== state.profiles.length) {
+    refreshProfileThemes();
+  } else {
+    render();
+  }
 });
 window.roopieInternal.onSettings((settings) => {
   bookmarkBarToggle.checked = !!settings.showBookmarkBar;
   adblockToggle.checked = settings.adblock !== false;
   savePasswordsToggle.checked = settings.savePasswords !== false;
+  renderDownloadPath(settings.downloadPath);
 });
 
 // 別タブでログインして戻ってきたときに「ログイン中」表示を更新する
@@ -1073,12 +1187,14 @@ document.addEventListener('visibilitychange', () => {
   bookmarkBarToggle.checked = !!settings.showBookmarkBar;
   adblockToggle.checked = settings.adblock !== false;
   savePasswordsToggle.checked = settings.savePasswords !== false;
+  renderDownloadPath(settings.downloadPath);
   if (gestureConfig) gestureState = gestureConfig;
   if (themeConfig) themeState = themeConfig;
   render();
   renderGestures();
   renderTheme();
   refreshSignedIn();
+  refreshProfileThemes();
 
   // OSの暗号化が使えない環境では保存機能自体を無効にする
   if (!(await window.roopieInternal.passwordsAvailable())) {

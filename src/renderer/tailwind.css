@@ -374,6 +374,69 @@ body {
   font-size: 18px;
 }
 
+/* =========================================================
+   縦タブ表示(タブバーを左側の固定レールにする)
+   ========================================================= */
+
+/* 上部表示(既定)では非表示。ウィンドウ移動用の役目はタブバー自身が持つ。
+   縦タブ時は#tab-barがposition:fixedで文書フローから抜けるため、
+   #chromeの高さはdrag-strip + toolbar + bookmark-bar等だけになる(タブバー分は含まない) */
+#drag-strip {
+  display: none;
+}
+
+.chrome-body.vertical-tabs #drag-strip {
+  display: flex;
+  height: 40px;
+  flex-shrink: 0;
+  background: var(--bg);
+  -webkit-app-region: drag;
+  /* 右上のウィンドウ操作ボタン(OSオーバーレイ)と重ならないように空ける */
+  padding-right: calc(100vw - env(titlebar-area-width, 100vw) + 8px);
+}
+
+.chrome-body.vertical-tabs #tab-bar {
+  position: fixed;
+  top: 40px;
+  left: 0;
+  bottom: 0;
+  width: 220px;
+  height: auto;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 8px 6px;
+  -webkit-app-region: no-drag;
+}
+
+.chrome-body.vertical-tabs #workspace-btn {
+  margin-right: 0;
+  margin-bottom: 4px;
+}
+
+.chrome-body.vertical-tabs #tabs {
+  flex-direction: column;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.chrome-body.vertical-tabs .tab {
+  width: 100%;
+}
+
+.chrome-body.vertical-tabs #new-tab-btn {
+  align-self: flex-start;
+}
+
+.chrome-body.vertical-tabs #toolbar,
+.chrome-body.vertical-tabs #bookmark-bar,
+.chrome-body.vertical-tabs #password-bar,
+.chrome-body.vertical-tabs #find-bar {
+  margin-left: 220px;
+}
+
 /* ---- ツールバー ----
    Zen Browser風: クローム全体を「額縁」として同色にし、
    アドレスバーだけを一段明るいピルとして浮かせる */
@@ -480,7 +543,8 @@ body {
 }
 
 #downloads-btn.active,
-#sidepanel-btn.active {
+#sidepanel-btn.active,
+#tab-bar-position-btn.active {
   color: var(--accent);
   background: var(--hover);
 }
@@ -1193,6 +1257,29 @@ body {
 
 .crop-actions .btn {
   flex: 1;
+}
+
+/* プロファイルカード内のテーマカラー選択 */
+.card-accent {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.card-accent-label {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.card-accent-swatches {
+  display: flex;
+  gap: 6px;
+}
+
+.swatch-sm {
+  width: 18px;
+  height: 18px;
 }
 
 .profile-name {

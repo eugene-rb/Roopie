@@ -31,6 +31,7 @@ class TabManager {
     this.splitTabId = null; // 画面分割で並べて表示しているタブ(nullなら分割なし)
     this.splitDirection = 'row'; // 'row'(左右) | 'column'(上下)
     this.chromeHeight = DEFAULT_CHROME_HEIGHT;
+    this.chromeLeft = 0; // タブバーを左側(縦)表示にしたときの左オフセット
     this.overlay = null; // メニュー等を表示する、常にタブより手前のView
 
     for (const event of ['resize', 'maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen']) {
@@ -116,6 +117,15 @@ class TabManager {
       tab.isInternal = isInternalUrl(url);
       if (!tab.isInternal) this.history.add(url, wc.getTitle());
       this.sendState();
+
+      // Googleにログインした可能性があるタイミングでアカウント一覧を確認する
+      try {
+        if (/(^|\.)google\.com$/.test(new URL(url).hostname)) {
+          this.onGoogleDomainVisit?.(this.session);
+        }
+      } catch {
+        // 不正なURLは無視
+      }
     });
 
     wc.on('page-favicon-updated', (_e, favicons) => {
@@ -339,6 +349,8 @@ class TabManager {
   }
 
   // プロファイル切り替え: セッションが変わるので全タブを作り直す
+  // タブは閉じるだけ。新しいタブの生成は呼び出し側に任せる
+  // (Edgeのワークスペースのように、プロファイルごとのタブ構成を復元できるようにするため)
   switchSession(session) {
     this.isSwitchingProfile = true;
     this.session = session;
@@ -347,12 +359,39 @@ class TabManager {
       this.closeTab(id);
     }
     this.isSwitchingProfile = false;
-    this.createTab();
+  }
+
+  // 現在開いているタブのURLとアクティブなタブを記録する(プロファイル切り替え前に呼ぶ)
+  snapshotTabs() {
+    return {
+      tabs: this.tabs.map((tab) => ({
+        url: tab.view.webContents.getURL(),
+        active: tab.id === this.activeTabId,
+      })),
+    };
+  }
+
+  // snapshotTabs() で記録した構成を再現する(URLからの再読み込みで復元する)
+  restoreTabs(entries) {
+    let activeId = null;
+    for (const entry of entries ?? []) {
+      if (!entry?.url) continue;
+      const tab = this.createTab(entry.url);
+      if (entry.active) activeId = tab.id;
+    }
+    if (activeId) this.switchTab(activeId);
   }
 
   setChromeHeight(height) {
     if (!Number.isFinite(height) || height === this.chromeHeight) return;
     this.chromeHeight = height;
+    this.layout();
+  }
+
+  // タブバーを左側(縦)表示にしたときの左オフセット(0なら通常の上部表示)
+  setChromeLeft(left) {
+    if (!Number.isFinite(left) || left === this.chromeLeft) return;
+    this.chromeLeft = left;
     this.layout();
   }
 
@@ -367,10 +406,10 @@ class TabManager {
     const m = this.margin;
     const radius = m ? CONTENT_RADIUS : 0;
 
-    // ページ・サイドパネルを載せる領域(周囲に余白を残す)
-    const areaX = m;
+    // ページ・サイドパネルを載せる領域(周囲に余白を残す。縦タブ時は左側にも余白を空ける)
+    const areaX = m + this.chromeLeft;
     const areaY = this.chromeHeight;
-    const areaWidth = Math.max(0, width - m * 2);
+    const areaWidth = Math.max(0, width - m * 2 - this.chromeLeft);
     const areaHeight = Math.max(0, height - this.chromeHeight - m);
 
     const panelWidth = this.sidePanel?.widthFor(areaWidth) ?? 0;
@@ -410,11 +449,12 @@ class TabManager {
       activeView.setBorderRadius(radius);
     }
 
-    // オーバーレイ(メニュー)は余白も含めた全域を覆う(外側クリックで閉じるため)
+    // オーバーレイ(メニュー)は余白も含めた全域を覆う(外側クリックで閉じるため)。
+    // 縦タブ時はタブバー部分を除く(そこは常設のHTML UIなので覆う必要がない)
     this.overlay?.setBounds({
-      x: 0,
+      x: this.chromeLeft,
       y: this.chromeHeight,
-      width,
+      width: Math.max(0, width - this.chromeLeft),
       height: Math.max(0, height - this.chromeHeight),
     });
 
