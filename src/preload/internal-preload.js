@@ -30,6 +30,7 @@ if (location.protocol === 'roopie:') {
     switchProfile: (id) => ipcRenderer.send('profiles:switch', id),
     setProfileShared: (id, key, shared) =>
       ipcRenderer.send('profiles:set-shared', id, key, shared),
+    setProfileIcon: (id, icon) => ipcRenderer.send('profiles:set-icon', id, icon),
 
     listGoogleAccounts: () => ipcRenderer.invoke('google:list'),
     addGoogleAccount: (email, label) => ipcRenderer.send('google:add', email, label),

@@ -28,6 +28,11 @@ const DEFAULT_SHARED = {
 
 const COLORS = ['#6c8cff', '#4bbf8a', '#ffb454', '#e5709b', '#a78bfa', '#4dc4d9'];
 
+// アイコン画像はdata URIとしてprofiles.jsonに直接保存する(専用の配信の仕組みを増やさないため)。
+// 呼び出し側(設定画面)でリサイズしてから送ってくるが、念のため上限も設ける。
+const MAX_EMOJI_LENGTH = 16; // ZWJ・肌色修飾を含む絵文字の連結も考慮
+const MAX_IMAGE_LENGTH = 400_000; // 128x128 PNG相当なら十分収まる上限
+
 class Profiles {
   constructor() {
     this.root = app.getPath('userData');
@@ -43,6 +48,7 @@ class Profiles {
     for (const profile of this.profiles) {
       profile.shared = { ...DEFAULT_SHARED, ...profile.shared };
       profile.google = { enabled: [], primaryId: null, ...profile.google };
+      profile.icon = profile.icon && typeof profile.icon.type === 'string' ? profile.icon : { type: 'letter' };
       delete profile.googleAccount;
     }
   }
@@ -53,6 +59,8 @@ class Profiles {
       id: crypto.randomUUID(),
       name,
       color: COLORS[used % COLORS.length],
+      // { type: 'letter' } | { type: 'emoji', value } | { type: 'image', value: dataURI }
+      icon: { type: 'letter' },
       shared: { ...DEFAULT_SHARED },
       // このプロファイルで使うGoogleアカウント(IDは google-accounts.js の一覧を参照)
       google: { enabled: [], primaryId: null },
@@ -147,6 +155,25 @@ class Profiles {
     for (const profile of this.profiles) {
       this.setGoogleEnabled(profile.id, accountId, false);
     }
+  }
+
+  setIcon(id, icon) {
+    const profile = this.profiles.find((p) => p.id === id);
+    if (!profile || !icon || typeof icon.type !== 'string') return;
+
+    if (icon.type === 'letter') {
+      profile.icon = { type: 'letter' };
+    } else if (icon.type === 'emoji' && typeof icon.value === 'string') {
+      const value = icon.value.trim();
+      if (!value || value.length > MAX_EMOJI_LENGTH) return;
+      profile.icon = { type: 'emoji', value };
+    } else if (icon.type === 'image' && typeof icon.value === 'string') {
+      if (!icon.value.startsWith('data:image/') || icon.value.length > MAX_IMAGE_LENGTH) return;
+      profile.icon = { type: 'image', value: icon.value };
+    } else {
+      return;
+    }
+    this.store.save();
   }
 
   setShared(id, key, shared) {

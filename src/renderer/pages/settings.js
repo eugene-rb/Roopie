@@ -20,6 +20,15 @@ const SHARABLE = [
 // 今後のフェーズで対応する項目(UIだけ先に用意)
 const PLANNED = [{ name: '拡張機能', desc: '拡張機能の管理UI実装後に対応' }];
 
+// アイコン選択の初期候補(絵文字はここになければ直接入力もできる)
+const DEFAULT_EMOJI = [
+  '😀', '😎', '🤓', '🥸', '🤖', '👻',
+  '🐱', '🐶', '🦊', '🐼', '🐧', '🦉',
+  '🌸', '🌵', '🍀', '🔥', '⚡', '🌙',
+  '🎮', '🎧', '📚', '☕', '🚀', '🎨',
+];
+const AVATAR_SIZE = 128; // アップロード画像はこのサイズの正方形に縮小する
+
 let state = { profiles: [], activeId: null, googleAccounts: [] };
 // プロファイルID -> 実際にGoogleにログイン中のメールアドレス一覧
 let signedIn = {};
@@ -44,6 +53,145 @@ function render() {
   }
 }
 
+// プロファイルのアイコン(文字/絵文字/画像)を1つの.avatar要素として作る
+function buildAvatar(profile) {
+  const el = document.createElement('div');
+  el.className = 'avatar';
+  const icon = profile.icon ?? { type: 'letter' };
+  if (icon.type === 'image' && icon.value) {
+    const img = document.createElement('img');
+    img.src = icon.value;
+    img.alt = '';
+    el.appendChild(img);
+  } else if (icon.type === 'emoji' && icon.value) {
+    el.classList.add('emoji');
+    el.textContent = icon.value;
+  } else {
+    el.style.background = profile.color;
+    el.textContent = (profile.name[0] || '?').toUpperCase();
+  }
+  return el;
+}
+
+// ---- アイコン選択ポップオーバー ----
+let openIconPicker = null; // { el, profileId }
+
+function closeIconPicker() {
+  openIconPicker?.el.remove();
+  openIconPicker = null;
+}
+
+function toggleIconPicker(profile, anchorEl) {
+  if (openIconPicker?.profileId === profile.id) {
+    closeIconPicker();
+    return;
+  }
+  closeIconPicker();
+
+  const panel = document.createElement('div');
+  panel.className = 'icon-picker';
+
+  const grid = document.createElement('div');
+  grid.className = 'icon-picker-grid';
+  for (const emoji of DEFAULT_EMOJI) {
+    const emojiBtn = document.createElement('button');
+    emojiBtn.className = 'icon-picker-emoji';
+    emojiBtn.textContent = emoji;
+    emojiBtn.addEventListener('click', () => {
+      window.roopieInternal.setProfileIcon(profile.id, { type: 'emoji', value: emoji });
+      closeIconPicker();
+    });
+    grid.appendChild(emojiBtn);
+  }
+  panel.appendChild(grid);
+
+  const customRow = document.createElement('div');
+  customRow.className = 'icon-picker-row';
+  const customInput = document.createElement('input');
+  customInput.className = 'search';
+  customInput.type = 'text';
+  customInput.placeholder = '絵文字を入力';
+  customInput.maxLength = 8;
+  const applyCustom = () => {
+    const value = customInput.value.trim();
+    if (!value) return;
+    window.roopieInternal.setProfileIcon(profile.id, { type: 'emoji', value });
+    closeIconPicker();
+  };
+  customInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') applyCustom();
+  });
+  customRow.append(customInput, button('設定', applyCustom));
+  panel.appendChild(customRow);
+
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = 'image/*';
+  fileInput.className = 'hidden';
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+    try {
+      const dataUrl = await squareImageToDataUrl(file, AVATAR_SIZE);
+      window.roopieInternal.setProfileIcon(profile.id, { type: 'image', value: dataUrl });
+    } catch {
+      // 画像として読み込めなかった場合は何もしない
+    }
+    closeIconPicker();
+  });
+  panel.appendChild(fileInput);
+
+  const actionsRow = document.createElement('div');
+  actionsRow.className = 'icon-picker-row';
+  actionsRow.appendChild(button('画像をアップロード', () => fileInput.click()));
+  actionsRow.appendChild(
+    button('既定に戻す', () => {
+      window.roopieInternal.setProfileIcon(profile.id, { type: 'letter' });
+      closeIconPicker();
+    })
+  );
+  panel.appendChild(actionsRow);
+
+  document.body.appendChild(panel);
+  const rect = anchorEl.getBoundingClientRect();
+  panel.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - 236))}px`;
+  panel.style.top = `${rect.bottom + 6}px`;
+
+  openIconPicker = { el: panel, profileId: profile.id };
+}
+
+// 外側クリックで閉じる
+document.addEventListener('mousedown', (e) => {
+  if (openIconPicker && !openIconPicker.el.contains(e.target) && !e.target.closest('.avatar-btn')) {
+    closeIconPicker();
+  }
+});
+
+// 画像を中央基準の正方形に切り抜き、指定サイズへ縮小してdata URLにする
+function squareImageToDataUrl(file, size) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        const side = Math.min(img.width, img.height);
+        const sx = (img.width - side) / 2;
+        const sy = (img.height - side) / 2;
+        ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.onerror = () => reject(new Error('画像を読み込めませんでした'));
+      img.src = reader.result;
+    };
+    reader.onerror = () => reject(new Error('ファイルを読み込めませんでした'));
+    reader.readAsDataURL(file);
+  });
+}
+
 function createProfileCard(profile) {
   const isActive = profile.id === state.activeId;
   const card = document.createElement('div');
@@ -52,11 +200,15 @@ function createProfileCard(profile) {
   const head = document.createElement('div');
   head.className = 'profile-head';
 
-  const avatar = document.createElement('div');
-  avatar.className = 'avatar';
-  avatar.style.background = profile.color;
-  avatar.textContent = (profile.name[0] || '?').toUpperCase();
-  head.appendChild(avatar);
+  const avatarBtn = document.createElement('button');
+  avatarBtn.className = 'avatar-btn';
+  avatarBtn.title = 'アイコンを変更';
+  avatarBtn.appendChild(buildAvatar(profile));
+  avatarBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleIconPicker(profile, avatarBtn);
+  });
+  head.appendChild(avatarBtn);
 
   const name = document.createElement('div');
   name.className = 'profile-name';

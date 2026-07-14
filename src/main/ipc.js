@@ -99,6 +99,10 @@ function registerIpc() {
   });
   ipcMain.on('profiles:switch', (_e, id) => browser.switchProfile(id));
   ipcMain.on('profiles:set-shared', (_e, id, key, shared) => browser.setShared(id, key, shared));
+  ipcMain.on('profiles:set-icon', (_e, id, icon) => {
+    browser.profiles?.setIcon(id, icon);
+    browser.sendProfiles();
+  });
 
   // ---- Googleアカウント ----
   ipcMain.handle('google:list', () => browser.googleAccounts?.list() ?? []);

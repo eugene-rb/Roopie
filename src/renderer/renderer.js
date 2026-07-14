@@ -205,14 +205,34 @@ function renderBookmarkBar() {
 
 // ---- プロファイル ----
 const profileBtn = $('profile-btn');
+const profileAvatar = $('profile-avatar');
 
 window.roopie.onProfilesState((state) => {
   const active = state.profiles.find((p) => p.id === state.activeId);
   if (!active) return;
-  profileBtn.textContent = (active.name[0] || '?').toUpperCase();
-  profileBtn.style.background = active.color;
+  renderAvatar(profileAvatar, active);
   profileBtn.title = `プロファイル: ${active.name}(クリックで切り替え)`;
 });
+
+// プロファイルのアイコン(文字/絵文字/画像)を1つの.avatar要素に反映する
+function renderAvatar(el, profile) {
+  el.textContent = '';
+  el.classList.remove('emoji');
+  el.style.background = '';
+  const icon = profile.icon ?? { type: 'letter' };
+  if (icon.type === 'image' && icon.value) {
+    const img = document.createElement('img');
+    img.src = icon.value;
+    img.alt = '';
+    el.appendChild(img);
+  } else if (icon.type === 'emoji' && icon.value) {
+    el.classList.add('emoji');
+    el.textContent = icon.value;
+  } else {
+    el.style.background = profile.color;
+    el.textContent = (profile.name[0] || '?').toUpperCase();
+  }
+}
 
 // プルダウンはページの上に重なるオーバーレイViewに描画するため、
 // ボタンの位置(ページ表示領域から見た座標)をメインプロセスへ渡す

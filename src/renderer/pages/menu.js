@@ -13,17 +13,33 @@ window.roopieInternal.onMenuShow(({ profiles, activeId, anchor }) => {
   position(anchor);
 });
 
+// プロファイルのアイコン(文字/絵文字/画像)を1つの.avatar要素として作る
+function buildAvatar(profile) {
+  const el = document.createElement('span');
+  el.className = 'avatar';
+  const icon = profile.icon ?? { type: 'letter' };
+  if (icon.type === 'image' && icon.value) {
+    const img = document.createElement('img');
+    img.src = icon.value;
+    img.alt = '';
+    el.appendChild(img);
+  } else if (icon.type === 'emoji' && icon.value) {
+    el.classList.add('emoji');
+    el.textContent = icon.value;
+  } else {
+    el.style.background = profile.color;
+    el.textContent = (profile.name[0] || '?').toUpperCase();
+  }
+  return el;
+}
+
 function renderItems(profiles, activeId) {
   itemsEl.textContent = '';
   for (const profile of profiles) {
     const item = document.createElement('button');
     item.className = 'menu-item';
 
-    const avatar = document.createElement('span');
-    avatar.className = 'avatar';
-    avatar.style.background = profile.color;
-    avatar.textContent = (profile.name[0] || '?').toUpperCase();
-    item.appendChild(avatar);
+    item.appendChild(buildAvatar(profile));
 
     const name = document.createElement('span');
     name.className = 'name';
