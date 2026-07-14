@@ -53,5 +53,6 @@ contextBridge.exposeInMainWorld('roopie', {
   dismissPassword: () => ipcRenderer.send('passwords:dismiss'),
   onFocusAddressBar: (cb) => ipcRenderer.on('ui:focus-address-bar', () => cb()),
   onOpenFind: (cb) => ipcRenderer.on('ui:open-find', () => cb()),
+  onToggleCompact: (cb) => ipcRenderer.on('ui:toggle-compact', () => cb()),
   onFindResult: (cb) => ipcRenderer.on('find:result', (_e, r) => cb(r)),
 });

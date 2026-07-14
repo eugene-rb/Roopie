@@ -17,6 +17,19 @@
 
 Roopie: Chromiumベース(Electron)の独自ブラウザ。詳細は `要件定義書.md` を参照。
 
+## ファイル構成(メインプロセス)
+
+| ファイル | 責務 |
+|---|---|
+| `main.js` | エントリポイント。アプリのライフサイクルのみ(24行) |
+| `browser.js` | ブラウザ本体。プロファイル単位のデータ、ウィンドウ生成、状態配信 |
+| `ipc.js` | IPCの受付(全チャンネル)。`windows.contextFor(e.sender)` で送信元ウィンドウに振り分け |
+| `menu.js` | アプリメニュー(キーボードショートカット)。フォーカス中のウィンドウに作用 |
+| `windows.js` | ウィンドウコンテキストのレジストリ |
+| `tab-manager.js` | タブ(WebContentsView)の管理とレイアウト |
+| `side-panel.js` / `gestures.js` / `passwords.js` / `adblock.js` / `extension-support.js` | 各機能 |
+| `store.js` / `history.js` / `bookmarks.js` / `downloads.js` / `profiles.js` / `google-accounts.js` | データ管理 |
+
 ## 現在の状態(2026-07-14 時点)
 
 Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP検証用に起動。
@@ -292,6 +305,19 @@ Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP
   - **拡張機能は取り付けない**(Electronは非永続セッションでの拡張機能に非対応)
   - ブックマークと広告ブロックは通常ウィンドウと共通
 - 検証: 新規ウィンドウ / ウィンドウごとに独立したタブ / 並べ替え(2,3,4→3,4,2)/ シークレット判定 / シークレットの閲覧が履歴に残らない / 通常の閲覧は残る / **Cookieが分離されている**(通常で設定したCookieがシークレットから見えない)をCDPで確認済み
+
+### 2026-07-14: 構造の最適化 + Zen Browser風UI
+
+**構造の最適化**: 819行あった `main.js` を責務ごとに4ファイルへ分割(上の「ファイル構成」参照)
+- `main.js`(24行)= アプリのライフサイクルのみ / `browser.js` = 本体 / `ipc.js` = IPC / `menu.js` = メニュー
+- 循環依存なし(`menu.js` と `ipc.js` が `browser.js` を参照する一方向)
+
+**Zen Browser風UI**:
+- **ページを角丸のカードとして浮かせる**: `WebContentsView.setBorderRadius()` + レイアウトで周囲に8pxの余白(`CONTENT_MARGIN` / `CONTENT_RADIUS` in tab-manager.js)。ウィンドウの `backgroundColor` をクロームと同色にして「額縁」に見せる。全画面時は余白なし
+- サイドパネルも同じ角丸カードに。**Webパネル表示中はパネルUIを領域全体に敷いたまま、その上にWebコンテンツを重ねる**(角丸から透けるのが額縁ではなくパネル背景色になるため)
+- クローム全体を同色(`--bg`)で統一し、**アドレスバーだけを一段明るいピルとして浮かせる**。ページ内検索バー・パスワード保存バーも角丸のフローティングカードに
+- **集中モード(Ctrl+Shift+H)**: ツールバーとブックマークバーを隠してタブバーだけ残す(クローム高さ 114px → 40px)
+- 検証: OSレベルのスクリーンショットで角丸カードを確認。サイドパネル・複数ウィンドウ・シークレット・ジェスチャー・集中モードの回帰テストを実施済み
 
 ### 開発の進め方(ツール)
 

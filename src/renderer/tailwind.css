@@ -204,6 +204,12 @@ body {
   color: var(--text);
 }
 
+/* 集中モード(Ctrl+Shift+H): ツールバー類を隠し、タブバーだけ残す */
+.chrome-body.compact #toolbar,
+.chrome-body.compact #bookmark-bar {
+  display: none;
+}
+
 /* ドラッグ並べ替え */
 .tab.dragging {
   opacity: 0.4;
@@ -308,16 +314,16 @@ body {
   font-size: 18px;
 }
 
-/* ---- ツールバー ---- */
+/* ---- ツールバー ----
+   Zen Browser風: クローム全体を「額縁」として同色にし、
+   アドレスバーだけを一段明るいピルとして浮かせる */
 #toolbar {
   display: flex;
   align-items: center;
-  height: 46px;
+  height: 44px;
   padding: 0 10px;
   gap: 4px;
-  background: var(--bg-toolbar);
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
+  background: var(--bg);
 }
 
 #address-wrap {
@@ -325,16 +331,21 @@ body {
   align-items: center;
   flex: 1;
   height: 32px;
-  margin: 0 6px;
+  margin: 0 8px;
   padding-right: 4px;
-  border: 1px solid transparent;
+  border: 1px solid var(--border);
   border-radius: 10px;
-  background: var(--bg);
-  transition: box-shadow 0.15s, border-color 0.15s;
+  background: var(--bg-toolbar);
+  transition: box-shadow 0.15s, border-color 0.15s, background 0.15s;
+}
+
+#address-wrap:hover {
+  background: var(--card-hover);
 }
 
 #address-wrap:focus-within {
   border-color: var(--accent);
+  background: var(--bg-toolbar);
   box-shadow: 0 0 0 3px var(--ring);
 }
 
@@ -436,11 +447,10 @@ body {
 #bookmark-bar {
   display: flex;
   align-items: center;
-  height: 32px;
-  padding: 0 8px;
+  height: 30px;
+  padding: 0 10px;
   gap: 2px;
-  background: var(--bg-bar);
-  border-bottom: 1px solid var(--border);
+  background: var(--bg);
   overflow: hidden;
 }
 
@@ -486,10 +496,12 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 44px;
+  margin: 0 8px 6px;
   padding: 0 12px;
+  height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
   background: var(--bg-toolbar);
-  border-bottom: 1px solid var(--border);
 }
 
 #password-bar .pw-icon {
@@ -542,11 +554,13 @@ body {
 #find-bar {
   display: flex;
   align-items: center;
-  height: 38px;
-  padding: 0 10px;
   gap: 6px;
+  margin: 0 8px 6px;
+  padding: 0 8px;
+  height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
   background: var(--bg-toolbar);
-  border-bottom: 1px solid var(--border);
 }
 
 #find-input {
@@ -1155,7 +1169,7 @@ body {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  border-left: 1px solid var(--border);
+  background: var(--bg-toolbar);
   font-size: 13px;
 }
 

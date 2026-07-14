@@ -5,6 +5,10 @@ const { attachContextMenu } = require('./context-menu');
 const NEW_TAB_URL = 'roopie://newtab';
 const INTERNAL_SCHEME = 'roopie:';
 const DEFAULT_CHROME_HEIGHT = 84;
+
+// Zen Browser風のレイアウト: ページを角丸のカードとして浮かせ、周囲に余白(額縁)を作る
+const CONTENT_MARGIN = 8;
+const CONTENT_RADIUS = 10;
 const ZOOM_LEVELS = [-3, -2, -1.5, -1, -0.5, 0, 0.5, 1, 1.5, 2, 2.5, 3];
 
 const INTERNAL_PRELOAD = path.join(__dirname, '..', 'preload', 'internal-preload.js');
@@ -298,27 +302,55 @@ class TabManager {
     this.layout();
   }
 
+  // 全画面表示のときは余白なし(ページを画面いっぱいに出す)
+  get margin() {
+    return this.window.isFullScreen() ? 0 : CONTENT_MARGIN;
+  }
+
   layout() {
     if (this.window.isDestroyed()) return;
     const [width, height] = this.window.getContentSize();
-    const contentHeight = Math.max(0, height - this.chromeHeight);
-    const panelWidth = this.sidePanel?.widthFor(width) ?? 0;
+    const m = this.margin;
+    const radius = m ? CONTENT_RADIUS : 0;
 
-    // ページはサイドパネルの分だけ幅を狭める
-    this.getTab(this.activeTabId)?.view.setBounds({
+    // ページ・サイドパネルを載せる領域(周囲に余白を残す)
+    const areaX = m;
+    const areaY = this.chromeHeight;
+    const areaWidth = Math.max(0, width - m * 2);
+    const areaHeight = Math.max(0, height - this.chromeHeight - m);
+
+    const panelWidth = this.sidePanel?.widthFor(areaWidth) ?? 0;
+    // パネルがあるときは、ページとの間にも余白を入れて2枚のカードに見せる
+    const gap = panelWidth ? m : 0;
+
+    const page = this.getTab(this.activeTabId)?.view;
+    if (page) {
+      page.setBounds({
+        x: areaX,
+        y: areaY,
+        width: Math.max(0, areaWidth - panelWidth - gap),
+        height: areaHeight,
+      });
+      page.setBorderRadius(radius);
+    }
+
+    // オーバーレイ(メニュー)は余白も含めた全域を覆う(外側クリックで閉じるため)
+    this.overlay?.setBounds({
       x: 0,
       y: this.chromeHeight,
-      width: width - panelWidth,
-      height: contentHeight,
+      width,
+      height: Math.max(0, height - this.chromeHeight),
     });
-    // オーバーレイ(メニュー)はパネルも含めた全域を覆う
-    this.overlay?.setBounds({ x: 0, y: this.chromeHeight, width, height: contentHeight });
-    this.sidePanel?.layout({
-      x: width - panelWidth,
-      y: this.chromeHeight,
-      width: panelWidth,
-      height: contentHeight,
-    });
+
+    this.sidePanel?.layout(
+      {
+        x: areaX + areaWidth - panelWidth,
+        y: areaY,
+        width: panelWidth,
+        height: areaHeight,
+      },
+      radius
+    );
   }
 
   // 内部ページ(履歴・ダウンロード等)を開いているタブへ通知を送る

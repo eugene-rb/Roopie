@@ -241,6 +241,12 @@ function applyTheme(theme) {
 window.roopie.onThemeState(applyTheme);
 window.roopie.getTheme().then(applyTheme);
 
+// ---- 集中モード(ツールバーを隠してページを広く使う) ----
+window.roopie.onToggleCompact(() => {
+  document.body.classList.toggle('compact');
+  reportChromeHeight();
+});
+
 // ---- ウィンドウ種別(シークレットかどうか) ----
 window.roopie.onWindowInfo(({ incognito }) => {
   document.body.classList.toggle('incognito', !!incognito);

@@ -77,15 +77,21 @@ class SidePanel {
   }
 
   // TabManager.layout() から呼ばれる。bounds はパネルに割り当てられた領域
-  layout(bounds) {
+  // radius はページと同じ角丸(Zen風のカード表示)
+  layout(bounds, radius = 0) {
     if (!this.open || bounds.width <= 0) {
       this.panelView?.setVisible(false);
       this.webView?.setVisible(false);
       return;
     }
+
+    // パネルUIは常に領域全体に敷く。Webパネル表示中はその上にWebコンテンツを重ねる。
+    // (こうするとWebコンテンツの角丸から透けるのが「額縁」ではなくパネルの背景色になる)
     this.panelView.setVisible(true);
+    this.panelView.setBounds(bounds);
+    this.panelView.setBorderRadius(radius);
+
     if (this.activeWebId && this.webView) {
-      this.panelView.setBounds({ ...bounds, height: WEB_HEADER_HEIGHT });
       this.webView.setVisible(true);
       this.webView.setBounds({
         x: bounds.x,
@@ -93,8 +99,8 @@ class SidePanel {
         width: bounds.width,
         height: Math.max(0, bounds.height - WEB_HEADER_HEIGHT),
       });
+      this.webView.setBorderRadius(radius);
     } else {
-      this.panelView.setBounds(bounds);
       this.webView?.setVisible(false);
     }
   }
