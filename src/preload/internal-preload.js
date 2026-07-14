@@ -81,6 +81,8 @@ if (location.protocol === 'roopie:') {
     // プルダウンメニュー(オーバーレイ)用
     onMenuShow: (cb) => ipcRenderer.on('menu:show', (_e, payload) => cb(payload)),
     closeMenu: () => ipcRenderer.send('menu:close'),
+    newWindow: () => ipcRenderer.send('window:new'),
+    newIncognitoWindow: () => ipcRenderer.send('window:new-incognito'),
 
     onDownloadsState: (cb) =>
       ipcRenderer.on('downloads:state', (_e, state) => cb(state)),

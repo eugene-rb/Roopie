@@ -199,6 +199,17 @@ class TabManager {
     if (tab) this.switchTab(tab.id);
   }
 
+  // ドラッグ&ドロップによる並べ替え(タブバーから呼ばれる)
+  moveTab(id, toIndex) {
+    const from = this.tabs.findIndex((t) => t.id === id);
+    if (from === -1) return;
+    const to = Math.max(0, Math.min(toIndex, this.tabs.length - 1));
+    if (from === to) return;
+    const [tab] = this.tabs.splice(from, 1);
+    this.tabs.splice(to, 0, tab);
+    this.sendState();
+  }
+
   // アドレスバー入力: URLらしければURLとして、それ以外はGoogle検索
   navigate(input) {
     const url = toUrl(input);

@@ -80,6 +80,33 @@ body {
   user-select: none;
 }
 
+/* シークレットウィンドウは紫がかった配色にして通常と区別する */
+.chrome-body.incognito {
+  --bg: #1b1730;
+  --bg-toolbar: #241f3d;
+  --bg-bar: #1f1a35;
+  --tab-inactive: #2b2549;
+  --tab-active: #3a3160;
+  --hover: rgba(255, 255, 255, 0.1);
+}
+
+/* タブバー左端にシークレットである目印を出す */
+.chrome-body.incognito #tab-bar::before {
+  content: "シークレット";
+  display: flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  margin-right: 4px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-dim);
+  font-size: 11px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  -webkit-app-region: drag;
+}
+
 /* SVGアイコン共通(stroke式、ボタンの文字色に追従) */
 .icon-btn svg,
 .section-tab svg,
@@ -175,6 +202,35 @@ body {
 .tab.active {
   background: var(--tab-active);
   color: var(--text);
+}
+
+/* ドラッグ並べ替え */
+.tab.dragging {
+  opacity: 0.4;
+}
+
+.tab.drop-before,
+.tab.drop-after {
+  position: relative;
+}
+
+.tab.drop-before::before,
+.tab.drop-after::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+
+.tab.drop-before::before {
+  left: -3px;
+}
+
+.tab.drop-after::after {
+  right: -3px;
 }
 
 .tab .favicon {
@@ -1477,6 +1533,22 @@ body {
   flex-shrink: 0;
   color: var(--accent);
   font-size: 12px;
+}
+
+.menu-item .icon svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.menu-item .shortcut {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-dim);
 }
 
 .menu-separator {

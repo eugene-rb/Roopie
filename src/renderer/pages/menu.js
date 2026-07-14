@@ -71,3 +71,13 @@ manageBtn.addEventListener('click', () => {
   window.roopieInternal.openTab('roopie://settings');
   close();
 });
+
+document.getElementById('new-window').addEventListener('click', () => {
+  window.roopieInternal.newWindow();
+  close();
+});
+
+document.getElementById('new-incognito').addEventListener('click', () => {
+  window.roopieInternal.newIncognitoWindow();
+  close();
+});

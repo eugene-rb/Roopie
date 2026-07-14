@@ -26,10 +26,14 @@ window.roopie.onTabsState((state) => {
 
 function renderTabs() {
   tabsEl.textContent = '';
-  for (const tab of tabState.tabs) {
+  for (const [index, tab] of tabState.tabs.entries()) {
     const tabEl = document.createElement('div');
     tabEl.className = 'tab' + (tab.id === tabState.activeTabId ? ' active' : '');
     tabEl.title = tab.title;
+    tabEl.draggable = true;
+    tabEl.dataset.id = String(tab.id);
+    tabEl.dataset.index = String(index);
+    attachTabDrag(tabEl, tab);
 
     if (tab.isLoading) {
       const spinner = document.createElement('div');
@@ -69,6 +73,60 @@ function renderTabs() {
     });
 
     tabsEl.appendChild(tabEl);
+  }
+}
+
+// ---- タブのドラッグ並べ替え ----
+// ドラッグ中は挿入位置のタブに .drop-before / .drop-after を付けて目印にする
+let draggingId = null;
+
+function attachTabDrag(tabEl, tab) {
+  tabEl.addEventListener('dragstart', (e) => {
+    draggingId = tab.id;
+    tabEl.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    // FirefoxやChromiumでdragを成立させるにはデータが必要
+    e.dataTransfer.setData('text/plain', String(tab.id));
+  });
+
+  tabEl.addEventListener('dragend', () => {
+    draggingId = null;
+    clearDropMarkers();
+    tabEl.classList.remove('dragging');
+  });
+
+  tabEl.addEventListener('dragover', (e) => {
+    if (draggingId === null || draggingId === tab.id) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    clearDropMarkers();
+    // タブの左半分なら手前、右半分なら後ろへ挿入
+    const rect = tabEl.getBoundingClientRect();
+    const after = e.clientX > rect.left + rect.width / 2;
+    tabEl.classList.add(after ? 'drop-after' : 'drop-before');
+  });
+
+  tabEl.addEventListener('drop', (e) => {
+    if (draggingId === null || draggingId === tab.id) return;
+    e.preventDefault();
+    const rect = tabEl.getBoundingClientRect();
+    const after = e.clientX > rect.left + rect.width / 2;
+
+    const from = tabState.tabs.findIndex((t) => t.id === draggingId);
+    let to = tabState.tabs.findIndex((t) => t.id === tab.id);
+    if (after) to += 1;
+    // 前方から後方へ動かす場合、抜けた分だけ位置が1つ詰まる
+    if (from < to) to -= 1;
+
+    clearDropMarkers();
+    window.roopie.moveTab(draggingId, to);
+    draggingId = null;
+  });
+}
+
+function clearDropMarkers() {
+  for (const el of tabsEl.querySelectorAll('.drop-before, .drop-after')) {
+    el.classList.remove('drop-before', 'drop-after');
   }
 }
 
@@ -182,6 +240,16 @@ function applyTheme(theme) {
 
 window.roopie.onThemeState(applyTheme);
 window.roopie.getTheme().then(applyTheme);
+
+// ---- ウィンドウ種別(シークレットかどうか) ----
+window.roopie.onWindowInfo(({ incognito }) => {
+  document.body.classList.toggle('incognito', !!incognito);
+  if (incognito) {
+    // シークレットでは履歴・パスワード関連のUIを出さない
+    $('history-btn').classList.add('hidden');
+    starBtn.title = 'このページをブックマーク (Ctrl+D)';
+  }
+});
 
 // ---- パスワード保存の確認バー ----
 const passwordBar = $('password-bar');
