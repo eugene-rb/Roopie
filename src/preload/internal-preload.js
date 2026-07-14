@@ -46,6 +46,17 @@ if (location.protocol === 'roopie:') {
     getSettings: () => ipcRenderer.invoke('settings:get'),
     setSetting: (key, value) => ipcRenderer.send('settings:set', key, value),
 
+    // メディアプレイヤー
+    onMediaState: (cb) => ipcRenderer.on('media:state', (_e, state) => cb(state)),
+    mediaToggle: () => ipcRenderer.send('media:control', 'toggle'),
+    mediaSeek: (time) => ipcRenderer.send('media:control', 'seek', time),
+    mediaPip: () => ipcRenderer.send('media:control', 'pip'),
+    mediaSwitchToTab: () => ipcRenderer.send('media:switch-to-tab'),
+    mediaDismiss: () => ipcRenderer.send('media:dismiss'),
+    mediaDragStart: () => ipcRenderer.send('media:drag-start'),
+    mediaDrag: (dx, dy) => ipcRenderer.send('media:drag', dx, dy),
+    mediaDragEnd: () => ipcRenderer.send('media:drag-end'),
+
     // サイドパネル
     getSidePanel: () => ipcRenderer.invoke('sidepanel:state'),
     toggleSidePanel: () => ipcRenderer.send('sidepanel:toggle'),

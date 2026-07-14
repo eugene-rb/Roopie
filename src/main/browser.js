@@ -9,6 +9,7 @@ const Profiles = require('./profiles');
 const GoogleAccounts = require('./google-accounts');
 const Gestures = require('./gestures');
 const SidePanel = require('./side-panel');
+const MediaPlayer = require('./media-player');
 const ExtensionSupport = require('./extension-support');
 const AdBlock = require('./adblock');
 const Passwords = require('./passwords');
@@ -18,7 +19,13 @@ const windows = require('./windows');
 const PAGES_DIR = path.join(__dirname, '..', 'renderer', 'pages');
 const PRELOAD_DIR = path.join(__dirname, '..', 'preload');
 
-const DEFAULT_SETTINGS = { showBookmarkBar: true, adblock: true, savePasswords: true };
+const DEFAULT_SETTINGS = {
+  showBookmarkBar: true,
+  adblock: true,
+  savePasswords: true,
+  mediaDocked: false,
+  mediaCorner: 'bottom-right',
+};
 const DEFAULT_THEME = { accent: '#6c8cff', background: 'auto', customCss: '' };
 const THEME_BACKGROUNDS = ['auto', 'dawn', 'day', 'dusk', 'night', 'plain'];
 const MAX_CUSTOM_CSS = 50000;
@@ -91,7 +98,7 @@ const pagePreloadSessions = new WeakSet();
 function registerPagePreloads(session) {
   if (pagePreloadSessions.has(session)) return;
   pagePreloadSessions.add(session);
-  for (const name of ['gesture-preload.js', 'password-preload.js']) {
+  for (const name of ['gesture-preload.js', 'password-preload.js', 'media-preload.js']) {
     session.registerPreloadScript({ type: 'frame', filePath: path.join(PRELOAD_DIR, name) });
   }
 }
@@ -204,7 +211,27 @@ browser.createWindow = ({ incognito = false } = {}) => {
   });
   tabManager.setSidePanel(sidePanel);
 
-  const ctx = windows.add({ window, tabManager, sidePanel, session, incognito });
+  const mediaPlayer = new MediaPlayer(window, {
+    session,
+    tabManager,
+    corner: browser.settings.data.mediaCorner,
+    onDrag: (corner) => {
+      browser.settings.data.mediaCorner = corner;
+      browser.settings.save();
+    },
+  });
+  mediaPlayer.setDocked(browser.settings.data.mediaDocked);
+  tabManager.setMediaPlayer(mediaPlayer);
+
+  const ctx = windows.add({ window, tabManager, sidePanel, mediaPlayer, session, incognito, media: null });
+
+  // 再生中だったタブを閉じたら、フローティングプレイヤー/サイドパネルの表示も消す
+  tabManager.onTabClosed = (tab) => {
+    if (ctx.media?.tabId === tab.id) {
+      ctx.media = null;
+      browser.sendMedia(ctx);
+    }
+  };
 
   // 拡張機能はシークレット(非永続セッション)では動かないので取り付けない
   if (!incognito) {
@@ -397,6 +424,20 @@ browser.sendTheme = () => {
 browser.sendPasswords = () => {
   if (!browser.passwords) return;
   broadcast('passwords:state', browser.passwords.list());
+};
+
+// メディア再生状態はウィンドウごとに異なる。フローティングプレイヤーとサイドパネルの
+// 「再生中」セクションの両方へ届ける(サイドパネルはsendToContext経由で自動的に届く)
+browser.sendMedia = (ctx) => {
+  if (!ctx || ctx.window.isDestroyed()) return;
+  sendToContext(ctx, 'media:state', ctx.media);
+  ctx.mediaPlayer.setState(ctx.media);
+};
+
+// 「サイドパネルに格納」設定の変更を全ウィンドウのプレイヤーへ反映する
+browser.applyMediaDocked = () => {
+  const docked = browser.settings?.data.mediaDocked === true;
+  for (const ctx of windows.all()) ctx.mediaPlayer.setDocked(docked);
 };
 
 browser.sendAll = () => {

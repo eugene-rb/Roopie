@@ -284,8 +284,73 @@ function registerIpc() {
     settings.data[key] = value;
     settings.save();
     if (key === 'adblock') browser.applyAdblock();
+    if (key === 'mediaDocked') browser.applyMediaDocked();
     browser.sendSettings();
   });
+
+  // ---- メディアプレイヤー ----
+  ipcMain.on('media:state', (e, payload) => {
+    const ctx = ctxOf(e);
+    const tab = ctx?.tabManager.tabs.find((t) => t.view.webContents === e.sender);
+    if (!ctx || !tab) return;
+
+    if (payload) {
+      ctx.media = { ...payload, tabId: tab.id };
+    } else if (ctx.media?.tabId === tab.id) {
+      // このタブの再生が終わった場合だけクリアする(他タブの再生中表示は消さない)
+      ctx.media = null;
+    } else {
+      return;
+    }
+    browser.sendMedia(ctx);
+  });
+
+  ipcMain.on('media:control', (e, action, value) => {
+    const ctx = ctxOf(e);
+    const media = ctx?.media;
+    if (!media) return;
+    const tab = ctx.tabManager.getTab(media.tabId);
+    if (!tab) {
+      ctx.media = null;
+      browser.sendMedia(ctx);
+      return;
+    }
+    const wc = tab.view.webContents;
+    const pick = `(() => {
+      const els = [...document.querySelectorAll('video, audio')];
+      return els.find((el) => !el.paused) || els[els.length - 1];
+    })()`;
+
+    if (action === 'toggle') {
+      wc.executeJavaScript(`(() => { const el = ${pick}; if (el) el.paused ? el.play() : el.pause(); })()`, true).catch(() => {});
+    } else if (action === 'seek' && typeof value === 'number') {
+      wc.executeJavaScript(`(() => { const el = ${pick}; if (el) el.currentTime = ${JSON.stringify(value)}; })()`, true).catch(() => {});
+    } else if (action === 'pip') {
+      wc.executeJavaScript(
+        `(() => {
+          const el = [...document.querySelectorAll('video')].find((v) => !v.paused) || document.querySelector('video');
+          if (el && document.pictureInPictureEnabled) el.requestPictureInPicture().catch(() => {});
+        })()`,
+        true
+      ).catch(() => {});
+    }
+  });
+
+  ipcMain.on('media:switch-to-tab', (e) => {
+    const ctx = ctxOf(e);
+    if (ctx?.media) ctx.tabManager.switchTab(ctx.media.tabId);
+  });
+
+  ipcMain.on('media:dismiss', (e) => {
+    const ctx = ctxOf(e);
+    if (!ctx) return;
+    ctx.media = null;
+    browser.sendMedia(ctx);
+  });
+
+  ipcMain.on('media:drag-start', (e) => ctxOf(e)?.mediaPlayer.dragStart());
+  ipcMain.on('media:drag', (e, dx, dy) => ctxOf(e)?.mediaPlayer.dragBy(dx, dy));
+  ipcMain.on('media:drag-end', (e) => ctxOf(e)?.mediaPlayer.dragEnd());
 }
 
 module.exports = { registerIpc };

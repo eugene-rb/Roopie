@@ -41,6 +41,7 @@ function contextFor(sender) {
     if (ctx.tabManager.overlay?.webContents === sender) return true;
     if (ctx.sidePanel?.panelView?.webContents === sender) return true;
     if (ctx.sidePanel?.webView?.webContents === sender) return true;
+    if (ctx.mediaPlayer?.view?.webContents === sender) return true;
     return false;
   });
   return found ?? focused();

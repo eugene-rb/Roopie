@@ -7,6 +7,8 @@ const notesEl = $('notes');
 const webListEl = $('web-list');
 const webUrlEl = $('web-url');
 const webIconsEl = $('web-icons');
+const nowPlayingTab = $('now-playing-tab');
+const nowPlayingBody = $('now-playing-body');
 
 let state = { open: false, webPanels: [], activeWebId: null, notes: '' };
 let section = 'bookmarks';
@@ -188,6 +190,136 @@ function renderWebHeader() {
   }
 }
 
+// ---- 再生中 ----
+let mediaState = null;
+let mediaSettings = { mediaDocked: false };
+let seekingNowPlaying = false;
+
+function renderNowPlaying() {
+  nowPlayingTab.classList.toggle('hidden', !mediaState);
+  if (section === 'now-playing' && !mediaState) showSection('bookmarks');
+  // シークバーをドラッグ中に描画し直すと操作中の値が飛ぶため、いったん保留する
+  if (seekingNowPlaying) return;
+
+  nowPlayingBody.textContent = '';
+  if (!mediaState) {
+    nowPlayingBody.appendChild(emptyNote('再生中のメディアはありません'));
+    return;
+  }
+
+  const card = document.createElement('div');
+  card.className = 'now-playing-card';
+
+  const art = document.createElement('div');
+  art.className = 'now-playing-art';
+  if (mediaState.artwork) {
+    const img = document.createElement('img');
+    img.src = mediaState.artwork;
+    art.appendChild(img);
+  } else {
+    art.innerHTML =
+      '<svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
+  }
+  card.appendChild(art);
+
+  const title = document.createElement('div');
+  title.className = 'now-playing-title';
+  title.textContent = mediaState.title || '';
+  card.appendChild(title);
+
+  const artist = document.createElement('div');
+  artist.className = 'now-playing-artist';
+  artist.textContent = mediaState.artist || '';
+  card.appendChild(artist);
+
+  const range = document.createElement('input');
+  range.type = 'range';
+  range.min = '0';
+  range.max = '1000';
+  range.className = 'now-playing-seek';
+  range.disabled = !(mediaState.duration > 0);
+  range.value = String(
+    mediaState.duration > 0 ? Math.round((mediaState.currentTime / mediaState.duration) * 1000) : 0
+  );
+  range.addEventListener('mousedown', () => {
+    seekingNowPlaying = true;
+  });
+  range.addEventListener('change', () => {
+    if (mediaState.duration > 0) {
+      window.roopieInternal.mediaSeek((Number(range.value) / 1000) * mediaState.duration);
+    }
+    seekingNowPlaying = false;
+  });
+  card.appendChild(range);
+
+  const controls = document.createElement('div');
+  controls.className = 'now-playing-controls';
+  controls.appendChild(button(mediaState.playing ? '一時停止' : '再生', () => window.roopieInternal.mediaToggle()));
+  if (mediaState.hasVideo) {
+    controls.appendChild(button('PinP', () => window.roopieInternal.mediaPip()));
+  }
+  controls.appendChild(button('タブを表示', () => window.roopieInternal.mediaSwitchToTab()));
+  card.appendChild(controls);
+
+  card.appendChild(
+    createToggleRow(
+      'フローティング表示',
+      'オフにすると、このパネルだけで操作します',
+      !mediaSettings.mediaDocked,
+      (checked) => window.roopieInternal.setSetting('mediaDocked', !checked)
+    )
+  );
+
+  nowPlayingBody.appendChild(card);
+}
+
+// 簡易ボタン(内部ページ共通の.btnスタイルを流用)
+function button(label, onClick) {
+  const btn = document.createElement('button');
+  btn.className = 'btn';
+  btn.textContent = label;
+  btn.addEventListener('click', onClick);
+  return btn;
+}
+
+function createToggleRow(name, desc, checked, onChange) {
+  const row = document.createElement('div');
+  row.className = 'setting-row';
+  const text = document.createElement('div');
+  const title = document.createElement('div');
+  title.className = 'setting-name';
+  title.textContent = name;
+  text.appendChild(title);
+  const description = document.createElement('div');
+  description.className = 'setting-desc';
+  description.textContent = desc;
+  text.appendChild(description);
+  row.appendChild(text);
+
+  const label = document.createElement('label');
+  label.className = 'switch';
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.checked = checked;
+  input.addEventListener('change', () => onChange(input.checked));
+  label.appendChild(input);
+  const slider = document.createElement('span');
+  slider.className = 'slider';
+  label.appendChild(slider);
+  row.appendChild(label);
+  return row;
+}
+
+window.roopieInternal.onMediaState((next) => {
+  mediaState = next;
+  renderNowPlaying();
+});
+
+window.roopieInternal.onSettings((settings) => {
+  mediaSettings.mediaDocked = settings.mediaDocked === true;
+  if (mediaState) renderNowPlaying();
+});
+
 // ---- 状態の反映 ----
 function render() {
   document.body.classList.toggle('web-mode', !!state.activeWebId);
@@ -203,8 +335,12 @@ window.roopieInternal.onSidePanelState((next) => {
 });
 
 (async () => {
-  const next = await window.roopieInternal.getSidePanel();
+  const [next, settings] = await Promise.all([
+    window.roopieInternal.getSidePanel(),
+    window.roopieInternal.getSettings(),
+  ]);
   if (next) state = next;
+  mediaSettings.mediaDocked = settings.mediaDocked === true;
   showSection('bookmarks');
   render();
   refreshBookmarks();

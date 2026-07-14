@@ -71,6 +71,12 @@ class TabManager {
     this.layout();
   }
 
+  // フローティングのミニプレイヤー
+  setMediaPlayer(mediaPlayer) {
+    this.mediaPlayer = mediaPlayer;
+    this.layout();
+  }
+
   // オーバーレイ(メニュー用の透明View)を登録する
   setOverlay(view) {
     this.overlay = view;
@@ -162,6 +168,7 @@ class TabManager {
     const [tab] = this.tabs.splice(index, 1);
     this.window.contentView.removeChildView(tab.view);
     tab.view.webContents.close();
+    this.onTabClosed?.(tab);
 
     if (this.tabs.length === 0) {
       // プロファイル切り替え中は、全タブを閉じた直後に新しいタブを開くので閉じない
@@ -419,6 +426,14 @@ class TabManager {
         height: areaHeight,
       },
       radius
+    );
+
+    // ミニプレイヤーはページ全体の領域を基準に置く(分割の影響は受けない)。
+    // サイドパネルが開いていて右寄せの場合は、パネルとの間にも余白を空ける
+    this.mediaPlayer?.layout(
+      { x: areaX, y: areaY, width: areaWidth, height: areaHeight },
+      radius,
+      panelWidth ? panelWidth + m : 0
     );
   }
 
