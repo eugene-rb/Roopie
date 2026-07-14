@@ -203,15 +203,18 @@ function renderBookmarkBar() {
   reportChromeHeight();
 }
 
-// ---- プロファイル ----
-const profileBtn = $('profile-btn');
-const profileAvatar = $('profile-avatar');
+// ---- プロファイル(Edgeの「ワークスペース」風ピル。タブバー左端) ----
+const workspaceBtn = $('workspace-btn');
+const workspaceAvatar = $('workspace-avatar');
+const workspaceName = $('workspace-name');
 
 window.roopie.onProfilesState((state) => {
   const active = state.profiles.find((p) => p.id === state.activeId);
   if (!active) return;
-  renderAvatar(profileAvatar, active);
-  profileBtn.title = `プロファイル: ${active.name}(クリックで切り替え)`;
+  renderAvatar(workspaceAvatar, active);
+  workspaceName.textContent = active.name;
+  workspaceBtn.style.setProperty('--workspace-color', active.color);
+  workspaceBtn.title = `プロファイル: ${active.name}(クリックで切り替え)`;
   renderExtensionActions(active.partition);
 });
 
@@ -254,8 +257,8 @@ function renderAvatar(el, profile) {
 
 // プルダウンはページの上に重なるオーバーレイViewに描画するため、
 // ボタンの位置(ページ表示領域から見た座標)をメインプロセスへ渡す
-profileBtn.addEventListener('click', () => {
-  const rect = profileBtn.getBoundingClientRect();
+workspaceBtn.addEventListener('click', () => {
+  const rect = workspaceBtn.getBoundingClientRect();
   window.roopie.openProfileMenu({
     right: Math.round(rect.right),
     bottom: Math.round(rect.bottom - chromeEl.offsetHeight),

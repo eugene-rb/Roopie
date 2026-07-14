@@ -1,3 +1,27 @@
+// ---- 左側の目次(クリックでスクロール + 現在地をハイライト) ----
+const tocLinks = Array.from(document.querySelectorAll('.toc-link'));
+const tocSections = tocLinks.map((link) => document.querySelector(link.getAttribute('href'))).filter(Boolean);
+
+for (const link of tocLinks) {
+  link.addEventListener('click', (e) => {
+    e.preventDefault();
+    document.querySelector(link.getAttribute('href'))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+}
+
+const tocObserver = new IntersectionObserver(
+  (entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      for (const link of tocLinks) {
+        link.classList.toggle('active', link.getAttribute('href') === `#${entry.target.id}`);
+      }
+    }
+  },
+  { rootMargin: '-10% 0px -70% 0px' }
+);
+for (const section of tocSections) tocObserver.observe(section);
+
 const profilesEl = document.getElementById('profiles');
 const accountsEl = document.getElementById('accounts');
 const addBtn = document.getElementById('add-btn');
@@ -664,34 +688,46 @@ function renderExtensions(items) {
   }
 
   for (const ext of items) {
-    const row = document.createElement('div');
-    row.className = 'row';
+    const card = document.createElement('div');
+    card.className = 'ext-card';
 
     if (ext.icon) {
       const icon = document.createElement('img');
-      icon.className = 'favicon';
+      icon.className = 'ext-icon';
       icon.src = ext.icon;
-      row.appendChild(icon);
+      card.appendChild(icon);
+    } else {
+      const fallback = document.createElement('span');
+      fallback.className = 'ext-icon ext-icon-fallback';
+      fallback.textContent = (ext.name[0] || '?').toUpperCase();
+      card.appendChild(fallback);
     }
 
     const main = document.createElement('div');
-    main.className = 'main';
-    const title = document.createElement('span');
-    title.className = 'title';
-    title.textContent = `${ext.name}(v${ext.version})`;
-    main.appendChild(title);
+    main.className = 'ext-main';
+    const titleRow = document.createElement('div');
+    titleRow.className = 'ext-title-row';
+    const name = document.createElement('span');
+    name.className = 'ext-name';
+    name.textContent = ext.name;
+    titleRow.appendChild(name);
+    const version = document.createElement('span');
+    version.className = 'ext-version';
+    version.textContent = `v${ext.version}`;
+    titleRow.appendChild(version);
+    main.appendChild(titleRow);
     if (ext.description) {
-      const sub = document.createElement('span');
-      sub.className = 'sub';
-      sub.textContent = ext.description;
-      main.appendChild(sub);
+      const desc = document.createElement('p');
+      desc.className = 'ext-desc';
+      desc.textContent = ext.description;
+      main.appendChild(desc);
     }
-    row.appendChild(main);
+    card.appendChild(main);
 
     const actions = document.createElement('div');
-    actions.className = 'row-actions';
+    actions.className = 'ext-actions';
     const removeBtn = document.createElement('button');
-    removeBtn.className = 'row-btn';
+    removeBtn.className = 'row-btn danger';
     removeBtn.textContent = '削除';
     removeBtn.addEventListener('click', () => {
       if (confirm(`「${ext.name}」を削除します。よろしいですか?`)) {
@@ -699,9 +735,9 @@ function renderExtensions(items) {
       }
     });
     actions.appendChild(removeBtn);
-    row.appendChild(actions);
+    card.appendChild(actions);
 
-    extensionsListEl.appendChild(row);
+    extensionsListEl.appendChild(card);
   }
 }
 

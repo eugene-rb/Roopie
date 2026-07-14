@@ -7,7 +7,18 @@
   <link rel="stylesheet" href="app.css" />
 </head>
 <body>
-  <main class="page">
+  <div class="settings-shell">
+    <nav class="settings-toc">
+      <a href="#section-profiles" class="toc-link">プロフィール</a>
+      <a href="#section-google" class="toc-link">Googleアカウント</a>
+      <a href="#section-extensions" class="toc-link">拡張機能</a>
+      <a href="#section-gestures" class="toc-link">マウスジェスチャー</a>
+      <a href="#section-passwords" class="toc-link">保存したパスワード</a>
+      <a href="#section-theme" class="toc-link">テーマ</a>
+      <a href="#section-browser" class="toc-link">ブラウザ設定</a>
+    </nav>
+    <main class="page settings-content">
+    <section id="section-profiles">
     <div class="page-header">
       <h1>プロファイルと設定</h1>
       <button id="add-btn" class="btn">＋ プロファイルを追加</button>
@@ -19,7 +30,9 @@
     </p>
 
     <div id="profiles"></div>
+    </section>
 
+    <section id="section-google">
     <h2 class="section-title">Googleアカウント</h2>
     <div class="card">
       <p class="note" style="margin-bottom: 12px">
@@ -33,7 +46,9 @@
       </div>
       <div id="accounts" class="list" style="margin-top: 14px"></div>
     </div>
+    </section>
 
+    <section id="section-extensions">
     <h2 class="section-title">拡張機能</h2>
     <div class="card">
       <p class="note" style="margin-bottom: 12px">
@@ -45,9 +60,11 @@
         <input id="extension-id" class="search" type="text" placeholder="拡張機能ID(32文字の英字)" autocomplete="off" style="flex: 1; width: auto" />
         <button id="extension-install-btn" class="btn">インストール</button>
       </div>
-      <div id="extensions-list" class="list" style="margin-top: 14px"></div>
+      <div id="extensions-list" class="ext-list" style="margin-top: 14px"></div>
     </div>
+    </section>
 
+    <section id="section-gestures">
     <h2 class="section-title">マウスジェスチャー</h2>
     <div class="card">
       <div class="setting-row">
@@ -80,7 +97,9 @@
         <button id="gesture-reset" class="btn">既定の割り当てに戻す</button>
       </div>
     </div>
+    </section>
 
+    <section id="section-passwords">
     <h2 class="section-title">保存したパスワード</h2>
     <div class="card">
       <div class="setting-row">
@@ -98,7 +117,9 @@
         <button id="passwords-clear" class="btn danger">すべて削除</button>
       </div>
     </div>
+    </section>
 
+    <section id="section-theme">
     <h2 class="section-title">テーマ</h2>
     <div class="card">
       <div class="setting-row">
@@ -132,7 +153,9 @@
         <div><button id="custom-css-apply" class="btn">適用</button></div>
       </div>
     </div>
+    </section>
 
+    <section id="section-browser">
     <h2 class="section-title">ブラウザ設定</h2>
     <div class="card">
       <div class="setting-row">
@@ -156,7 +179,9 @@
         </label>
       </div>
     </div>
-  </main>
+    </section>
+    </main>
+  </div>
 
   <script src="theme.js"></script>
   <script src="settings.js"></script>

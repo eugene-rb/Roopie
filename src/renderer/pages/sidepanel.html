@@ -7,8 +7,36 @@
   <link rel="stylesheet" href="app.css" />
 </head>
 <body class="panel-body">
-  <!-- 通常モード: セクション切り替え -->
+  <!-- 通常モード: セクション切り替え。Edgeのサイドパネル風に、右端の縦アイコンレール+左側にコンテンツ -->
   <div id="home">
+    <div class="section-content">
+      <div id="section-bookmarks" class="section">
+        <div id="bookmark-list" class="panel-list"></div>
+      </div>
+
+      <div id="section-history" class="section">
+        <input id="history-search" class="panel-input" type="text" placeholder="履歴を検索" spellcheck="false" autocomplete="off" />
+        <div id="history-list" class="panel-list"></div>
+      </div>
+
+      <div id="section-notes" class="section">
+        <textarea id="notes" placeholder="メモを入力(自動保存されます)" spellcheck="false"></textarea>
+      </div>
+
+      <div id="section-web" class="section">
+        <p class="hint">よく使うサイトを登録して、ページを見ながら並行して使えます</p>
+        <div class="web-add">
+          <input id="web-url" class="panel-input" type="text" placeholder="URLを追加(例: gmail.com)" spellcheck="false" autocomplete="off" />
+          <button id="web-add-btn" class="btn">追加</button>
+        </div>
+        <div id="web-list" class="panel-list"></div>
+      </div>
+
+      <div id="section-now-playing" class="section">
+        <div id="now-playing-body"></div>
+      </div>
+    </div>
+
     <div class="section-tabs">
       <button class="section-tab" data-section="bookmarks" title="ブックマーク">
         <svg viewBox="0 0 24 24"><path d="M12 3l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.8 6.2 20.9l1.1-6.5L2.6 9.8l6.5-.9z"/></svg>
@@ -29,32 +57,6 @@
       <button id="panel-close" class="section-tab" title="サイドパネルを閉じる (Ctrl+Shift+S)">
         <svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </button>
-    </div>
-
-    <div id="section-bookmarks" class="section">
-      <div id="bookmark-list" class="panel-list"></div>
-    </div>
-
-    <div id="section-history" class="section">
-      <input id="history-search" class="panel-input" type="text" placeholder="履歴を検索" spellcheck="false" autocomplete="off" />
-      <div id="history-list" class="panel-list"></div>
-    </div>
-
-    <div id="section-notes" class="section">
-      <textarea id="notes" placeholder="メモを入力(自動保存されます)" spellcheck="false"></textarea>
-    </div>
-
-    <div id="section-web" class="section">
-      <p class="hint">よく使うサイトを登録して、ページを見ながら並行して使えます</p>
-      <div class="web-add">
-        <input id="web-url" class="panel-input" type="text" placeholder="URLを追加(例: gmail.com)" spellcheck="false" autocomplete="off" />
-        <button id="web-add-btn" class="btn">追加</button>
-      </div>
-      <div id="web-list" class="panel-list"></div>
-    </div>
-
-    <div id="section-now-playing" class="section">
-      <div id="now-playing-body"></div>
     </div>
   </div>
 

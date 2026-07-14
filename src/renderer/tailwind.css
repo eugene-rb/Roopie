@@ -132,7 +132,7 @@ body {
   height: 30px;
   flex-shrink: 0;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   background: transparent;
   color: var(--text);
   font-size: 15px;
@@ -163,6 +163,61 @@ body {
   -webkit-app-region: drag;
   /* 右上のウィンドウ操作ボタン(OSオーバーレイ)と重ならないように空ける */
   padding-right: calc(100vw - env(titlebar-area-width, 100vw) + 8px);
+}
+
+/* Edgeの「ワークスペース」に相当するプロファイル切り替えピル(プロファイル色で着色) */
+#workspace-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px 0 4px;
+  margin-right: 4px;
+  border: none;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--workspace-color, var(--accent)) 20%, transparent);
+  color: var(--text);
+  cursor: pointer;
+  flex-shrink: 0;
+  max-width: 160px;
+  -webkit-app-region: no-drag;
+  transition: background 0.12s;
+}
+
+#workspace-btn:hover {
+  background: color-mix(in srgb, var(--workspace-color, var(--accent)) 32%, transparent);
+}
+
+#workspace-avatar {
+  width: 20px;
+  height: 20px;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+#workspace-avatar.emoji {
+  font-size: 13px;
+}
+
+#workspace-name {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.workspace-chevron {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.7;
 }
 
 #tabs {
@@ -430,6 +485,13 @@ body {
   background: var(--hover);
 }
 
+/* Edge風: ダウンロード/サイドパネル/履歴/分割/ズームをひとまとまりにする */
+#toolbar-utility {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
 /* 画面分割コントロール */
 #split-controls {
   display: flex;
@@ -445,44 +507,17 @@ body {
   display: flex;
   align-items: center;
   gap: 2px;
+  margin-right: 4px;
 }
 
 #extensions-list::part(action) {
   width: 26px;
   height: 26px;
-  border-radius: 8px;
+  border-radius: 6px;
 }
 
 #extensions-list::part(action):hover {
   background: var(--hover);
-}
-
-/* ---- プロファイルボタン ---- */
-#profile-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  flex-shrink: 0;
-  margin-left: 2px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: transparent;
-  cursor: pointer;
-  overflow: hidden;
-}
-
-#profile-btn .avatar {
-  width: 100%;
-  height: 100%;
-  font-size: 12px;
-  background: var(--accent);
-}
-
-#profile-btn .avatar.emoji {
-  font-size: 15px;
 }
 
 /* ---- ブックマークバー ---- */
@@ -781,6 +816,86 @@ body {
   color: var(--text);
 }
 
+.row-btn.danger:hover {
+  color: #ff7b7f;
+}
+
+/* 拡張機能カード(Edgeの拡張機能ページ風) */
+.ext-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ext-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  transition: background 0.12s;
+}
+
+.ext-card:hover {
+  background: var(--card-hover);
+}
+
+.ext-icon {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.ext-icon-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--card-hover);
+  color: var(--text-dim);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.ext-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.ext-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.ext-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ext-version {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.ext-desc {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.ext-actions {
+  flex-shrink: 0;
+}
+
 .date-heading {
   margin: 20px 0 8px;
   font-size: 12px;
@@ -813,6 +928,68 @@ body {
 /* =========================================================
    設定ページ
    ========================================================= */
+
+/* Edge風: 左に目次(クリックでスクロール)、右に本文の2カラム構成 */
+.settings-shell {
+  display: flex;
+  align-items: flex-start;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 32px 24px 64px;
+  gap: 32px;
+}
+
+.settings-shell .page {
+  max-width: 680px;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-toc {
+  position: sticky;
+  top: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 180px;
+  flex-shrink: 0;
+}
+
+.toc-link {
+  padding: 8px 12px;
+  border-radius: 6px;
+  color: var(--text-dim);
+  font-size: 13px;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.12s, color 0.12s;
+}
+
+.toc-link:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.toc-link.active {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+@media (max-width: 900px) {
+  .settings-toc {
+    display: none;
+  }
+
+  .settings-shell .page {
+    max-width: 840px;
+  }
+}
+
 .note {
   margin-bottom: 20px;
   font-size: 13px;
@@ -1376,25 +1553,37 @@ body {
   font-size: 13px;
 }
 
+/* Edge風: コンテンツを左、セクション切り替えの縦アイコンレールを右端に配置 */
 #home {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   height: 100%;
+  min-height: 0;
+}
+
+.section-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
 }
 
 .section-tabs {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--border);
+  gap: 4px;
+  width: 44px;
+  padding: 8px 6px;
+  border-left: 1px solid var(--border);
   flex-shrink: 0;
 }
 
 .section-tab {
-  width: 34px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
   border: none;
   border-radius: 8px;
   background: transparent;
