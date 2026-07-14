@@ -17,7 +17,10 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-app.on('before-quit', () => browser.flushAll());
+app.on('before-quit', () => {
+  browser.flushAll();
+  browser.tor.stop();
+});
 
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) browser.createWindow();

@@ -468,6 +468,7 @@ contextBridge.exposeInMainWorld('roopie', {
   onDownloadsState: (cb) => ipcRenderer.on('downloads:state', (_e, state) => cb(state)),
   onSettings: (cb) => ipcRenderer.on('ui:settings', (_e, s) => cb(s)),
   setSetting: (key, value) => ipcRenderer.send('settings:set', key, value),
+  onTorStatus: (cb) => ipcRenderer.on('tor:status', (_e, s) => cb(s)),
   onSidePanelState: (cb) => ipcRenderer.on('sidepanel:state', (_e, s) => cb(s)),
   getTheme: () => ipcRenderer.invoke('theme:get'),
   onThemeState: (cb) => ipcRenderer.on('theme:state', (_e, t) => cb(t)),

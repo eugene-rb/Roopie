@@ -13,6 +13,7 @@ const SidePanel = require('./side-panel');
 const MediaPlayer = require('./media-player');
 const ExtensionSupport = require('./extension-support');
 const AdBlock = require('./adblock');
+const Tor = require('./tor');
 const Passwords = require('./passwords');
 const Store = require('./store');
 const windows = require('./windows');
@@ -62,6 +63,7 @@ const browser = {
 
   extensions: new ExtensionSupport(),
   adblock: new AdBlock(),
+  tor: new Tor(),
 
   // 保存確認バーで「保存する」が押されるまで、平文パスワードを一時保持する
   pendingPassword: null,
@@ -202,6 +204,8 @@ browser.createWindow = ({ incognito = false, url, x, y } = {}) => {
   if (!incognito) browser.downloads.attachSession(session);
   browser.applyAdblock(session);
   browser.applyDownloadPath(session);
+  // Tor設定はプロファイル単位。シークレットは対象外(素の一時セッション)
+  if (!incognito) browser.applyTorForProfile(profile).catch((err) => console.error('Torの適用に失敗:', err));
 
   const tabManager = new TabManager(window, {
     history: incognito ? NULL_HISTORY : browser.history,
@@ -308,6 +312,54 @@ browser.applyAdblock = (session) => {
       .catch((err) => console.error('広告ブロックの適用に失敗:', err));
   }
 };
+
+// ---- Tor ----
+
+// あるプロファイルのセッションに、そのプロファイルのTor設定を反映する。
+// Tor ONならSOCKS5プロキシ経由、OFFなら直接接続に戻す。
+browser.applyTorForProfile = async (profile) => {
+  const session = browser.profiles.sessionFor(profile);
+  if (profile.tor) {
+    const proxyRules = await browser.tor.ensureRunning();
+    if (proxyRules) {
+      await session.setProxy({ proxyRules });
+      // WebRTCによる実IPの漏洩を防ぐ(Torプロキシはトンネルできないため)
+      setWebRtcPolicyForSession(session);
+    } else {
+      // Torを準備できなかった場合は、意図せず素の接続で通信しないよう空ルートにする
+      await session.setProxy({ proxyRules: 'socks5://127.0.0.1:1' });
+    }
+  } else {
+    await session.setProxy({ proxyRules: '' });
+  }
+};
+
+// 全プロファイルのTor設定を各セッションへ適用する(Tor状態が変わったときなど)
+browser.applyAllTor = async () => {
+  for (const profile of browser.profiles.list()) {
+    await browser.applyTorForProfile(profile).catch((err) => console.error('Torの適用に失敗:', err));
+  }
+  browser.sendTor();
+};
+
+// Torプロファイルのタブは、WebRTCでローカル/公開IPを露出しないようにする
+function setWebRtcPolicyForSession(session) {
+  for (const ctx of windows.all()) {
+    if (ctx.session !== session) continue;
+    for (const tab of ctx.tabManager.tabs) {
+      if (!tab.view.webContents.isDestroyed()) {
+        tab.view.webContents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
+      }
+    }
+  }
+}
+
+browser.sendTor = () => {
+  broadcast('tor:status', browser.tor.state());
+};
+
+// Torの状態変化(起動中→接続済み等)を全ウィンドウへ配信する
+browser.tor.on('status', () => browser.sendTor?.());
 
 // ---- テーマ ----
 
@@ -470,6 +522,7 @@ browser.applyActiveProfile = ({ recreateTabs, previousProfileId } = {}) => {
   browser.applyAdblock();
   browser.applyDownloadPath();
   browser.applyTabBarPosition();
+  browser.applyTorForProfile(profile).catch((err) => console.error('Torの適用に失敗:', err));
   browser.sendAll();
 };
 
@@ -477,6 +530,15 @@ browser.switchProfile = (id) => {
   const previousProfileId = browser.profiles.activeId;
   if (!browser.profiles.switchTo(id)) return;
   browser.applyActiveProfile({ recreateTabs: true, previousProfileId });
+};
+
+// プロファイルのTor ON/OFFを切り替えて、そのセッションへ即時反映する
+browser.setProfileTor = async (id, enabled) => {
+  browser.profiles.setTor(id, enabled);
+  const profile = browser.profiles.list().find((p) => p.id === id);
+  if (profile) await browser.applyTorForProfile(profile).catch((err) => console.error('Torの適用に失敗:', err));
+  browser.sendProfiles();
+  browser.sendTor();
 };
 
 // 共有トグルの変更は、そのプロファイルがアクティブなときだけ保存先の切り替えが必要
@@ -598,6 +660,7 @@ browser.sendAll = () => {
   browser.sendTheme();
   browser.sendPasswords();
   browser.sendExtensions();
+  browser.sendTor();
   for (const ctx of windows.all()) browser.sendSidePanel(ctx);
 };
 
@@ -609,6 +672,7 @@ browser.sendAllTo = (ctx) => {
   sendToContext(ctx, 'bookmarks:state', browser.bookmarks.list());
   sendToContext(ctx, 'downloads:state', downloadsPayload());
   sendToContext(ctx, 'theme:state', browser.theme.data);
+  sendToContext(ctx, 'tor:status', browser.tor.state());
   browser.sendSidePanel(ctx);
 };
 

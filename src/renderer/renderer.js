@@ -225,7 +225,38 @@ window.roopie.onProfilesState((state) => {
   workspaceName.textContent = active.name;
   workspaceBtn.style.setProperty('--workspace-color', active.color);
   workspaceBtn.title = `プロファイル: ${active.name}(クリックで切り替え)`;
+  // アクティブプロファイルがTorを使っているかを、ピルの🧅インジケーターで示す
+  activeProfileTor = !!active.tor;
+  updateTorIndicator();
   renderExtensionActions(active.partition);
+});
+
+// ---- Torインジケーター(ワークスペースピル内) ----
+let activeProfileTor = false;
+let torStatus = { status: 'disabled' };
+const torIndicator = $('workspace-tor');
+
+function updateTorIndicator() {
+  if (!activeProfileTor) {
+    torIndicator.classList.add('hidden');
+    return;
+  }
+  torIndicator.classList.remove('hidden');
+  torIndicator.classList.toggle('connecting', torStatus.status === 'starting');
+  torIndicator.classList.toggle('error', torStatus.status === 'error');
+  torIndicator.title =
+    torStatus.status === 'ready'
+      ? 'Torで接続中'
+      : torStatus.status === 'starting'
+        ? 'Torに接続しています…'
+        : torStatus.status === 'error'
+          ? `Torに接続できません: ${torStatus.error ?? ''}`
+          : 'Tor(停止中)';
+}
+
+window.roopie.onTorStatus((status) => {
+  torStatus = status;
+  updateTorIndicator();
 });
 
 // 拡張機能アイコンをアクティブなプロファイルのセッションに向ける。

@@ -123,6 +123,10 @@ function registerIpc() {
     browser.sendProfiles();
   });
 
+  // ---- Tor ----
+  ipcMain.handle('tor:status', () => browser.tor.state());
+  ipcMain.on('profiles:set-tor', (_e, id, enabled) => browser.setProfileTor(id, enabled));
+
   // ---- Googleアカウント ----
   ipcMain.handle('google:list', () => browser.googleAccounts?.list() ?? []);
   ipcMain.on('google:add', (_e, email, label) => browser.googleAccounts?.add(email, label));

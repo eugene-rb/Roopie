@@ -49,6 +49,7 @@ class Profiles {
       profile.shared = { ...DEFAULT_SHARED, ...profile.shared };
       profile.google = { enabled: [], primaryId: null, ...profile.google };
       profile.icon = profile.icon && typeof profile.icon.type === 'string' ? profile.icon : { type: 'letter' };
+      profile.tor = profile.tor === true;
       delete profile.googleAccount;
     }
   }
@@ -64,6 +65,8 @@ class Profiles {
       shared: { ...DEFAULT_SHARED },
       // このプロファイルで使うGoogleアカウント(IDは google-accounts.js の一覧を参照)
       google: { enabled: [], primaryId: null },
+      // Torプロキシ経由で接続するか
+      tor: false,
       createdAt: Date.now(),
     };
   }
@@ -181,6 +184,13 @@ class Profiles {
     const profile = this.profiles.find((p) => p.id === id);
     if (!profile) return;
     profile.shared[key] = !!shared;
+    this.store.save();
+  }
+
+  setTor(id, enabled) {
+    const profile = this.profiles.find((p) => p.id === id);
+    if (!profile) return;
+    profile.tor = !!enabled;
     this.store.save();
   }
 

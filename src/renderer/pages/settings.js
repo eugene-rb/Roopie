@@ -57,6 +57,8 @@ let state = { profiles: [], activeId: null, googleAccounts: [] };
 let signedIn = {};
 // プロファイルID -> そのプロファイルのテーマ({ accent, background, ... })
 let themeByProfile = {};
+// Torの現在の状態({ status, socksPort, error })
+let torStatus = { status: 'disabled' };
 
 async function refreshProfileThemes() {
   const results = await Promise.all(
@@ -107,6 +109,43 @@ function buildAvatar(profile) {
 }
 
 // プロファイルを切り替えなくても、そのプロファイルのテーマカラーを選べる小さなスウォッチ列
+// このプロファイルでTor経由の接続を使うかのトグル+現在の状態表示
+function buildTorRow(profile) {
+  const wrap = document.createElement('div');
+  wrap.className = 'tor-row';
+
+  const row = createToggleRow({
+    name: 'Torで接続',
+    desc: 'このプロファイルの通信をTorネットワーク経由にします(接続が遅くなります)',
+    checked: !!profile.tor,
+    onChange: (checked) => window.roopieInternal.setProfileTor(profile.id, checked),
+  });
+  wrap.appendChild(row);
+
+  // Torが有効なプロファイルにだけ、現在の接続状態を出す
+  if (profile.tor) {
+    const status = document.createElement('div');
+    status.className = 'tor-status';
+    status.textContent = torStatusText(torStatus);
+    status.classList.toggle('error', torStatus.status === 'error');
+    wrap.appendChild(status);
+  }
+  return wrap;
+}
+
+function torStatusText(state) {
+  switch (state?.status) {
+    case 'starting':
+      return 'Torに接続しています…';
+    case 'ready':
+      return `Torに接続済み(ポート ${state.socksPort})`;
+    case 'error':
+      return `Torに接続できません: ${state.error ?? '不明なエラー'}`;
+    default:
+      return 'Torは停止しています';
+  }
+}
+
 function buildAccentPicker(profile) {
   const wrap = document.createElement('div');
   wrap.className = 'card-accent';
@@ -434,6 +473,7 @@ function createProfileCard(profile) {
   head.appendChild(actions);
   card.appendChild(head);
   card.appendChild(buildAccentPicker(profile));
+  card.appendChild(buildTorRow(profile));
 
   // 共有トグル
   const list = document.createElement('div');
@@ -1144,6 +1184,11 @@ window.roopieInternal.onGesturesState((next) => {
   renderGestures();
 });
 
+window.roopieInternal.onTorStatus((next) => {
+  torStatus = next;
+  render();
+});
+
 window.roopieInternal.onProfilesState((next) => {
   const known = new Set(state.profiles.map((p) => p.id));
   state = next;
@@ -1174,14 +1219,16 @@ document.addEventListener('visibilitychange', () => {
 });
 
 (async () => {
-  const [profileState, accounts, settings, gestureConfig, themeConfig, extensions] = await Promise.all([
+  const [profileState, accounts, settings, gestureConfig, themeConfig, extensions, tor] = await Promise.all([
     window.roopieInternal.listProfiles(),
     window.roopieInternal.listGoogleAccounts(),
     window.roopieInternal.getSettings(),
     window.roopieInternal.getGestures(),
     window.roopieInternal.getTheme(),
     window.roopieInternal.listExtensions(),
+    window.roopieInternal.getTorStatus(),
   ]);
+  if (tor) torStatus = tor;
   renderExtensions(extensions);
   state = { ...profileState, googleAccounts: accounts };
   bookmarkBarToggle.checked = !!settings.showBookmarkBar;

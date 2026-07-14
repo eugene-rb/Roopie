@@ -220,6 +220,26 @@ body {
   opacity: 0.7;
 }
 
+/* Torインジケーター(ピル内の🧅) */
+#workspace-tor {
+  font-size: 12px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+#workspace-tor.connecting {
+  animation: tor-pulse 1.2s ease-in-out infinite;
+}
+
+#workspace-tor.error {
+  filter: grayscale(1);
+  opacity: 0.6;
+}
+
+@keyframes tor-pulse {
+  50% { opacity: 0.35; }
+}
+
 #tabs {
   display: flex;
   align-items: center;
@@ -1280,6 +1300,22 @@ body {
 .swatch-sm {
   width: 18px;
   height: 18px;
+}
+
+/* プロファイルカード内のTorトグルと状態表示 */
+.tor-row {
+  margin-top: 4px;
+  padding-top: 4px;
+}
+
+.tor-status {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.tor-status.error {
+  color: #ff7b7f;
 }
 
 .profile-name {

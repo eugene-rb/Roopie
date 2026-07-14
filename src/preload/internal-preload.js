@@ -41,6 +41,10 @@ if (location.protocol === 'roopie:') {
     setProfileShared: (id, key, shared) =>
       ipcRenderer.send('profiles:set-shared', id, key, shared),
     setProfileIcon: (id, icon) => ipcRenderer.send('profiles:set-icon', id, icon),
+    setProfileTor: (id, enabled) => ipcRenderer.send('profiles:set-tor', id, enabled),
+
+    getTorStatus: () => ipcRenderer.invoke('tor:status'),
+    onTorStatus: (cb) => ipcRenderer.on('tor:status', (_e, s) => cb(s)),
 
     listGoogleAccounts: () => ipcRenderer.invoke('google:list'),
     addGoogleAccount: (email, label) => ipcRenderer.send('google:add', email, label),
