@@ -1,7 +1,7 @@
 const { Menu, MenuItem, clipboard, shell } = require('electron');
 const windows = require('./windows');
+const { searchUrl, SEARCH_ENGINES } = require('./search-engines');
 
-const SEARCH_URL = 'https://www.google.com/search?q=';
 const IMAGE_SEARCH_URL = 'https://lens.google.com/uploadbyurl?url=';
 const MAX_SELECTION_LABEL = 16;
 
@@ -90,9 +90,11 @@ function attachContextMenu(webContents, tabManager) {
       const text = params.selectionText.trim();
       add({ label: 'コピー', role: 'copy' });
       const label = text.length > MAX_SELECTION_LABEL ? `${text.slice(0, MAX_SELECTION_LABEL)}…` : text;
+      const engineId = browser.settings?.data.searchEngine;
+      const engineName = SEARCH_ENGINES[engineId]?.name ?? SEARCH_ENGINES.google.name;
       add({
-        label: `「${label}」をGoogleで検索`,
-        click: () => tabManager.createTab(SEARCH_URL + encodeURIComponent(text)),
+        label: `「${label}」を${engineName}で検索`,
+        click: () => tabManager.createTab(searchUrl(engineId, text)),
       });
       // 選択テキストがURLらしければ、そのまま開く選択肢も出す
       if (/^https?:\/\/\S+$/i.test(text)) {

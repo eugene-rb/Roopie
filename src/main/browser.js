@@ -30,6 +30,7 @@ const DEFAULT_SETTINGS = {
   downloadPath: '', // 空ならOS既定(session.setDownloadPathを呼ばない)
   tabBarPosition: 'top', // 'top' | 'left'
   sidePanelPosition: 'right', // 'left' | 'right'
+  searchEngine: 'google', // 'google' | 'duckduckgo' | 'yahoo' | 'bing' | 'ecosia' | 'startpage'
 };
 const DEFAULT_THEME = { accent: '#6c8cff', background: 'auto', backgroundImage: '', customCss: '' };
 const THEME_BACKGROUNDS = ['auto', 'dawn', 'day', 'dusk', 'night', 'plain', 'image'];
@@ -216,6 +217,7 @@ browser.createWindow = ({ incognito = false, url, x, y } = {}) => {
   tabManager.setOverlay(createOverlayView(session));
   tabManager.setChromeLeft(browser.settings.data.tabBarPosition === 'left' ? TAB_BAR_WIDTH : 0);
   tabManager.setSidePanelSide(browser.settings.data.sidePanelPosition === 'left' ? 'left' : 'right');
+  tabManager.setSearchEngine(browser.settings.data.searchEngine);
 
   const sidePanel = new SidePanel(window, {
     session,
@@ -478,6 +480,14 @@ browser.applySidePanelPosition = (session) => {
   for (const ctx of targets) ctx.tabManager.setSidePanelSide(side);
 };
 
+// ---- 検索エンジン ----
+
+browser.applySearchEngine = (session) => {
+  const engine = browser.settings?.data.searchEngine;
+  const targets = session ? windows.all().filter((c) => c.session === session) : windows.all();
+  for (const ctx of targets) ctx.tabManager.setSearchEngine(engine);
+};
+
 // ---- プロファイル ----
 
 // アクティブなプロファイルのデータ/セッションを各機能へ適用する
@@ -533,6 +543,7 @@ browser.applyActiveProfile = ({ recreateTabs, previousProfileId } = {}) => {
   browser.applyDownloadPath();
   browser.applyTabBarPosition();
   browser.applySidePanelPosition();
+  browser.applySearchEngine();
   browser.applyTorForProfile(profile).catch((err) => console.error('Torの適用に失敗:', err));
   browser.sendAll();
 };

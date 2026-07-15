@@ -1,6 +1,7 @@
 const { WebContentsView } = require('electron');
 const path = require('path');
 const { attachContextMenu } = require('./context-menu');
+const { searchUrl, DEFAULT_ENGINE } = require('./search-engines');
 
 const NEW_TAB_URL = 'roopie://newtab';
 const INTERNAL_SCHEME = 'roopie:';
@@ -33,6 +34,7 @@ class TabManager {
     this.chromeHeight = DEFAULT_CHROME_HEIGHT;
     this.chromeLeft = 0; // タブバーを左側(縦)表示にしたときの左オフセット
     this.sidePanelSide = 'right'; // サイドパネルを表示する側('left' | 'right')
+    this.searchEngine = DEFAULT_ENGINE; // アドレスバーでURLでない入力をしたときの検索エンジン
     this.overlay = null; // メニュー等を表示する、常にタブより手前のView
 
     for (const event of ['resize', 'maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen']) {
@@ -278,9 +280,9 @@ class TabManager {
     this.sendState();
   }
 
-  // アドレスバー入力: URLらしければURLとして、それ以外はGoogle検索
+  // アドレスバー入力: URLらしければURLとして、それ以外は設定した検索エンジンで検索
   navigate(input) {
-    const url = toUrl(input);
+    const url = toUrl(input, this.searchEngine);
     const tab = this.getTab(this.activeTabId);
     if (!tab) return;
     // 内部ページはpreloadを持つタブでしか動かせない
@@ -402,6 +404,10 @@ class TabManager {
     if (next === this.sidePanelSide) return;
     this.sidePanelSide = next;
     this.layout();
+  }
+
+  setSearchEngine(engineId) {
+    this.searchEngine = engineId || DEFAULT_ENGINE;
   }
 
   // 全画面表示のときは余白なし(ページを画面いっぱいに出す)
@@ -544,15 +550,15 @@ function isNewTabUrl(url) {
   return url === NEW_TAB_URL || url === `${NEW_TAB_URL}/`;
 }
 
-// 入力文字列をURLに変換(URLでなければGoogle検索URLにする)
-function toUrl(input) {
+// 入力文字列をURLに変換(URLでなければ設定した検索エンジンで検索するURLにする)
+function toUrl(input, engineId) {
   const text = String(input).trim();
   if (/^(https?|file|roopie|about):/i.test(text)) return text;
   // スペースを含まず、ドットかlocalhostを含むならURLとみなす
   if (!/\s/.test(text) && (/\./.test(text) || /^localhost(:\d+)?/.test(text))) {
     return `https://${text}`;
   }
-  return `https://www.google.com/search?q=${encodeURIComponent(text)}`;
+  return searchUrl(engineId, text);
 }
 
 module.exports = TabManager;

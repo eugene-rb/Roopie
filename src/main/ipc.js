@@ -6,6 +6,7 @@ const GoogleAccounts = require('./google-accounts');
 const Passwords = require('./passwords');
 const { showTabMenu } = require('./tab-context-menu');
 const { showSidePanelPositionMenu, showSidePanelRailMenu } = require('./toolbar-context-menu');
+const { searchUrl } = require('./search-engines');
 
 // IPCは「送信元のウィンドウ」に対して処理する
 const ctxOf = (e) => windows.contextFor(e.sender);
@@ -19,7 +20,7 @@ function registerIpc() {
   ipcMain.on('tabs:search-new-tab', (e, text) => {
     const query = String(text ?? '').trim();
     if (!query) return;
-    tabsOf(e)?.createTab(`https://www.google.com/search?q=${encodeURIComponent(query)}`);
+    tabsOf(e)?.createTab(searchUrl(browser.settings?.data.searchEngine, query));
   });
   ipcMain.on('tabs:close', (e, id) => tabsOf(e)?.closeTab(id));
   ipcMain.on('tabs:switch', (e, id) => tabsOf(e)?.switchTab(id));
@@ -363,6 +364,7 @@ function registerIpc() {
     if (key === 'downloadPath') browser.applyDownloadPath();
     if (key === 'tabBarPosition') browser.applyTabBarPosition();
     if (key === 'sidePanelPosition') browser.applySidePanelPosition();
+    if (key === 'searchEngine') browser.applySearchEngine();
     browser.sendSettings();
   });
 

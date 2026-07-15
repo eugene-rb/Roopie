@@ -758,6 +758,11 @@ for (const el of [accountEmailEl, accountLabelEl]) {
   });
 }
 
+const searchEngineSelect = document.getElementById('search-engine');
+searchEngineSelect.addEventListener('change', () =>
+  window.roopieInternal.setSetting('searchEngine', searchEngineSelect.value)
+);
+
 bookmarkBarToggle.addEventListener('change', () =>
   window.roopieInternal.setSetting('showBookmarkBar', bookmarkBarToggle.checked)
 );
@@ -1222,6 +1227,7 @@ window.roopieInternal.onProfilesState((next) => {
   }
 });
 window.roopieInternal.onSettings((settings) => {
+  searchEngineSelect.value = settings.searchEngine || 'google';
   bookmarkBarToggle.checked = !!settings.showBookmarkBar;
   adblockToggle.checked = settings.adblock !== false;
   savePasswordsToggle.checked = settings.savePasswords !== false;
@@ -1246,6 +1252,7 @@ document.addEventListener('visibilitychange', () => {
   if (tor) torStatus = tor;
   renderExtensions(extensions);
   state = { ...profileState, googleAccounts: accounts };
+  searchEngineSelect.value = settings.searchEngine || 'google';
   bookmarkBarToggle.checked = !!settings.showBookmarkBar;
   adblockToggle.checked = settings.adblock !== false;
   savePasswordsToggle.checked = settings.savePasswords !== false;
