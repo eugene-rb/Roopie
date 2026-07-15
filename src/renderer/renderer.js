@@ -481,10 +481,10 @@ $('history-btn').addEventListener('click', () => window.roopie.newTab('roopie://
 // ---- サイドパネル ----
 const sidepanelBtn = $('sidepanel-btn');
 sidepanelBtn.addEventListener('click', () => window.roopie.toggleSidePanel());
-// 右クリックで表示側(左/右)を切り替える
+// 右クリックで表示側(左/右)を選べるメニューを開く
 sidepanelBtn.addEventListener('contextmenu', (e) => {
   e.preventDefault();
-  window.roopie.setSetting('sidePanelPosition', sidePanelPosition === 'left' ? 'right' : 'left');
+  window.roopie.sidePanelContextMenu();
 });
 window.roopie.onSidePanelState((state) => {
   sidepanelBtn.classList.toggle('active', state.open);

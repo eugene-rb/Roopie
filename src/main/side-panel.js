@@ -84,10 +84,12 @@ class SidePanel {
   }
 
   // 境界のドラッグでリサイズする(deltaXは直前イベントからの相対移動量=movementX)。
-  // パネルは右端固定なので、ハンドルが左へ動く(deltaXが負)ほど幅は増える
+  // 右ドック時はページ側の端(パネルの左端)固定なので、ハンドルが左へ動く(deltaXが負)ほど幅は増える。
+  // 左ドック時は逆にパネルの右端が可動なので、符号を反転させる
   resizeBy(deltaX) {
     if (!Number.isFinite(deltaX)) return;
-    this.store.data.width = clampWidth(this.store.data.width - deltaX);
+    const sign = this.tabManager.sidePanelSide === 'left' ? 1 : -1;
+    this.store.data.width = clampWidth(this.store.data.width + sign * deltaX);
     this.store.save();
     this.tabManager.layout();
   }
@@ -108,10 +110,12 @@ class SidePanel {
     this.panelView.setBorderRadius(radius);
 
     if (this.activeWebId && this.webView) {
-      // 左端にリサイズハンドル分の帯を残す(Webパネル表示中も幅を変えられるように)
+      // リサイズハンドル分の帯を残す(Webパネル表示中も幅を変えられるように)。
+      // ハンドルは常にページ側との境界(右ドックなら左端、左ドックなら右端)にある
+      const handleOnLeft = this.tabManager.sidePanelSide !== 'left';
       this.webView.setVisible(true);
       this.webView.setBounds({
-        x: bounds.x + RESIZE_HANDLE_WIDTH,
+        x: bounds.x + (handleOnLeft ? RESIZE_HANDLE_WIDTH : 0),
         y: bounds.y + WEB_HEADER_HEIGHT,
         width: Math.max(0, bounds.width - RESIZE_HANDLE_WIDTH),
         height: Math.max(0, bounds.height - WEB_HEADER_HEIGHT),

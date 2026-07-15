@@ -5,6 +5,7 @@ const browser = require('./browser');
 const GoogleAccounts = require('./google-accounts');
 const Passwords = require('./passwords');
 const { showTabMenu } = require('./tab-context-menu');
+const { showSidePanelPositionMenu } = require('./toolbar-context-menu');
 
 // IPCは「送信元のウィンドウ」に対して処理する
 const ctxOf = (e) => windows.contextFor(e.sender);
@@ -198,6 +199,7 @@ function registerIpc() {
 
   // ---- サイドパネル ----
   ipcMain.on('sidepanel:toggle', (e) => panelOf(e)?.toggle());
+  ipcMain.on('sidepanel:context-menu', () => showSidePanelPositionMenu());
   ipcMain.handle('sidepanel:state', (e) => panelOf(e)?.state() ?? null);
   ipcMain.on('sidepanel:add-web', (e, url) => panelOf(e)?.addWeb(url));
   ipcMain.on('sidepanel:remove-web', (e, id) => panelOf(e)?.removeWeb(id));

@@ -1717,6 +1717,8 @@ body {
 
 /* Edge/Vivaldiと同じ、左端をドラッグしてパネル幅を変えるハンドル。
    このパネル自身のView境界の外側は描画されないため、幅は0から始める */
+/* 既定(右ドック)ではパネルの左端(ページ側との境界)をつまむ。
+   左ドック時はページ側との境界がパネルの右端になるため、ハンドルも右へ */
 #resize-handle {
   position: absolute;
   left: 0;
@@ -1728,18 +1730,28 @@ body {
   touch-action: none;
 }
 
+.panel-body.panel-left #resize-handle {
+  left: auto;
+  right: 0;
+}
+
 #resize-handle:hover,
 #resize-handle.dragging {
   background: var(--accent);
   opacity: 0.5;
 }
 
-/* Edge風: コンテンツを左、セクション切り替えの縦アイコンレールを右端に配置 */
+/* Edge風: コンテンツを左、セクション切り替えの縦アイコンレールを右端に配置。
+   ただしパネルがウィンドウの左側にドッキングしているときは逆(レールが常に外側=ウィンドウの縁に来るようにする。Vivaldi等と同様) */
 #home {
   display: flex;
   flex-direction: row;
   height: 100%;
   min-height: 0;
+}
+
+.panel-body.panel-left #home {
+  flex-direction: row-reverse;
 }
 
 .section-content {
@@ -1772,6 +1784,11 @@ body {
   padding: 8px 6px;
   border-left: 1px solid var(--border);
   flex-shrink: 0;
+}
+
+.panel-body.panel-left .section-tabs {
+  border-left: none;
+  border-right: 1px solid var(--border);
 }
 
 .section-tab {

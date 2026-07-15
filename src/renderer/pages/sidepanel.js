@@ -376,8 +376,15 @@ window.roopieInternal.onMediaState((next) => {
 
 window.roopieInternal.onSettings((settings) => {
   mediaSettings.mediaDocked = settings.mediaDocked === true;
+  applySidePanelSide(settings.sidePanelPosition);
   if (mediaState) renderNowPlaying();
 });
+
+// パネルが左右どちら側に開くかで、コンテンツとアイコンレールの左右を入れ替える
+// (レールは常に「外側の端」= ウィンドウの縁に接する側に来るようにする。Vivaldi等と同様)
+function applySidePanelSide(position) {
+  document.body.classList.toggle('panel-left', position === 'left');
+}
 
 // ---- 状態の反映 ----
 function render() {
@@ -401,6 +408,7 @@ window.roopieInternal.onSidePanelState((next) => {
   ]);
   if (next) state = next;
   mediaSettings.mediaDocked = settings.mediaDocked === true;
+  applySidePanelSide(settings.sidePanelPosition);
   showSection('bookmarks');
   render();
   refreshBookmarks();
