@@ -71,12 +71,27 @@ async function refreshProfileThemes() {
 let pendingCreate = false;
 let renameOnRenderId = null;
 
+// セクション見出しの「プロファイル個別/共有中」バッジ。
+// 現在アクティブなプロファイルの共有設定(プロファイルカードのトグルと同じ値)を反映する
+function renderScopeBadges() {
+  const active = state.profiles.find((p) => p.id === state.activeId);
+  for (const el of document.querySelectorAll('.scope-badge[data-scope-key]')) {
+    const shared = !!active?.shared?.[el.dataset.scopeKey];
+    el.textContent = shared ? '共有中' : 'プロファイル個別';
+    el.classList.toggle('is-shared', shared);
+    el.title = shared
+      ? 'この設定は「共有する」がONの他のプロファイルとも共通です(上のプロファイル一覧で切り替えられます)'
+      : 'この設定は現在のプロファイルだけのものです(上のプロファイル一覧の「共有する」で切り替えられます)';
+  }
+}
+
 function render() {
   profilesEl.textContent = '';
   for (const profile of state.profiles) {
     profilesEl.appendChild(createProfileCard(profile));
   }
   renderAccounts();
+  renderScopeBadges();
 
   if (renameOnRenderId) {
     const id = renameOnRenderId;

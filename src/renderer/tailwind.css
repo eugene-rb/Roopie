@@ -165,6 +165,13 @@ body {
   padding-right: calc(100vw - env(titlebar-area-width, 100vw) + 8px);
 }
 
+/* タブバー縦横切替(左上に配置。ウィンドウ移動用のドラッグ領域を上書き) */
+#tab-bar-position-btn {
+  flex-shrink: 0;
+  margin-right: 4px;
+  -webkit-app-region: no-drag;
+}
+
 /* Edgeの「ワークスペース」に相当するプロファイル切り替えピル(プロファイル色で着色) */
 #workspace-btn {
   display: flex;
@@ -428,9 +435,11 @@ body {
   -webkit-app-region: no-drag;
 }
 
+.chrome-body.vertical-tabs #tab-bar-position-btn,
 .chrome-body.vertical-tabs #workspace-btn {
   margin-right: 0;
   margin-bottom: 4px;
+  align-self: flex-start;
 }
 
 .chrome-body.vertical-tabs #tabs {
@@ -1085,6 +1094,30 @@ body {
   margin: 32px 0 12px;
   font-size: 15px;
   font-weight: 600;
+}
+
+/* プロファイル個別/共有中/常に全体共通、を見出しの隣に表示するバッジ */
+.scope-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--card-hover);
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 500;
+  vertical-align: middle;
+  cursor: help;
+}
+
+.scope-badge.is-shared {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--accent);
+}
+
+.scope-badge.is-global {
+  background: color-mix(in srgb, var(--text-dim) 25%, transparent);
 }
 
 .card {
@@ -1766,6 +1799,13 @@ body {
 
 .spacer {
   flex: 1;
+}
+
+/* アイコンレールにピン留めしたWebパネル(.web-iconと同じ見た目を縦積みで流用) */
+#web-pin-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .section {

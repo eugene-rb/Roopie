@@ -63,7 +63,8 @@ class MediaPlayer {
   }
 
   // TabManager.layout() から呼ばれる。area はページ全体の領域(分割前・パネル控除前)
-  layout(area, radius, panelInset = 0) {
+  // panelInset は { left, right } — サイドパネルが開いている側の隅に余白を空ける
+  layout(area, radius, panelInset = { left: 0, right: 0 }) {
     this.lastArea = area;
     if (!this.view) return;
     const visible = !!this.state && !this.docked;
@@ -81,10 +82,11 @@ class MediaPlayer {
   }
 
   boundsFor(corner, area, panelInset) {
-    const rightInset = corner.includes('right') ? panelInset : 0;
+    const rightInset = corner.includes('right') ? panelInset.right || 0 : 0;
+    const leftInset = !corner.includes('right') ? panelInset.left || 0 : 0;
     const x = corner.includes('right')
       ? area.x + area.width - WIDTH - MARGIN - rightInset
-      : area.x + MARGIN;
+      : area.x + MARGIN + leftInset;
     const y = corner.includes('bottom')
       ? area.y + area.height - HEIGHT - MARGIN
       : area.y + MARGIN;

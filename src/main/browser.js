@@ -29,6 +29,7 @@ const DEFAULT_SETTINGS = {
   mediaCorner: 'bottom-right',
   downloadPath: '', // 空ならOS既定(session.setDownloadPathを呼ばない)
   tabBarPosition: 'top', // 'top' | 'left'
+  sidePanelPosition: 'right', // 'left' | 'right'
 };
 const DEFAULT_THEME = { accent: '#6c8cff', background: 'auto', backgroundImage: '', customCss: '' };
 const THEME_BACKGROUNDS = ['auto', 'dawn', 'day', 'dusk', 'night', 'plain', 'image'];
@@ -214,6 +215,7 @@ browser.createWindow = ({ incognito = false, url, x, y } = {}) => {
   });
   tabManager.setOverlay(createOverlayView(session));
   tabManager.setChromeLeft(browser.settings.data.tabBarPosition === 'left' ? TAB_BAR_WIDTH : 0);
+  tabManager.setSidePanelSide(browser.settings.data.sidePanelPosition === 'left' ? 'left' : 'right');
 
   const sidePanel = new SidePanel(window, {
     session,
@@ -468,6 +470,14 @@ browser.applyTabBarPosition = (session) => {
   for (const ctx of targets) ctx.tabManager.setChromeLeft(left);
 };
 
+// ---- サイドパネルの左右位置 ----
+
+browser.applySidePanelPosition = (session) => {
+  const side = browser.settings?.data.sidePanelPosition === 'left' ? 'left' : 'right';
+  const targets = session ? windows.all().filter((c) => c.session === session) : windows.all();
+  for (const ctx of targets) ctx.tabManager.setSidePanelSide(side);
+};
+
 // ---- プロファイル ----
 
 // アクティブなプロファイルのデータ/セッションを各機能へ適用する
@@ -522,6 +532,7 @@ browser.applyActiveProfile = ({ recreateTabs, previousProfileId } = {}) => {
   browser.applyAdblock();
   browser.applyDownloadPath();
   browser.applyTabBarPosition();
+  browser.applySidePanelPosition();
   browser.applyTorForProfile(profile).catch((err) => console.error('Torの適用に失敗:', err));
   browser.sendAll();
 };

@@ -7,6 +7,7 @@ const notesEl = $('notes');
 const webListEl = $('web-list');
 const webUrlEl = $('web-url');
 const webIconsEl = $('web-icons');
+const webPinListEl = $('web-pin-list');
 const nowPlayingTab = $('now-playing-tab');
 const nowPlayingBody = $('now-playing-body');
 
@@ -24,7 +25,8 @@ const SECTION_LABELS = {
 
 // ---- 共通の行アイテム ----
 function faviconEl(favicon, fallbackText) {
-  if (favicon) {
+  // faviconが無いページでは Electron が空データURI "data:," を報告することがある(実質「無し」)
+  if (favicon && favicon !== 'data:,') {
     const img = document.createElement('img');
     img.src = favicon;
     return img;
@@ -75,8 +77,15 @@ function showSection(next) {
   if (section === 'bookmarks') refreshBookmarks();
 }
 
+// 開いているセクションのアイコンをもう一度クリックするとパネルごと収納する(Vivaldi同様)
 for (const btn of document.querySelectorAll('.section-tab[data-section]')) {
-  btn.addEventListener('click', () => showSection(btn.dataset.section));
+  btn.addEventListener('click', () => {
+    if (state.open && !state.activeWebId && btn.dataset.section === section) {
+      window.roopieInternal.toggleSidePanel();
+    } else {
+      showSection(btn.dataset.section);
+    }
+  });
 }
 
 $('panel-close').addEventListener('click', () => window.roopieInternal.toggleSidePanel());
@@ -208,14 +217,34 @@ $('web-open-tab').addEventListener('click', () => {
   window.roopieInternal.openTab(active.url);
 });
 
-function renderWebHeader() {
-  webIconsEl.textContent = '';
+// アイコンレールへの直接ピン留め表示。クリックで即座にそのWebパネルを開く。
+// この一覧は web-mode(Webパネル表示中)では#homeごと隠れるため、表示中のものを
+// もう一度押す状況は起こらない(収納操作は表示中に見えている#web-icons側で行う)
+function renderPinnedWebPanels() {
+  webPinListEl.textContent = '';
   for (const panel of state.webPanels) {
     const btn = document.createElement('button');
-    btn.className = 'web-icon' + (panel.id === state.activeWebId ? ' active' : '');
+    btn.className = 'web-icon';
     btn.title = panel.title || panel.url;
     btn.appendChild(faviconEl(panel.favicon, panel.title));
     btn.addEventListener('click', () => window.roopieInternal.openWebPanel(panel.id));
+    webPinListEl.appendChild(btn);
+  }
+}
+
+function renderWebHeader() {
+  webIconsEl.textContent = '';
+  for (const panel of state.webPanels) {
+    const active = panel.id === state.activeWebId;
+    const btn = document.createElement('button');
+    btn.className = 'web-icon' + (active ? ' active' : '');
+    btn.title = panel.title || panel.url;
+    btn.appendChild(faviconEl(panel.favicon, panel.title));
+    // 表示中のものをもう一度押すとパネルごと収納する(Vivaldi同様)
+    btn.addEventListener('click', () => {
+      if (active) window.roopieInternal.toggleSidePanel();
+      else window.roopieInternal.openWebPanel(panel.id);
+    });
     webIconsEl.appendChild(btn);
   }
 }
@@ -355,6 +384,7 @@ function render() {
   document.body.classList.toggle('web-mode', !!state.activeWebId);
   renderWebList();
   renderWebHeader();
+  renderPinnedWebPanels();
   // 入力中のメモは上書きしない
   if (document.activeElement !== notesEl) notesEl.value = state.notes;
 }

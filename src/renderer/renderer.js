@@ -327,20 +327,34 @@ window.roopie.onDownloadsState((state) => {
   downloadsBtn.classList.toggle('active', state.hasActive);
 });
 
-// ---- 設定(ブックマークバーの表示切替・タブバーの位置) ----
+// ---- 設定(ブックマークバーの表示切替・タブバーの位置・サイドパネルの位置) ----
 let tabBarPosition = 'top';
+let sidePanelPosition = 'right';
 
 window.roopie.onSettings((settings) => {
   bookmarkBarEl.classList.toggle('hidden', !settings.showBookmarkBar);
   tabBarPosition = settings.tabBarPosition || 'top';
   document.body.classList.toggle('vertical-tabs', tabBarPosition === 'left');
   $('tab-bar-position-btn').classList.toggle('active', tabBarPosition === 'left');
+  sidePanelPosition = settings.sidePanelPosition === 'left' ? 'left' : 'right';
+  applySidePanelButtonPosition();
   reportChromeHeight();
 });
 
 $('tab-bar-position-btn').addEventListener('click', () => {
   window.roopie.setSetting('tabBarPosition', tabBarPosition === 'left' ? 'top' : 'left');
 });
+
+// on/offボタンは、サイドパネルが実際に開く側(現在の設定)のツールバーの端に置く
+function applySidePanelButtonPosition() {
+  const toolbar = $('toolbar');
+  const btn = $('sidepanel-btn');
+  if (sidePanelPosition === 'left') {
+    toolbar.insertBefore(btn, toolbar.firstChild);
+  } else {
+    toolbar.appendChild(btn);
+  }
+}
 
 // ---- テーマ ----
 // カスタムCSSはadoptedStyleSheets経由で適用する(CSPのstyle-srcに妨げられない)
@@ -467,6 +481,11 @@ $('history-btn').addEventListener('click', () => window.roopie.newTab('roopie://
 // ---- サイドパネル ----
 const sidepanelBtn = $('sidepanel-btn');
 sidepanelBtn.addEventListener('click', () => window.roopie.toggleSidePanel());
+// 右クリックで表示側(左/右)を切り替える
+sidepanelBtn.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  window.roopie.setSetting('sidePanelPosition', sidePanelPosition === 'left' ? 'right' : 'left');
+});
 window.roopie.onSidePanelState((state) => {
   sidepanelBtn.classList.toggle('active', state.open);
 });

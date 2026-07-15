@@ -32,6 +32,7 @@ class TabManager {
     this.splitDirection = 'row'; // 'row'(左右) | 'column'(上下)
     this.chromeHeight = DEFAULT_CHROME_HEIGHT;
     this.chromeLeft = 0; // タブバーを左側(縦)表示にしたときの左オフセット
+    this.sidePanelSide = 'right'; // サイドパネルを表示する側('left' | 'right')
     this.overlay = null; // メニュー等を表示する、常にタブより手前のView
 
     for (const event of ['resize', 'maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen']) {
@@ -395,6 +396,14 @@ class TabManager {
     this.layout();
   }
 
+  // サイドパネルを表示する側を切り替える('left' | 'right')
+  setSidePanelSide(side) {
+    const next = side === 'left' ? 'left' : 'right';
+    if (next === this.sidePanelSide) return;
+    this.sidePanelSide = next;
+    this.layout();
+  }
+
   // 全画面表示のときは余白なし(ページを画面いっぱいに出す)
   get margin() {
     return this.window.isFullScreen() ? 0 : CONTENT_MARGIN;
@@ -416,6 +425,10 @@ class TabManager {
     // パネルがあるときは、ページとの間にも余白を入れて2枚のカードに見せる
     const gap = panelWidth ? m : 0;
     const pageAreaWidth = Math.max(0, areaWidth - panelWidth - gap);
+    const panelOnLeft = this.sidePanelSide === 'left';
+    // パネルを左に置く場合はページ領域をその分右へ押し出す
+    const pageX = panelOnLeft ? areaX + panelWidth + gap : areaX;
+    const panelX = panelOnLeft ? areaX : areaX + areaWidth - panelWidth;
 
     const activeView = this.getTab(this.activeTabId)?.view;
     const splitView = this.splitTabId ? this.getTab(this.splitTabId)?.view : null;
@@ -425,18 +438,18 @@ class TabManager {
         // 2ペインの間にも余白を入れて、それぞれ独立したカードに見せる
         if (this.splitDirection === 'column') {
           const paneHeight = Math.max(0, (areaHeight - m) / 2);
-          activeView.setBounds({ x: areaX, y: areaY, width: pageAreaWidth, height: paneHeight });
+          activeView.setBounds({ x: pageX, y: areaY, width: pageAreaWidth, height: paneHeight });
           splitView.setBounds({
-            x: areaX,
+            x: pageX,
             y: areaY + paneHeight + m,
             width: pageAreaWidth,
             height: Math.max(0, areaHeight - paneHeight - m),
           });
         } else {
           const paneWidth = Math.max(0, (pageAreaWidth - m) / 2);
-          activeView.setBounds({ x: areaX, y: areaY, width: paneWidth, height: areaHeight });
+          activeView.setBounds({ x: pageX, y: areaY, width: paneWidth, height: areaHeight });
           splitView.setBounds({
-            x: areaX + paneWidth + m,
+            x: pageX + paneWidth + m,
             y: areaY,
             width: Math.max(0, pageAreaWidth - paneWidth - m),
             height: areaHeight,
@@ -444,7 +457,7 @@ class TabManager {
         }
         splitView.setBorderRadius(radius);
       } else {
-        activeView.setBounds({ x: areaX, y: areaY, width: pageAreaWidth, height: areaHeight });
+        activeView.setBounds({ x: pageX, y: areaY, width: pageAreaWidth, height: areaHeight });
       }
       activeView.setBorderRadius(radius);
     }
@@ -460,7 +473,7 @@ class TabManager {
 
     this.sidePanel?.layout(
       {
-        x: areaX + areaWidth - panelWidth,
+        x: panelX,
         y: areaY,
         width: panelWidth,
         height: areaHeight,
@@ -469,12 +482,11 @@ class TabManager {
     );
 
     // ミニプレイヤーはページ全体の領域を基準に置く(分割の影響は受けない)。
-    // サイドパネルが開いていて右寄せの場合は、パネルとの間にも余白を空ける
-    this.mediaPlayer?.layout(
-      { x: areaX, y: areaY, width: areaWidth, height: areaHeight },
-      radius,
-      panelWidth ? panelWidth + m : 0
-    );
+    // サイドパネルが開いている側の隅は、パネルとの間にも余白を空ける
+    this.mediaPlayer?.layout({ x: areaX, y: areaY, width: areaWidth, height: areaHeight }, radius, {
+      left: panelWidth && panelOnLeft ? panelWidth + m : 0,
+      right: panelWidth && !panelOnLeft ? panelWidth + m : 0,
+    });
   }
 
   // 内部ページ(履歴・ダウンロード等)を開いているタブへ通知を送る

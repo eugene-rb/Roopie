@@ -351,6 +351,7 @@ function registerIpc() {
     if (key === 'mediaDocked') browser.applyMediaDocked();
     if (key === 'downloadPath') browser.applyDownloadPath();
     if (key === 'tabBarPosition') browser.applyTabBarPosition();
+    if (key === 'sidePanelPosition') browser.applySidePanelPosition();
     browser.sendSettings();
   });
 
