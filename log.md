@@ -403,6 +403,29 @@ Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP
   - `tor.exe`は同梱していない(サイズとライセンス・更新の都合)。ユーザーがTor Browserを入れているか、Expert Bundleのtor.exeを配置する運用
 - 検証(すべてCDP): tor.exe未検出時のエラー表示とフェイルクローズ(`ERR_PROXY_CONNECTION_FAILED`で全遮断、素の接続に漏れない)を確認 → Tor Expert Bundle 15.0.18のtor.exeを`%APPDATA%/Roopie/tor/`に配置 → トグルON→自前でtor.exe起動(ポート9152)→`check.torproject.org/api/ip`で**`IsTor:true`(exit node IP)**を確認 → 別プロファイルは同時に`IsTor:false`(実IP)で直接接続 → プロファイル切り替えでピルのインジケーターが追従 → トグルOFFで直接接続に復帰、を確認済み
 
+### 2026-07-15: 右クリックメニューの充実
+
+ユーザー要望「右クリックメニューを充実させて」。ページ内(`context-menu.js`)とタブ(`tab-context-menu.js`)の両方をChrome/Edge相当に拡張。
+
+- **ページ内メニュー**(`context-menu.js`):
+  - リンク: 新しいタブ ✓ / **新しいウィンドウ** / **シークレットウィンドウ** / リンクのテキストをコピー / アドレスをコピー ✓ / **リンク先を保存**
+  - 画像: 新しいタブ ✓ / アドレスをコピー ✓ / **画像をコピー**(`copyImageAt`)/ 保存 ✓ / **Googleで検索**(Lens)
+  - **動画・音声(新設)**: ピクチャー・イン・ピクチャー / ループ再生(チェックボックス)/ アドレスをコピー / 保存(`mediaFlags`で可否判定)
+  - 選択テキスト: コピー ✓ / Google検索 ✓ / **URLらしければリンクとして開く**
+  - 入力欄: **スペルミスの修正候補+辞書に追加**(`dictionarySuggestions`/`misspelledWord`)/ 元に戻す・やり直し・切り取り・コピー・貼り付け・**書式なしで貼り付け**・すべて選択(`editFlags`で各項目のenabledを制御)
+  - ページ全体: 戻る・進む・再読み込み ✓ / **ブックマークはトグル表示に**(登録済みなら「解除」)/ **印刷** / **ページのソースを表示**(`view-source:`)/ **名前を付けてページを保存** / 既定のブラウザで開く ✓
+  - 常時: 検証 ✓
+  - 変更点: 画像・動画を右クリックしたときはページ全体のナビゲーション項目を出さない(`mediaType === 'none'`を条件に追加。Chromeの挙動に合わせた)
+- **タブメニュー**(`tab-context-menu.js`):
+  - 新しいタブ ✓ / **タブを複製** / **タブを再読み込み** / **タブをミュート/解除**(`setAudioMuted`)
+  - 右に並べて表示・下に並べて表示・分割を解除 ✓
+  - **URLをコピー** / **タブを新しいウィンドウに移動**(切り離し)
+  - タブを閉じる ✓ / 他のタブを閉じる ✓ / **右側のタブを閉じる**
+- 技術メモ:
+  - `context-menu.js`は`browser.js → tab-manager.js → context-menu.js`の循環依存の下流なので、`browser`(createWindow用)はクリック時に遅延require(モジュールロード時に空の`{}`を掴む問題を回避)。`tab-context-menu.js`はipc.js経由でbrowser完全ロード後に読まれるためトップでrequireして問題ない
+  - スペルチェックはElectronの既定(en-US)で動く。対象言語外の誤字は候補が出ないだけで害はない
+- 検証(CDP): `Input.dispatchMouseEvent`で実際に右クリックを発火させ、リンク/画像/動画/入力欄(誤字入り)/選択/空ページ/タブの全ブランチでメニュー構築時に例外が出ないことを確認。`view-source:`と切り離し(createWindow)のハンドラも個別に動作確認済み(ネイティブメニュー自体はCDPからクリックできないため、構築エラーの有無で検証)
+
 ### 開発の進め方(ツール)
 
 - 動作確認は `npm run start:debug`(`--remote-debugging-port=9222`)で起動し、CDP(Node の WebSocket)で `window.roopie` / `window.roopieInternal` を直接叩いて検証する。
