@@ -13,6 +13,15 @@ const nowPlayingBody = $('now-playing-body');
 let state = { open: false, webPanels: [], activeWebId: null, notes: '' };
 let section = 'bookmarks';
 
+// リサイズハンドルの近く・タブのtitle属性と揃えたラベル(Edge/Vivaldiのパネルヘッダー相当)
+const SECTION_LABELS = {
+  bookmarks: 'ブックマーク',
+  history: '履歴',
+  notes: 'メモ',
+  web: 'Webパネル',
+  'now-playing': '再生中',
+};
+
 // ---- 共通の行アイテム ----
 function faviconEl(favicon, fallbackText) {
   if (favicon) {
@@ -61,6 +70,7 @@ function showSection(next) {
   for (const el of document.querySelectorAll('.section')) {
     el.classList.toggle('active', el.id === `section-${section}`);
   }
+  $('panel-header-title').textContent = SECTION_LABELS[section] ?? '';
   if (section === 'history') refreshHistory();
   if (section === 'bookmarks') refreshBookmarks();
 }
@@ -70,6 +80,26 @@ for (const btn of document.querySelectorAll('.section-tab[data-section]')) {
 }
 
 $('panel-close').addEventListener('click', () => window.roopieInternal.toggleSidePanel());
+
+// ---- 幅のリサイズ(左端のハンドルをドラッグ。Edge/Vivaldiと同じ操作) ----
+// パネル自身のViewはドラッグ中に再配置されるため、絶対座標ではなく直前からの
+// 相対移動量(movementX)を都度メインへ送る(フローティングプレイヤーのドラッグと同じ方式)
+const resizeHandle = $('resize-handle');
+resizeHandle.addEventListener('pointerdown', (e) => {
+  resizeHandle.setPointerCapture(e.pointerId);
+  resizeHandle.classList.add('dragging');
+});
+resizeHandle.addEventListener('pointermove', (e) => {
+  if (!resizeHandle.hasPointerCapture(e.pointerId)) return;
+  if (e.movementX) window.roopieInternal.resizeSidePanel(e.movementX);
+});
+resizeHandle.addEventListener('pointerup', (e) => {
+  resizeHandle.releasePointerCapture(e.pointerId);
+  resizeHandle.classList.remove('dragging');
+});
+resizeHandle.addEventListener('pointercancel', () => {
+  resizeHandle.classList.remove('dragging');
+});
 
 // ---- ブックマーク ----
 async function refreshBookmarks() {

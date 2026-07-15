@@ -4,8 +4,13 @@ const path = require('path');
 const { attachContextMenu } = require('./context-menu');
 
 const PANEL_URL = 'roopie://sidepanel';
-const PANEL_WIDTH = 360;
+const DEFAULT_WIDTH = 360;
+const MIN_WIDTH = 280;
+const MAX_WIDTH = 640;
 const WEB_HEADER_HEIGHT = 44; // Webパネル表示中に上部へ残すヘッダーの高さ
+const RESIZE_HANDLE_WIDTH = 6; // 左端のリサイズハンドル分(CSSの#resize-handleと合わせる)
+
+const clampWidth = (w) => Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, Math.round(w)));
 
 const INTERNAL_PRELOAD = path.join(__dirname, '..', 'preload', 'internal-preload.js');
 
@@ -33,6 +38,7 @@ class SidePanel {
     const data = this.store.data;
     if (!Array.isArray(data.webPanels)) data.webPanels = [];
     if (typeof data.notes !== 'string') data.notes = '';
+    data.width = Number.isFinite(data.width) ? clampWidth(data.width) : DEFAULT_WIDTH;
   }
 
   get webPanels() {
@@ -45,6 +51,7 @@ class SidePanel {
       webPanels: this.webPanels,
       activeWebId: this.activeWebId,
       notes: this.store.data.notes,
+      width: this.store.data.width,
     };
   }
 
@@ -73,7 +80,16 @@ class SidePanel {
   // 表示中のパネル幅。狭いウィンドウではページ側を最低半分残す
   widthFor(totalWidth) {
     if (!this.open) return 0;
-    return Math.min(PANEL_WIDTH, Math.floor(totalWidth / 2));
+    return Math.min(this.store.data.width, Math.floor(totalWidth / 2));
+  }
+
+  // 境界のドラッグでリサイズする(deltaXは直前イベントからの相対移動量=movementX)。
+  // パネルは右端固定なので、ハンドルが左へ動く(deltaXが負)ほど幅は増える
+  resizeBy(deltaX) {
+    if (!Number.isFinite(deltaX)) return;
+    this.store.data.width = clampWidth(this.store.data.width - deltaX);
+    this.store.save();
+    this.tabManager.layout();
   }
 
   // TabManager.layout() から呼ばれる。bounds はパネルに割り当てられた領域
@@ -92,11 +108,12 @@ class SidePanel {
     this.panelView.setBorderRadius(radius);
 
     if (this.activeWebId && this.webView) {
+      // 左端にリサイズハンドル分の帯を残す(Webパネル表示中も幅を変えられるように)
       this.webView.setVisible(true);
       this.webView.setBounds({
-        x: bounds.x,
+        x: bounds.x + RESIZE_HANDLE_WIDTH,
         y: bounds.y + WEB_HEADER_HEIGHT,
-        width: bounds.width,
+        width: Math.max(0, bounds.width - RESIZE_HANDLE_WIDTH),
         height: Math.max(0, bounds.height - WEB_HEADER_HEIGHT),
       });
       this.webView.setBorderRadius(radius);

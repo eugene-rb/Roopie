@@ -148,12 +148,16 @@ function roundRectPath(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-window.roopieInternal.onQrShow(({ url, anchor }) => {
+// ダウンロード時のファイル名に使う、ポップアップを開いた時点のページタイトル
+let qrPageTitle = '';
+
+window.roopieInternal.onQrShow(({ url, title, anchor }) => {
   menu.classList.add('hidden');
   closeQrCenterPicker();
   qrCenter = null;
   qrCenterClear.classList.add('hidden');
   qrText.value = url ?? '';
+  qrPageTitle = title ?? '';
   qrPopup.classList.remove('hidden');
   position(qrPopup, anchor ?? { right: window.innerWidth - MARGIN }, QR_WIDTH);
   renderQr();
@@ -264,9 +268,18 @@ qrText.addEventListener('input', () => {
 
 qrCenterClear.addEventListener('click', () => setQrCenter(null));
 
+// ファイル名に使えない文字を取り除く(Windows/macOS双方の禁止文字を考慮)
+function sanitizeFilename(name) {
+  return name
+    .replace(/[\\/:*?"<>|]/g, '')
+    .trim()
+    .slice(0, 100);
+}
+
 qrDownload.addEventListener('click', async () => {
   if (!qrText.value.trim()) return;
-  await window.roopieInternal.saveQr(qrCanvas.toDataURL('image/png'));
+  const filename = sanitizeFilename(qrPageTitle) || 'qrcode';
+  await window.roopieInternal.saveQr(qrCanvas.toDataURL('image/png'), filename);
 });
 
 // ---- 中央マークの選択パネル(プロフィールアイコンと同じUI) ----

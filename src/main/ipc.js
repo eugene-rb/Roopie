@@ -71,13 +71,15 @@ function registerIpc() {
     tabManager.overlay.webContents.send('qr:show', payload ?? {});
   });
 
-  // QR画像(dataURL)をPNGとして保存する
-  ipcMain.handle('qr:save', async (e, dataUrl) => {
+  // QR画像(dataURL)をPNGとして保存する。ファイル名はリンク先のページタイトルを既定にする
+  ipcMain.handle('qr:save', async (e, dataUrl, filename) => {
     const window = ctxOf(e)?.window;
     if (!window || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) return false;
+    // レンダラー側で既に禁止文字は除去済みだが、念のためここでも取り除く
+    const safeName = (typeof filename === 'string' ? filename : '').replace(/[\\/:*?"<>|]/g, '').trim();
     const { canceled, filePath } = await dialog.showSaveDialog(window, {
       title: 'QRコードを保存',
-      defaultPath: 'qrcode.png',
+      defaultPath: `${safeName || 'qrcode'}.png`,
       filters: [{ name: 'PNG画像', extensions: ['png'] }],
     });
     if (canceled || !filePath) return false;
@@ -203,6 +205,7 @@ function registerIpc() {
   ipcMain.on('sidepanel:close-web', (e) => panelOf(e)?.closeWeb());
   ipcMain.on('sidepanel:reload-web', (e) => panelOf(e)?.reloadWeb());
   ipcMain.on('sidepanel:set-notes', (e, text) => panelOf(e)?.setNotes(text));
+  ipcMain.on('sidepanel:resize', (e, deltaX) => panelOf(e)?.resizeBy(deltaX));
 
   // ---- パスワード ----
   // ページのpreloadがログイン送信を検出したら、未保存のときだけUIに確認バーを出す

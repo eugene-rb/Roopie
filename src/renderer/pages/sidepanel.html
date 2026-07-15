@@ -7,9 +7,16 @@
   <link rel="stylesheet" href="app.css" />
 </head>
 <body class="panel-body">
+  <!-- 左端のリサイズハンドル(Edge/Vivaldiと同じくドラッグでパネル幅を変えられる) -->
+  <div id="resize-handle" title="ドラッグして幅を変更"></div>
+
   <!-- 通常モード: セクション切り替え。Edgeのサイドパネル風に、右端の縦アイコンレール+左側にコンテンツ -->
   <div id="home">
     <div class="section-content">
+      <div id="panel-header">
+        <span id="panel-header-title"></span>
+      </div>
+
       <div id="section-bookmarks" class="section">
         <div id="bookmark-list" class="panel-list"></div>
       </div>

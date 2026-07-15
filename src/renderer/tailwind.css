@@ -1672,6 +1672,7 @@ body {
    サイドパネル — .panel-body
    ========================================================= */
 .panel-body {
+  position: relative;
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -1679,6 +1680,25 @@ body {
   flex-direction: column;
   background: var(--bg-toolbar);
   font-size: 13px;
+}
+
+/* Edge/Vivaldiと同じ、左端をドラッグしてパネル幅を変えるハンドル。
+   このパネル自身のView境界の外側は描画されないため、幅は0から始める */
+#resize-handle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  z-index: 10;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+#resize-handle:hover,
+#resize-handle.dragging {
+  background: var(--accent);
+  opacity: 0.5;
 }
 
 /* Edge風: コンテンツを左、セクション切り替えの縦アイコンレールを右端に配置 */
@@ -1695,6 +1715,19 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+/* セクションのヘッダー(Edge/Vivaldiのパネルタイトル相当) */
+#panel-header {
+  flex-shrink: 0;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+#panel-header-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
 }
 
 .section-tabs {

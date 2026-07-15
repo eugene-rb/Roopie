@@ -81,6 +81,7 @@ if (location.protocol === 'roopie:') {
     closeWebPanel: () => ipcRenderer.send('sidepanel:close-web'),
     reloadWebPanel: () => ipcRenderer.send('sidepanel:reload-web'),
     setSidePanelNotes: (text) => ipcRenderer.send('sidepanel:set-notes', text),
+    resizeSidePanel: (deltaX) => ipcRenderer.send('sidepanel:resize', deltaX),
     onSidePanelState: (cb) => ipcRenderer.on('sidepanel:state', (_e, s) => cb(s)),
 
     // 保存パスワード(管理画面用)
@@ -117,7 +118,7 @@ if (location.protocol === 'roopie:') {
 
     // QRコードのポップアップ(オーバーレイ)用
     onQrShow: (cb) => ipcRenderer.on('qr:show', (_e, payload) => cb(payload)),
-    saveQr: (dataUrl) => ipcRenderer.invoke('qr:save', dataUrl),
+    saveQr: (dataUrl, filename) => ipcRenderer.invoke('qr:save', dataUrl, filename),
 
     onDownloadsState: (cb) =>
       ipcRenderer.on('downloads:state', (_e, state) => cb(state)),
