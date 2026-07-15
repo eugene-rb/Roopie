@@ -28,7 +28,7 @@ function initGestures() {
   let pattern = '';
   let suppressMenu = false; // 直後のcontextmenuを抑止する
   let startX = 0, startY = 0, anchorX = 0, anchorY = 0;
-  let canvas = null, ctx = null, label = null;
+  let trailContainer = null, label = null, lastX = 0, lastY = 0;
 
   window.addEventListener('mousedown', (e) => {
     if (e.button !== 2 || !config.enabled) return;
@@ -104,27 +104,22 @@ function initGestures() {
   }
 
   // ---- 軌跡とラベルの描画 ----
+  // 軌跡はcanvasではなくDOM要素(線分ごとのdiv)で描く。
+  // このタブはZen風の角丸カード表示のため WebContentsView.setBorderRadius() が掛かっており、
+  // その状態だとcanvasへの動的な描画(ctx.stroke()の連続呼び出し)が実ウィンドウの合成結果に
+  // 反映されない(devtoolsのスクリーンショットには映るのに、実際の画面には出ない)という
+  // Electron側の挙動を確認した。通常のDOM要素(div)は同条件でも問題なく合成されるため、
+  // 軌跡はdivの線分を都度追加していく方式にする
 
   function showTrail() {
-    const dpr = window.devicePixelRatio || 1;
-    canvas = document.createElement('canvas');
-    canvas.width = window.innerWidth * dpr;
-    canvas.height = window.innerHeight * dpr;
-    setStyle(canvas, {
+    trailContainer = document.createElement('div');
+    setStyle(trailContainer, {
       position: 'fixed',
       left: '0', top: '0',
-      width: '100%', height: '100%',
+      width: '0', height: '0',
       zIndex: '2147483647',
       pointerEvents: 'none',
     });
-    ctx = canvas.getContext('2d');
-    ctx.scale(dpr, dpr);
-    ctx.strokeStyle = '#6c8cff';
-    ctx.lineWidth = 3;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.beginPath();
-    ctx.moveTo(startX, startY);
 
     label = document.createElement('div');
     setStyle(label, {
@@ -142,13 +137,32 @@ function initGestures() {
       display: 'none',
     });
 
-    (document.body || document.documentElement).append(canvas, label);
+    (document.body || document.documentElement).append(trailContainer, label);
+    lastX = startX;
+    lastY = startY;
   }
 
   function drawTo(x, y) {
-    if (!ctx) return;
-    ctx.lineTo(x, y);
-    ctx.stroke();
+    if (!trailContainer) return;
+    const dx = x - lastX;
+    const dy = y - lastY;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 1) return;
+    const seg = document.createElement('div');
+    setStyle(seg, {
+      position: 'fixed',
+      left: `${lastX}px`,
+      top: `${lastY - 1.5}px`,
+      width: `${dist}px`,
+      height: '3px',
+      borderRadius: '1.5px',
+      background: '#6c8cff',
+      transformOrigin: '0 50%',
+      transform: `rotate(${Math.atan2(dy, dx)}rad)`,
+    });
+    trailContainer.appendChild(seg);
+    lastX = x;
+    lastY = y;
   }
 
   function updateLabel() {
@@ -161,9 +175,9 @@ function initGestures() {
   }
 
   function hideTrail() {
-    canvas?.remove();
+    trailContainer?.remove();
     label?.remove();
-    canvas = ctx = label = null;
+    trailContainer = label = null;
   }
 
   function setStyle(el, styles) {
