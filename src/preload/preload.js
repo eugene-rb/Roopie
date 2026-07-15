@@ -423,6 +423,7 @@ injectBrowserAction();
 contextBridge.exposeInMainWorld('roopie', {
   // タブ操作
   newTab: (url) => ipcRenderer.send('tabs:new', url),
+  searchInNewTab: (text) => ipcRenderer.send('tabs:search-new-tab', text),
   closeTab: (id) => ipcRenderer.send('tabs:close', id),
   switchTab: (id) => ipcRenderer.send('tabs:switch', id),
   moveTab: (id, toIndex) => ipcRenderer.send('tabs:move', id, toIndex),

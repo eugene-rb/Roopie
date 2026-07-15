@@ -148,6 +148,22 @@ function clearDropMarkers() {
   }
 }
 
+// ---- 選択テキストをタブバーへドラッグして検索(Edgeオマージュ) ----
+// ページ(別のWebContentsView)から選択テキストをドラッグしてきた場合のみ反応する。
+// 自分のタブの並べ替えドラッグは draggingId が立つので、その間は何もしない
+const tabBarEl = $('tab-bar');
+tabBarEl.addEventListener('dragover', (e) => {
+  if (draggingId !== null) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'copy';
+});
+tabBarEl.addEventListener('drop', (e) => {
+  if (draggingId !== null) return;
+  e.preventDefault();
+  const text = e.dataTransfer.getData('text/plain');
+  if (text.trim()) window.roopie.searchInNewTab(text);
+});
+
 function activeTab() {
   return tabState.tabs.find((t) => t.id === tabState.activeTabId) || null;
 }
@@ -473,6 +489,15 @@ starBtn.addEventListener('click', () => window.roopie.toggleBookmark());
 $('zoom-in-btn').addEventListener('click', () => window.roopie.zoom(1));
 $('zoom-out-btn').addEventListener('click', () => window.roopie.zoom(-1));
 zoomLabel.addEventListener('click', () => window.roopie.zoom(0));
+// ズーム表示の上でホイールを回すと拡大縮小できる
+$('zoom-controls').addEventListener(
+  'wheel',
+  (e) => {
+    e.preventDefault();
+    window.roopie.zoom(e.deltaY < 0 ? 1 : -1);
+  },
+  { passive: false }
+);
 downloadsBtn.addEventListener('click', () => window.roopie.newTab('roopie://downloads'));
 $('split-direction-btn').addEventListener('click', () => window.roopie.toggleSplitDirection());
 $('split-close-btn').addEventListener('click', () => window.roopie.closeSplit());

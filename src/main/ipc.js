@@ -15,6 +15,12 @@ const panelOf = (e) => ctxOf(e)?.sidePanel ?? null;
 function registerIpc() {
   // ---- タブ ----
   ipcMain.on('tabs:new', (e, url) => tabsOf(e)?.createTab(url || undefined));
+  // タブバーへのドラッグ&ドロップ検索(Edgeオマージュ): 選択テキストは常に検索する
+  ipcMain.on('tabs:search-new-tab', (e, text) => {
+    const query = String(text ?? '').trim();
+    if (!query) return;
+    tabsOf(e)?.createTab(`https://www.google.com/search?q=${encodeURIComponent(query)}`);
+  });
   ipcMain.on('tabs:close', (e, id) => tabsOf(e)?.closeTab(id));
   ipcMain.on('tabs:switch', (e, id) => tabsOf(e)?.switchTab(id));
   ipcMain.on('tabs:move', (e, id, toIndex) => tabsOf(e)?.moveTab(id, toIndex));

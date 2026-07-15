@@ -563,6 +563,12 @@ body {
   visibility: hidden;
 }
 
+#zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
 #zoom-label {
   min-width: 42px;
   font-size: 11px;
