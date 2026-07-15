@@ -1256,6 +1256,11 @@ body {
   cursor: grabbing;
 }
 
+/* QRの中央マーク用: 円ではなく角丸四角形でクロップ */
+.crop-viewport-rect {
+  border-radius: 16%;
+}
+
 .crop-viewport img {
   position: absolute;
   max-width: none;

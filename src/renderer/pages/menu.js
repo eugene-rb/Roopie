@@ -107,27 +107,59 @@ document.getElementById('new-incognito').addEventListener('click', () => {
 // =========================================================
 const qrCanvas = document.getElementById('qr-canvas');
 const qrText = document.getElementById('qr-text');
-const qrLogoBtn = document.getElementById('qr-logo-btn');
-const qrLogoClear = document.getElementById('qr-logo-clear');
+const qrCenterBtn = document.getElementById('qr-center-btn');
+const qrCenterClear = document.getElementById('qr-center-clear');
 const qrLogoInput = document.getElementById('qr-logo-input');
 const qrDownload = document.getElementById('qr-download');
 
 const QR_SIZE = 480; // 描画解像度(表示はCSSで縮小)
 const QR_QUIET = 4; // クワイエットゾーン(モジュール数)
-let qrLogoImage = null; // 中央に重ねる画像(HTMLImageElement)
+
+// 中央のマーク(角丸四角形に描く)。プロフィールアイコンと同じ選び方
+//   null | { type:'emoji', value } | { type:'image', img: HTMLImageElement }
+let qrCenter = null;
 let qrRenderTimer = null;
+
+// アイコン選択の初期候補(settings.js と同じ)
+const QR_EMOJI = [
+  '😀', '😎', '🤓', '🥸', '🤖', '👻',
+  '🐱', '🐶', '🦊', '🐼', '🐧', '🦉',
+  '🌸', '🌵', '🍀', '🔥', '⚡', '🌙',
+  '🎮', '🎧', '📚', '☕', '🚀', '🎨',
+];
+
+function qrButton(label, onClick) {
+  const btn = document.createElement('button');
+  btn.className = 'btn';
+  btn.textContent = label;
+  btn.addEventListener('click', onClick);
+  return btn;
+}
+
+// 角丸四角形のパスを引く(clip/fill 共用)
+function roundRectPath(ctx, x, y, w, h, r) {
+  const rr = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
 
 window.roopieInternal.onQrShow(({ url, anchor }) => {
   menu.classList.add('hidden');
-  qrLogoImage = null;
-  qrLogoClear.classList.add('hidden');
+  closeQrCenterPicker();
+  qrCenter = null;
+  qrCenterClear.classList.add('hidden');
   qrText.value = url ?? '';
   qrPopup.classList.remove('hidden');
   position(qrPopup, anchor ?? { right: window.innerWidth - MARGIN }, QR_WIDTH);
   renderQr();
 });
 
-// テキストからQRのモジュール行列を作る。ロゴがあると中央が隠れるので誤り訂正はH(高)を優先し、
+// テキストからQRのモジュール行列を作る。中央マークで隠れるので誤り訂正はH(高)を優先し、
 // 容量オーバーで作れないときは段階的に下げる
 function buildQr(text) {
   for (const level of ['H', 'Q', 'M', 'L']) {
@@ -176,23 +208,52 @@ function renderQr() {
     }
   }
 
-  // 中央のロゴ(誤り訂正Hなら約2〜3割の欠損に耐えるので、22%程度までに抑える)
-  if (qrLogoImage) {
-    const logoSize = Math.round(dim * 0.22);
-    const pad = Math.round(cell * 1.5);
-    const box = logoSize + pad * 2;
-    const x = Math.round((dim - box) / 2);
-    const y = Math.round((dim - box) / 2);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(x, y, box, box);
-    // アスペクト比を保って中央に収める
-    const iw = qrLogoImage.naturalWidth || logoSize;
-    const ih = qrLogoImage.naturalHeight || logoSize;
-    const scale = Math.min(logoSize / iw, logoSize / ih);
+  drawQrCenter(ctx, dim, cell);
+}
+
+// 中央のマークを角丸四角形で描く(誤り訂正Hなら約2〜3割の欠損に耐えるので、22%程度までに抑える)
+function drawQrCenter(ctx, dim, cell) {
+  if (!qrCenter) return;
+  const inner = Math.round(dim * 0.22);
+  const pad = Math.round(cell * 1.5);
+  const box = inner + pad * 2;
+  const x = Math.round((dim - box) / 2);
+  const y = Math.round((dim - box) / 2);
+  const radius = Math.round(box * 0.22); // 角丸
+
+  // 白い角丸の下地
+  ctx.fillStyle = '#ffffff';
+  roundRectPath(ctx, x, y, box, box, radius);
+  ctx.fill();
+
+  if (qrCenter.type === 'emoji') {
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `${inner}px "Segoe UI Emoji", "Apple Color Emoji", sans-serif`;
+    ctx.fillText(qrCenter.value, dim / 2, dim / 2 + inner * 0.06);
+    ctx.restore();
+  } else if (qrCenter.type === 'image' && qrCenter.img) {
+    ctx.save();
+    // 画像は角丸四角形にクリップして描く
+    const ir = Math.round(inner * 0.22);
+    roundRectPath(ctx, Math.round((dim - inner) / 2), Math.round((dim - inner) / 2), inner, inner, ir);
+    ctx.clip();
+    const img = qrCenter.img;
+    const iw = img.naturalWidth || inner;
+    const ih = img.naturalHeight || inner;
+    const scale = Math.max(inner / iw, inner / ih); // カバー(はみ出しはクリップで切る)
     const dw = iw * scale;
     const dh = ih * scale;
-    ctx.drawImage(qrLogoImage, Math.round((dim - dw) / 2), Math.round((dim - dh) / 2), dw, dh);
+    ctx.drawImage(img, Math.round((dim - dw) / 2), Math.round((dim - dh) / 2), dw, dh);
+    ctx.restore();
   }
+}
+
+function setQrCenter(center) {
+  qrCenter = center;
+  qrCenterClear.classList.toggle('hidden', !center);
+  renderQr();
 }
 
 // 内容の編集(打つたびに再生成。負荷を抑えるため少しデバウンス)
@@ -201,32 +262,258 @@ qrText.addEventListener('input', () => {
   qrRenderTimer = setTimeout(renderQr, 150);
 });
 
-qrLogoBtn.addEventListener('click', () => qrLogoInput.click());
-
-qrLogoInput.addEventListener('change', () => {
-  const file = qrLogoInput.files?.[0];
-  qrLogoInput.value = '';
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    const img = new Image();
-    img.onload = () => {
-      qrLogoImage = img;
-      qrLogoClear.classList.remove('hidden');
-      renderQr();
-    };
-    img.src = reader.result;
-  };
-  reader.readAsDataURL(file);
-});
-
-qrLogoClear.addEventListener('click', () => {
-  qrLogoImage = null;
-  qrLogoClear.classList.add('hidden');
-  renderQr();
-});
+qrCenterClear.addEventListener('click', () => setQrCenter(null));
 
 qrDownload.addEventListener('click', async () => {
   if (!qrText.value.trim()) return;
   await window.roopieInternal.saveQr(qrCanvas.toDataURL('image/png'));
 });
+
+// ---- 中央マークの選択パネル(プロフィールアイコンと同じUI) ----
+let qrCenterPicker = null;
+
+function closeQrCenterPicker() {
+  qrCenterPicker?.remove();
+  qrCenterPicker = null;
+}
+
+qrCenterBtn.addEventListener('click', () => {
+  if (qrCenterPicker) {
+    closeQrCenterPicker();
+    return;
+  }
+  const panel = document.createElement('div');
+  panel.className = 'icon-picker';
+  // パネル内のクリックはオーバーレイの外側クリック判定に渡さない
+  panel.addEventListener('mousedown', (e) => e.stopPropagation());
+
+  const grid = document.createElement('div');
+  grid.className = 'icon-picker-grid';
+  for (const emoji of QR_EMOJI) {
+    const b = document.createElement('button');
+    b.className = 'icon-picker-emoji';
+    b.textContent = emoji;
+    b.addEventListener('click', () => {
+      setQrCenter({ type: 'emoji', value: emoji });
+      closeQrCenterPicker();
+    });
+    grid.appendChild(b);
+  }
+  panel.appendChild(grid);
+
+  const customRow = document.createElement('div');
+  customRow.className = 'icon-picker-row';
+  const customInput = document.createElement('input');
+  customInput.className = 'search';
+  customInput.type = 'text';
+  customInput.placeholder = '絵文字を入力';
+  customInput.maxLength = 8;
+  const applyCustom = () => {
+    const value = customInput.value.trim();
+    if (!value) return;
+    setQrCenter({ type: 'emoji', value });
+    closeQrCenterPicker();
+  };
+  customInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') applyCustom();
+  });
+  customRow.append(customInput, qrButton('設定', applyCustom));
+  panel.appendChild(customRow);
+
+  const actionsRow = document.createElement('div');
+  actionsRow.className = 'icon-picker-row';
+  actionsRow.appendChild(qrButton('画像をアップロード', () => qrLogoInput.click()));
+  actionsRow.appendChild(qrButton('マークを消す', () => {
+    setQrCenter(null);
+    closeQrCenterPicker();
+  }));
+  panel.appendChild(actionsRow);
+
+  document.body.appendChild(panel);
+  const rect = qrCenterBtn.getBoundingClientRect();
+  panel.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - 236))}px`;
+  panel.style.top = `${Math.max(8, rect.top - 8 - panel.offsetHeight)}px`;
+  qrCenterPicker = panel;
+});
+
+qrLogoInput.addEventListener('change', () => {
+  const file = qrLogoInput.files?.[0];
+  qrLogoInput.value = '';
+  if (!file) return;
+  closeQrCenterPicker();
+  openQrCropModal(file);
+});
+
+// 選択パネルの外側クリックで閉じる(オーバーレイ自体は閉じないよう、captureで先に処理して止める)
+document.addEventListener(
+  'mousedown',
+  (e) => {
+    if (qrCenterPicker && !qrCenterPicker.contains(e.target) && e.target !== qrCenterBtn) {
+      closeQrCenterPicker();
+      e.stopPropagation();
+    }
+  },
+  true
+);
+
+// ---- 画像のGUIクロップ(角丸四角形。プロフィールアイコンと同じ操作) ----
+function openQrCropModal(file) {
+  const VS = 240; // クロップ表示のビューポートサイズ(px)
+  const OUTPUT = 200; // 書き出す一辺(px)
+  const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'crop-backdrop';
+  // クロップ中のクリック/キーはオーバーレイに渡さない
+  backdrop.addEventListener('mousedown', (e) => e.stopPropagation());
+
+  const modal = document.createElement('div');
+  modal.className = 'crop-modal';
+
+  const hint = document.createElement('div');
+  hint.className = 'hint';
+  hint.textContent = 'ドラッグで位置を調整、スライダー(またはホイール)で拡大縮小できます';
+  modal.appendChild(hint);
+
+  const viewport = document.createElement('div');
+  viewport.className = 'crop-viewport crop-viewport-rect';
+  const img = document.createElement('img');
+  img.draggable = false;
+  viewport.appendChild(img);
+  modal.appendChild(viewport);
+
+  const zoomInput = document.createElement('input');
+  zoomInput.type = 'range';
+  zoomInput.className = 'crop-zoom';
+  zoomInput.min = '0';
+  zoomInput.max = '100';
+  zoomInput.value = '0';
+  modal.appendChild(zoomInput);
+
+  const actions = document.createElement('div');
+  actions.className = 'crop-actions';
+  const applyBtn = qrButton('中央に設定', apply);
+  applyBtn.classList.add('primary');
+  actions.append(qrButton('キャンセル', close), applyBtn);
+  modal.appendChild(actions);
+
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
+
+  let nw = 0;
+  let nh = 0;
+  let baseScale = 1;
+  let scale = 1;
+  let offsetX = 0;
+  let offsetY = 0;
+
+  function currentZoomedScale() {
+    const z = 1 + (Number(zoomInput.value) / 100) * 2; // 1倍〜3倍
+    return baseScale * z;
+  }
+
+  function applyTransform() {
+    scale = currentZoomedScale();
+    const dw = nw * scale;
+    const dh = nh * scale;
+    offsetX = clamp(offsetX, VS - dw, 0);
+    offsetY = clamp(offsetY, VS - dh, 0);
+    img.style.width = `${dw}px`;
+    img.style.height = `${dh}px`;
+    img.style.left = `${offsetX}px`;
+    img.style.top = `${offsetY}px`;
+  }
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    img.onload = () => {
+      nw = img.naturalWidth;
+      nh = img.naturalHeight;
+      baseScale = VS / Math.min(nw, nh); // 短辺がビューポートを覆う倍率
+      offsetX = (VS - nw * baseScale) / 2;
+      offsetY = (VS - nh * baseScale) / 2;
+      applyTransform();
+    };
+    img.onerror = close;
+    img.src = reader.result;
+  };
+  reader.onerror = close;
+  reader.readAsDataURL(file);
+
+  let dragging = false;
+  let startX = 0;
+  let startY = 0;
+  let startOffsetX = 0;
+  let startOffsetY = 0;
+
+  viewport.addEventListener('pointerdown', (e) => {
+    dragging = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    startOffsetX = offsetX;
+    startOffsetY = offsetY;
+    viewport.setPointerCapture(e.pointerId);
+  });
+  viewport.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    offsetX = startOffsetX + (e.clientX - startX);
+    offsetY = startOffsetY + (e.clientY - startY);
+    applyTransform();
+  });
+  viewport.addEventListener('pointerup', () => {
+    dragging = false;
+  });
+  viewport.addEventListener('pointercancel', () => {
+    dragging = false;
+  });
+
+  zoomInput.addEventListener('input', () => {
+    const oldScale = scale;
+    const newScale = currentZoomedScale();
+    const cx = (VS / 2 - offsetX) / oldScale;
+    const cy = (VS / 2 - offsetY) / oldScale;
+    offsetX = VS / 2 - cx * newScale;
+    offsetY = VS / 2 - cy * newScale;
+    applyTransform();
+  });
+
+  viewport.addEventListener(
+    'wheel',
+    (e) => {
+      e.preventDefault();
+      zoomInput.value = String(clamp(Number(zoomInput.value) + (e.deltaY > 0 ? -4 : 4), 0, 100));
+      zoomInput.dispatchEvent(new Event('input'));
+    },
+    { passive: false }
+  );
+
+  // Escでモーダルを閉じる(オーバーレイ自体は閉じないよう、captureで先に止める)
+  function onKeydown(e) {
+    if (e.key === 'Escape') {
+      close();
+      e.stopPropagation();
+    }
+  }
+  document.addEventListener('keydown', onKeydown, true);
+
+  function close() {
+    document.removeEventListener('keydown', onKeydown, true);
+    backdrop.remove();
+  }
+
+  function apply() {
+    if (!nw) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = OUTPUT;
+    canvas.height = OUTPUT;
+    const ctx = canvas.getContext('2d');
+    const srcSize = VS / scale;
+    const srcX = clamp(-offsetX / scale, 0, nw - srcSize);
+    const srcY = clamp(-offsetY / scale, 0, nh - srcSize);
+    ctx.drawImage(img, srcX, srcY, srcSize, srcSize, 0, 0, OUTPUT, OUTPUT);
+    const out = new Image();
+    out.onload = () => setQrCenter({ type: 'image', img: out });
+    out.src = canvas.toDataURL('image/png');
+    close();
+  }
+}
