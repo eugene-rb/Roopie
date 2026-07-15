@@ -1,5 +1,6 @@
 const { Menu, MenuItem } = require('electron');
 const browser = require('./browser');
+const { TOOLBAR_ITEMS, normalizeToolbarItems } = require('./toolbar-items');
 
 function setSidePanelPosition(value) {
   if (!browser.settings || value === browser.settings.data.sidePanelPosition) return;
@@ -54,4 +55,38 @@ function showSidePanelRailMenu(panel) {
   menu.popup();
 }
 
-module.exports = { showSidePanelPositionMenu, showSidePanelRailMenu };
+/**
+ * ツールバーのユーティリティ群を右クリックしたときのメニュー。
+ * 各項目の表示/非表示をチェックボックスで切り替え、設定画面(並び替え)へも誘導する。
+ */
+function showToolbarMenu(ctx) {
+  if (!browser.settings) return;
+  const items = normalizeToolbarItems(browser.settings.data.toolbarItems);
+  const visibleById = new Map(items.map((it) => [it.id, it.visible]));
+  const menu = new Menu();
+  for (const { id, label } of TOOLBAR_ITEMS) {
+    menu.append(
+      new MenuItem({
+        label,
+        type: 'checkbox',
+        checked: visibleById.get(id) !== false,
+        click: () => {
+          const next = items.map((it) => (it.id === id ? { ...it, visible: !it.visible } : it));
+          browser.settings.data.toolbarItems = next;
+          browser.settings.save();
+          browser.sendSettings();
+        },
+      })
+    );
+  }
+  menu.append(new MenuItem({ type: 'separator' }));
+  menu.append(
+    new MenuItem({
+      label: 'ツールバーをカスタマイズ...',
+      click: () => ctx?.tabManager.createTab('roopie://settings'),
+    })
+  );
+  menu.popup();
+}
+
+module.exports = { showSidePanelPositionMenu, showSidePanelRailMenu, showToolbarMenu };

@@ -17,6 +17,7 @@ const Tor = require('./tor');
 const Passwords = require('./passwords');
 const Store = require('./store');
 const windows = require('./windows');
+const { defaultToolbarItems, normalizeToolbarItems } = require('./toolbar-items');
 
 const PAGES_DIR = path.join(__dirname, '..', 'renderer', 'pages');
 const PRELOAD_DIR = path.join(__dirname, '..', 'preload');
@@ -31,6 +32,7 @@ const DEFAULT_SETTINGS = {
   tabBarPosition: 'top', // 'top' | 'left'
   sidePanelPosition: 'right', // 'left' | 'right'
   searchEngine: 'google', // 'google' | 'duckduckgo' | 'yahoo' | 'bing' | 'ecosia' | 'startpage'
+  toolbarItems: defaultToolbarItems(), // ツールバーのユーティリティ項目の表示/順序
 };
 const DEFAULT_THEME = { accent: '#6c8cff', background: 'auto', backgroundImage: '', customCss: '' };
 const THEME_BACKGROUNDS = ['auto', 'dawn', 'day', 'dusk', 'night', 'plain', 'image'];
@@ -622,6 +624,8 @@ browser.sendProfiles = () => {
 
 browser.sendSettings = () => {
   if (!browser.settings) return;
+  // 全ての利用側が正しい形の配列を受け取れるよう、配信前に正規化して保持する
+  browser.settings.data.toolbarItems = normalizeToolbarItems(browser.settings.data.toolbarItems);
   broadcast('ui:settings', browser.settings.data);
 };
 

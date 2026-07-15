@@ -794,6 +794,100 @@ downloadPathResetBtn.addEventListener('click', () => {
   renderDownloadPath('');
 });
 
+// ---- ツールバーのカスタマイズ(表示/非表示 + 並べ替え) ----
+const TOOLBAR_ITEM_LABELS = {
+  downloads: 'ダウンロード',
+  history: '履歴',
+  qr: 'QRコード',
+  zoom: 'ズーム',
+};
+const toolbarItemsList = document.getElementById('toolbar-items-list');
+let toolbarItemsState = [];
+let toolbarDragIndex = null;
+
+function saveToolbarItems(next) {
+  toolbarItemsState = next;
+  window.roopieInternal.setSetting('toolbarItems', next);
+  renderToolbarItems(next);
+}
+
+function clearToolbarMarkers() {
+  for (const el of toolbarItemsList.querySelectorAll('.drop-before, .drop-after')) {
+    el.classList.remove('drop-before', 'drop-after');
+  }
+}
+
+function renderToolbarItems(items) {
+  if (Array.isArray(items) && items.length) toolbarItemsState = items;
+  toolbarItemsList.textContent = '';
+  toolbarItemsState.forEach((item, index) => {
+    const row = document.createElement('div');
+    row.className = 'toolbar-item-row';
+    row.draggable = true;
+
+    const handle = document.createElement('span');
+    handle.className = 'drag-handle';
+    handle.textContent = '⠿';
+    handle.title = 'ドラッグで並べ替え';
+    row.appendChild(handle);
+
+    const label = document.createElement('span');
+    label.className = 'toolbar-item-label';
+    label.textContent = TOOLBAR_ITEM_LABELS[item.id] || item.id;
+    row.appendChild(label);
+
+    const sw = document.createElement('label');
+    sw.className = 'switch';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = item.visible !== false;
+    cb.addEventListener('change', () => {
+      saveToolbarItems(
+        toolbarItemsState.map((it) => (it.id === item.id ? { ...it, visible: cb.checked } : it))
+      );
+    });
+    const slider = document.createElement('span');
+    slider.className = 'slider';
+    sw.append(cb, slider);
+    row.appendChild(sw);
+
+    // ドラッグ並べ替え(タブバーの並べ替えと同じ手法)
+    row.addEventListener('dragstart', () => {
+      toolbarDragIndex = index;
+      row.classList.add('dragging');
+    });
+    row.addEventListener('dragend', () => {
+      toolbarDragIndex = null;
+      row.classList.remove('dragging');
+      clearToolbarMarkers();
+    });
+    row.addEventListener('dragover', (e) => {
+      if (toolbarDragIndex === null || toolbarDragIndex === index) return;
+      e.preventDefault();
+      clearToolbarMarkers();
+      const rect = row.getBoundingClientRect();
+      row.classList.add(e.clientY > rect.top + rect.height / 2 ? 'drop-after' : 'drop-before');
+    });
+    row.addEventListener('drop', (e) => {
+      if (toolbarDragIndex === null || toolbarDragIndex === index) return;
+      e.preventDefault();
+      const rect = row.getBoundingClientRect();
+      const after = e.clientY > rect.top + rect.height / 2;
+      let to = index + (after ? 1 : 0);
+      const from = toolbarDragIndex;
+      if (from < to) to -= 1;
+      const next = toolbarItemsState.slice();
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      toolbarDragIndex = null;
+      clearToolbarMarkers();
+      saveToolbarItems(next);
+    });
+
+    toolbarItemsList.appendChild(row);
+  });
+}
+
 // ---- 拡張機能 ----
 const extensionIdEl = document.getElementById('extension-id');
 const extensionInstallBtn = document.getElementById('extension-install-btn');
@@ -1232,6 +1326,7 @@ window.roopieInternal.onSettings((settings) => {
   adblockToggle.checked = settings.adblock !== false;
   savePasswordsToggle.checked = settings.savePasswords !== false;
   renderDownloadPath(settings.downloadPath);
+  renderToolbarItems(settings.toolbarItems);
 });
 
 // 別タブでログインして戻ってきたときに「ログイン中」表示を更新する
@@ -1257,6 +1352,7 @@ document.addEventListener('visibilitychange', () => {
   adblockToggle.checked = settings.adblock !== false;
   savePasswordsToggle.checked = settings.savePasswords !== false;
   renderDownloadPath(settings.downloadPath);
+  renderToolbarItems(settings.toolbarItems);
   if (gestureConfig) gestureState = gestureConfig;
   if (themeConfig) themeState = themeConfig;
   render();

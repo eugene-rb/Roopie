@@ -5,8 +5,9 @@ const browser = require('./browser');
 const GoogleAccounts = require('./google-accounts');
 const Passwords = require('./passwords');
 const { showTabMenu } = require('./tab-context-menu');
-const { showSidePanelPositionMenu, showSidePanelRailMenu } = require('./toolbar-context-menu');
+const { showSidePanelPositionMenu, showSidePanelRailMenu, showToolbarMenu } = require('./toolbar-context-menu');
 const { searchUrl } = require('./search-engines');
+const { normalizeToolbarItems } = require('./toolbar-items');
 
 // IPCは「送信元のウィンドウ」に対して処理する
 const ctxOf = (e) => windows.contextFor(e.sender);
@@ -210,6 +211,9 @@ function registerIpc() {
   ipcMain.on('sidepanel:open-section', (e, key) => panelOf(e)?.openSection(key));
   ipcMain.on('sidepanel:context-menu', () => showSidePanelPositionMenu());
   ipcMain.on('sidepanel:rail-context-menu', (e) => showSidePanelRailMenu(panelOf(e)));
+
+  // ツールバーのユーティリティ群を右クリック → 表示/非表示の切り替えメニュー
+  ipcMain.on('toolbar:context-menu', (e) => showToolbarMenu(ctxOf(e)));
   ipcMain.handle('sidepanel:state', (e) => panelOf(e)?.state() ?? null);
   ipcMain.on('sidepanel:add-web', (e, url) => panelOf(e)?.addWeb(url));
   ipcMain.on('sidepanel:remove-web', (e, id) => panelOf(e)?.removeWeb(id));
@@ -357,7 +361,7 @@ function registerIpc() {
   ipcMain.on('settings:set', (_e, key, value) => {
     const settings = browser.settings;
     if (!settings || !(key in browser.DEFAULT_SETTINGS)) return;
-    settings.data[key] = value;
+    settings.data[key] = key === 'toolbarItems' ? normalizeToolbarItems(value) : value;
     settings.save();
     if (key === 'adblock') browser.applyAdblock();
     if (key === 'mediaDocked') browser.applyMediaDocked();

@@ -1501,6 +1501,49 @@ body {
   color: var(--text-dim);
 }
 
+/* ツールバーのカスタマイズ(表示/非表示 + ドラッグ並べ替え) */
+.toolbar-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.toolbar-item-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--card-hover);
+  border: 1px solid var(--border);
+}
+
+.toolbar-item-row.dragging {
+  opacity: 0.5;
+}
+
+.toolbar-item-row .drag-handle {
+  cursor: grab;
+  color: var(--text-dim);
+  font-size: 15px;
+  line-height: 1;
+  user-select: none;
+}
+
+.toolbar-item-label {
+  flex: 1;
+  font-size: 13px;
+}
+
+.toolbar-item-row.drop-before {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.toolbar-item-row.drop-after {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
 .switch {
   position: relative;
   width: 38px;

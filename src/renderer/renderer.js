@@ -360,7 +360,46 @@ window.roopie.onSettings((settings) => {
   applyTabBarLayout();
   sidePanelPosition = settings.sidePanelPosition === 'left' ? 'left' : 'right';
   applySidePanelButtonPosition();
+  applyToolbarItems(settings.toolbarItems);
   reportChromeHeight();
+});
+
+// ---- ツールバーのユーティリティ項目(表示/非表示・並び替え) ----
+// メイン側で正規化済みの配列 [{id, visible}] を受け取り、DOMへ反映する
+const TOOLBAR_EL_BY_ID = {
+  downloads: 'downloads-btn',
+  history: 'history-btn',
+  qr: 'qr-btn',
+  zoom: 'zoom-controls',
+};
+
+function applyToolbarItems(items) {
+  if (!Array.isArray(items) || !items.length) return;
+  const utility = $('toolbar-utility');
+  // 表示/非表示。history-btnはシークレット時に .hidden(!important)で隠れるため、
+  // 表示側は display='' に戻して .hidden 側に判断を委ねる
+  for (const { id, visible } of items) {
+    const el = document.getElementById(TOOLBAR_EL_BY_ID[id]);
+    if (el) el.style.display = visible ? '' : 'none';
+  }
+  // 並び替え: configurable な要素だけを保存順に入れ替える。
+  // サイドパネルボタン・分割コントロールなど非対象の要素は現在の位置を保つ
+  const queue = items
+    .map((it) => document.getElementById(TOOLBAR_EL_BY_ID[it.id]))
+    .filter((el) => el && el.parentElement === utility);
+  const configurable = new Set(queue);
+  const newOrder = [];
+  let q = 0;
+  for (const child of utility.children) {
+    newOrder.push(configurable.has(child) ? queue[q++] : child);
+  }
+  for (const el of newOrder) utility.appendChild(el);
+}
+
+// ユーティリティ群を右クリック → 表示/非表示の切り替えメニュー(ネイティブ)
+$('toolbar-utility').addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  window.roopie.toolbarContextMenu();
 });
 
 // 縦タブ時は上部ストリップ(#drag-strip)が空きスペースになるため、

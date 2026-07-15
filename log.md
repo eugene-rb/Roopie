@@ -515,4 +515,18 @@ Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP
 - **検索エンジン選択機能**: 設定画面の「ブラウザ設定」にGoogle/DuckDuckGo/Yahoo!検索/Bing/Ecosia/Startpageから選べるセレクタを追加。`src/main/search-engines.js`に検索URL生成を一元化し、アドレスバー入力・タブバーへのドラッグ検索・右クリックメニューの選択テキスト検索の3箇所を設定に追従させた(画像のGoogle画像検索は対象外のまま)。プロファイル単位(既存の`settings`共有トグルに含まれる)
 - 検証: CDPで実施。DuckDuckGoに切り替えてアドレスバー入力・ドラッグ検索それぞれが実際に`... at DuckDuckGo`のタイトルで開くことを確認、設定画面のセレクタの初期値・保存を確認
 
-(次にやることは冒頭の「今後の計画」を参照。8件のうち6・7(ツールバーの右クリック設定、右クリックメニューへのショートカット割当)と、Webパネルアイコンの右クリック管理(名前/アイコン/URL変更・削除)が残作業。マウスジェスチャー軌跡は実マウスでの最終確認待ち)
+### 2026-07-16: ツールバーのカスタマイズ(表示/非表示 + 並べ替え)(要望6)
+
+ユーザー確認済みの要望「ツールバー等の各UIを右クリックして表示/非表示のチェックボックス。設定画面から詳細(表示可否・並び替え)を設定できるように」を実装。
+
+- **対象項目**: ツールバーのユーティリティ群のうち **ダウンロード / 履歴 / QRコード / ズーム** の4つを表示切替・並べ替え可能にした。戻る/進む/再読み込み/アドレスバー/拡張機能/設定は固定(Chrome/Edgeと同様)。サイドパネルボタン(状態で自動表示)・画面分割コントロール(分割中のみ)は対象外
+- **設定の持ち方**: `settings.toolbarItems = [{id, visible}]`(順序付き)。既存の`settings`ストア(共有トグル「ブラウザ設定」に含まれる)にプロファイル単位で保存
+- **正規化を1箇所に集約**(`src/main/toolbar-items.js`新規): `normalizeToolbarItems()`が (a)不正入力→既定順 (b)未知ID除去・重複除去 (c)**欠けている既定IDを既定位置に補完**。将来項目を増やしても既存プロファイルに自動で現れる。全利用側(renderer適用/ネイティブメニュー/設定画面)がメイン正規化済みの値を受け取るよう、`browser.sendSettings()`が配信前に正規化して保持する
+- **右クリックメニュー**: ツールバーのユーティリティ群を右クリック→ネイティブのチェックボックスメニューで各項目の表示/非表示を切替(`toolbar-context-menu.js`の`showToolbarMenu`)。「ツールバーをカスタマイズ...」で設定画面を開く
+- **設定画面に「ツールバー」セクション**(目次リンク+スコープバッジ付き): 各項目のチェックボックス+ドラッグ並べ替え(タブバーの並べ替えと同じ`drop-before/after`方式)
+- **表示切替の実装メモ**: `history-btn`はシークレット時に`.hidden`(!important)で隠れるため、非表示は`style.display='none'`、表示は`style.display=''`に戻して`.hidden`側へ判断を委ねる(CSSクラスは新設せずインラインdisplayで対処)。並べ替えは`#toolbar-utility`内でconfigurable要素だけを保存順に入れ替え、非対象要素(分割コントロール等)の位置は保つ
+- 変更ファイル: `toolbar-items.js`(新規)、`browser.js`(DEFAULT_SETTINGS+sendSettings正規化)、`ipc.js`(settings:set正規化・`toolbar:context-menu`)、`toolbar-context-menu.js`(`showToolbarMenu`)、`preload.js`(`toolbarContextMenu`)、`renderer.js`(`applyToolbarItems`+右クリック)、`settings.{html,js}`(ツールバーセクション)、`tailwind.css`(`.toolbar-item-row`等→`build:css`済み)
+- 検証: 正規化ロジックを単体で7ケース確認。CDP(**再起動して確認**。メインUIは`Page.reload()`で状態を再取得しないため)で、setSetting経由の並べ替え(split-controlsの位置保持を含む)+表示切替、設定画面のリスト描画(4項目・目次・セクション)、設定画面チェックボックス→メインUIへの反映(往復)を確認。`showToolbarMenu`はelectronスタブで例外なくメニュー構築されることを確認(ネイティブメニューのクリック自体はCDP不可のため既存方針を踏襲)
+  - **ハマりどころ**: 前セッションの古いElectronインスタンスが9222を占有しており、最初その古いUI(applyToolbarItems未定義)に接続してしまった。`taskkill /F /IM electron.exe`で一掃してから再起動して解消
+
+(次にやることは冒頭の「今後の計画」を参照。8件のうち7(右クリックメニューへのショートカット割当)と、Webパネルアイコンの右クリック管理(名前/アイコン/URL変更・削除)が残作業。要望6は完了。マウスジェスチャー軌跡は実マウスでの最終確認待ち)

@@ -447,6 +447,7 @@ contextBridge.exposeInMainWorld('roopie', {
   toggleBookmarkBar: () => ipcRenderer.send('ui:toggle-bookmark-bar'),
   toggleSidePanel: () => ipcRenderer.send('sidepanel:toggle'),
   sidePanelContextMenu: () => ipcRenderer.send('sidepanel:context-menu'),
+  toolbarContextMenu: () => ipcRenderer.send('toolbar:context-menu'),
 
   // ページ内検索
   find: (text, options) => ipcRenderer.send('find:start', text, options),
