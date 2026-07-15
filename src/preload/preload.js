@@ -460,6 +460,7 @@ contextBridge.exposeInMainWorld('roopie', {
   // プロファイル
   switchProfile: (id) => ipcRenderer.send('profiles:switch', id),
   openProfileMenu: (anchor) => ipcRenderer.send('menu:open-profiles', anchor),
+  openQr: (payload) => ipcRenderer.send('menu:open-qr', payload),
 
   // メインプロセスからの通知
   onTabsState: (cb) => ipcRenderer.on('tabs:state', (_e, state) => cb(state)),

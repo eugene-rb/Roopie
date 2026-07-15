@@ -1,3 +1,4 @@
+const fs = require('fs');
 const { ipcMain, dialog, shell } = require('electron');
 const windows = require('./windows');
 const browser = require('./browser');
@@ -61,6 +62,29 @@ function registerIpc() {
     });
   });
   ipcMain.on('menu:close', (e) => tabsOf(e)?.showOverlay(false));
+
+  // QRコードのポップアップもオーバーレイに描画する(タブより手前に出すため)
+  ipcMain.on('menu:open-qr', (e, payload) => {
+    const tabManager = tabsOf(e);
+    if (!tabManager?.overlay) return;
+    tabManager.showOverlay(true);
+    tabManager.overlay.webContents.send('qr:show', payload ?? {});
+  });
+
+  // QR画像(dataURL)をPNGとして保存する
+  ipcMain.handle('qr:save', async (e, dataUrl) => {
+    const window = ctxOf(e)?.window;
+    if (!window || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) return false;
+    const { canceled, filePath } = await dialog.showSaveDialog(window, {
+      title: 'QRコードを保存',
+      defaultPath: 'qrcode.png',
+      filters: [{ name: 'PNG画像', extensions: ['png'] }],
+    });
+    if (canceled || !filePath) return false;
+    const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+    await fs.promises.writeFile(filePath, Buffer.from(base64, 'base64'));
+    return true;
+  });
 
   // ---- ページ内検索 ----
   ipcMain.on('find:start', (e, text, options) => tabsOf(e)?.find(text, options));

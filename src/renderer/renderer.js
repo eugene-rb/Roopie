@@ -308,6 +308,18 @@ workspaceBtn.addEventListener('click', () => {
 
 $('settings-btn').addEventListener('click', () => window.roopie.newTab('roopie://settings'));
 
+// QRコード: 現在のページURLとボタン位置をオーバーレイViewへ渡す
+$('qr-btn').addEventListener('click', () => {
+  const rect = $('qr-btn').getBoundingClientRect();
+  window.roopie.openQr({
+    url: activeTab()?.url ?? '',
+    anchor: {
+      right: Math.round(rect.right),
+      bottom: Math.round(rect.bottom - chromeEl.offsetHeight),
+    },
+  });
+});
+
 // ---- ダウンロード ----
 window.roopie.onDownloadsState((state) => {
   downloadsBtn.classList.toggle('active', state.hasActive);

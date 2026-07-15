@@ -22,6 +22,7 @@ Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP
 | UIをEdge風に刷新(ツールバー/ワークスペースピル/設定目次/サイドパネル) | ✅ 完了 |
 | プロファイル/スタート画面/Googleアカウント連携の拡充 | ✅ 完了 |
 | Tor接続のプロファイル別ON/OFF | ✅ 完了 |
+| 右クリックメニューの充実 / ページQRコード生成 | ✅ 完了 |
 
 ### 動く機能(一覧)
 
@@ -425,6 +426,20 @@ Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP
   - `context-menu.js`は`browser.js → tab-manager.js → context-menu.js`の循環依存の下流なので、`browser`(createWindow用)はクリック時に遅延require(モジュールロード時に空の`{}`を掴む問題を回避)。`tab-context-menu.js`はipc.js経由でbrowser完全ロード後に読まれるためトップでrequireして問題ない
   - スペルチェックはElectronの既定(en-US)で動く。対象言語外の誤字は候補が出ないだけで害はない
 - 検証(CDP): `Input.dispatchMouseEvent`で実際に右クリックを発火させ、リンク/画像/動画/入力欄(誤字入り)/選択/空ページ/タブの全ブランチでメニュー構築時に例外が出ないことを確認。`view-source:`と切り離し(createWindow)のハンドラも個別に動作確認済み(ネイティブメニュー自体はCDPからクリックできないため、構築エラーの有無で検証)
+
+### 2026-07-15: ページのQRコード生成
+
+ユーザー要望「ツールバーに現在のページのQRコードを作成するボタン。ポップアップで内容編集・中央画像・ダウンロード」。
+
+- QRライブラリは `qrcode-generator`(MIT、依存なし単一ファイル)を導入し、`node_modules/qrcode-generator/dist/qrcode.js` を `src/renderer/pages/qrcode.js` にコピー(内部ページはroopie://でpages配下しか配信できないため、app.cssと同じく生成物をコミットする方針)
+- **ポップアップはオーバーレイViewに載せる**: タブはネイティブViewで上に重なるため、既存の「プロファイルメニュー用オーバーレイ(roopie://menu)」にQRポップアップのDOMを同居させ、show/hide・外側クリックで閉じる・アンカー位置決めの仕組みを流用(プロファイルメニューとQRは排他表示)
+- ツールバーの`#toolbar-utility`にQRボタンを追加。クリックで`window.roopie.openQr({url, anchor})`(現在のアクティブタブURL+ボタン位置)→ `menu:open-qr` → オーバーレイに`qr:show`
+- ポップアップ機能(`menu.js`):
+  - **内容編集**: 現在のURLをtextareaに入れて表示。打つたびに150msデバウンスで再生成
+  - **QR描画**: `qrcode(0, level)`でモジュール行列を作りcanvasへ黒/白で描画(テーマに関係なく白地黒で常にスキャン可能に)。誤り訂正はロゴが載っても読めるようH(高)を優先し、URLが長くて容量オーバーなら Q→M→L と自動で下げる
+  - **中央に画像**: 画像をアップロードするとcanvas中央に白いパディングボックス+ロゴを合成(サイズはQRの約22%に抑え、H訂正の範囲で読み取り可能に)。削除ボタンで解除
+  - **ダウンロード**: `canvas.toDataURL('image/png')` を `qr:save` へ渡し、`dialog.showSaveDialog`+`fs.writeFile`でPNG保存
+- 検証(CDP): QRボタン→ポップアップ表示(現在URL入り)、canvasの全1089モジュールがqrcodeの行列と完全一致(mismatch:0)、内容編集で再生成(モジュール数が33→49に変化)、中央画像の合成(白ボックス+ロゴ)、`toDataURL`が有効なPNG(qr:saveと同一のwriteFile処理で7486バイトの正しいPNGヘッダを確認)、外側クリックで閉じる・プロファイルメニューとの排他、を確認。生成PNGを実際に目視して正常なQR(検出パターン3つ)であることも確認。**保存ダイアログのネイティブ操作だけはCDPから自動化できないため未自動テスト**(Electron標準API+検証済みのwriteFile処理なので低リスク)
 
 ### 開発の進め方(ツール)
 

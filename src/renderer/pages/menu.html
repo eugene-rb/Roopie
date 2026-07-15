@@ -35,9 +35,26 @@
         <span class="name">プロファイルと設定</span>
       </button>
     </div>
+
+    <!-- QRコードのポップアップ -->
+    <div id="qr-popup" class="hidden">
+      <div class="qr-title">QRコード</div>
+      <div class="qr-canvas-wrap">
+        <canvas id="qr-canvas"></canvas>
+      </div>
+      <label class="qr-field-label">内容(編集できます)</label>
+      <textarea id="qr-text" class="qr-text" rows="2" spellcheck="false"></textarea>
+      <div class="qr-actions">
+        <button id="qr-logo-btn" class="btn">中央に画像</button>
+        <button id="qr-logo-clear" class="btn hidden">画像を削除</button>
+        <button id="qr-download" class="btn primary">ダウンロード</button>
+      </div>
+      <input id="qr-logo-input" type="file" accept="image/*" class="hidden" />
+    </div>
   </div>
 
   <script src="theme.js"></script>
+  <script src="qrcode.js"></script>
   <script src="menu.js"></script>
 </body>
 </html>

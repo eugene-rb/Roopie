@@ -115,6 +115,10 @@ if (location.protocol === 'roopie:') {
     newWindow: () => ipcRenderer.send('window:new'),
     newIncognitoWindow: () => ipcRenderer.send('window:new-incognito'),
 
+    // QRコードのポップアップ(オーバーレイ)用
+    onQrShow: (cb) => ipcRenderer.on('qr:show', (_e, payload) => cb(payload)),
+    saveQr: (dataUrl) => ipcRenderer.invoke('qr:save', dataUrl),
+
     onDownloadsState: (cb) =>
       ipcRenderer.on('downloads:state', (_e, state) => cb(state)),
     onBookmarksState: (cb) =>

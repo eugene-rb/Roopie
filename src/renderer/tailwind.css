@@ -2231,6 +2231,76 @@ body {
   }
 }
 
+/* QRコードのポップアップ(オーバーレイ上) */
+#qr-popup {
+  position: absolute;
+  width: 300px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--menu-bg);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  animation: pop 0.12s ease-out;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.qr-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.qr-canvas-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 10px;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+#qr-canvas {
+  width: 240px;
+  height: 240px;
+  image-rendering: pixelated;
+}
+
+.qr-field-label {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.qr-text {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
+  font: 12px/1.5 Consolas, "Cascadia Mono", monospace;
+  outline: none;
+  resize: vertical;
+  min-height: 42px;
+}
+
+.qr-text:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+.qr-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.qr-actions .btn {
+  flex: 1;
+  height: 32px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
 .menu-label {
   padding: 6px 10px 4px;
   font-size: 11px;
