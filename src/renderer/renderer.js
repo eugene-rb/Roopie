@@ -115,6 +115,8 @@ function attachTabDrag(tabEl, tab) {
 
   tabEl.addEventListener('dragover', (e) => {
     if (draggingId === null || draggingId === tab.id) return;
+    // タブ並べ替えのドラッグは、親(#tab-bar)のドラッグ検索ハンドラへ伝播させない
+    e.stopPropagation();
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     clearDropMarkers();
@@ -126,6 +128,9 @@ function attachTabDrag(tabEl, tab) {
 
   tabEl.addEventListener('drop', (e) => {
     if (draggingId === null || draggingId === tab.id) return;
+    // タブ並べ替えのドロップは、親(#tab-bar)のドラッグ検索ハンドラへ伝播させない
+    // (先に draggingId を null にするため、伝播すると検索ハンドラの draggingId ガードをすり抜ける)
+    e.stopPropagation();
     e.preventDefault();
     const rect = tabEl.getBoundingClientRect();
     const after = e.clientX > rect.left + rect.width / 2;
