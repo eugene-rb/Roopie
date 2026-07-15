@@ -6,20 +6,22 @@ const historySearchEl = $('history-search');
 const notesEl = $('notes');
 const webListEl = $('web-list');
 const webUrlEl = $('web-url');
-const webIconsEl = $('web-icons');
 const webPinListEl = $('web-pin-list');
+const railEl = $('rail');
 const nowPlayingTab = $('now-playing-tab');
 const nowPlayingBody = $('now-playing-body');
+const panelHeaderTitle = $('panel-header-title');
+const webReloadBtn = $('web-reload');
+const webOpenTabBtn = $('web-open-tab');
 
-let state = { open: false, webPanels: [], activeWebId: null, notes: '' };
-let section = 'bookmarks';
+let state = { open: true, webPanels: [], activeSection: null, activeWebId: null, notes: '' };
 
-// リサイズハンドルの近く・タブのtitle属性と揃えたラベル(Edge/Vivaldiのパネルヘッダー相当)
+// パネル見出し・タブのtitle属性と揃えたラベル(Edge/Vivaldiのパネルヘッダー相当)
 const SECTION_LABELS = {
   bookmarks: 'ブックマーク',
   history: '履歴',
   notes: 'メモ',
-  web: 'Webパネル',
+  web: 'Webパネルを追加・管理',
   'now-playing': '再生中',
 };
 
@@ -63,34 +65,18 @@ function emptyNote(text) {
   return el;
 }
 
-// ---- セクション切り替え ----
-function showSection(next) {
-  section = next;
-  for (const btn of document.querySelectorAll('.section-tab[data-section]')) {
-    btn.classList.toggle('active', btn.dataset.section === section);
-  }
-  for (const el of document.querySelectorAll('.section')) {
-    el.classList.toggle('active', el.id === `section-${section}`);
-  }
-  $('panel-header-title').textContent = SECTION_LABELS[section] ?? '';
-  if (section === 'history') refreshHistory();
-  if (section === 'bookmarks') refreshBookmarks();
-}
-
-// 開いているセクションのアイコンをもう一度クリックするとパネルごと収納する(Vivaldi同様)
+// ---- アイコンレール(常時表示)。クリックで開閉はメインプロセス側(SidePanel)が判断する ----
 for (const btn of document.querySelectorAll('.section-tab[data-section]')) {
-  btn.addEventListener('click', () => {
-    if (state.open && !state.activeWebId && btn.dataset.section === section) {
-      window.roopieInternal.toggleSidePanel();
-    } else {
-      showSection(btn.dataset.section);
-    }
-  });
+  btn.addEventListener('click', () => window.roopieInternal.openSidePanelSection(btn.dataset.section));
 }
 
-$('panel-close').addEventListener('click', () => window.roopieInternal.toggleSidePanel());
+// 何もないところを右クリック: 左右切替/アイコンの追加/非表示のメニュー
+railEl.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  window.roopieInternal.sidePanelRailContextMenu();
+});
 
-// ---- 幅のリサイズ(左端のハンドルをドラッグ。Edge/Vivaldiと同じ操作) ----
+// ---- 幅のリサイズ(境界のハンドルをドラッグ。Edge/Vivaldiと同じ操作) ----
 // パネル自身のViewはドラッグ中に再配置されるため、絶対座標ではなく直前からの
 // 相対移動量(movementX)を都度メインへ送る(フローティングプレイヤーのドラッグと同じ方式)
 const resizeHandle = $('resize-handle');
@@ -208,23 +194,13 @@ function renderWebList() {
   }
 }
 
-// ---- Webパネルモードのヘッダー ----
-$('web-back').addEventListener('click', () => window.roopieInternal.closeWebPanel());
-$('web-reload').addEventListener('click', () => window.roopieInternal.reloadWebPanel());
-$('web-open-tab').addEventListener('click', () => {
-  const active = state.webPanels.find((p) => p.id === state.activeWebId);
-  if (!active) return;
-  window.roopieInternal.openTab(active.url);
-});
-
-// アイコンレールへの直接ピン留め表示。クリックで即座にそのWebパネルを開く。
-// この一覧は web-mode(Webパネル表示中)では#homeごと隠れるため、表示中のものを
-// もう一度押す状況は起こらない(収納操作は表示中に見えている#web-icons側で行う)
+// アイコンレールへの直接ピン留め表示。クリックで即座にそのWebパネルを開く
+// (表示中のものをもう一度押すとメイン側の判断で折りたたまれ、activeWebIdがnullに戻って反映される)
 function renderPinnedWebPanels() {
   webPinListEl.textContent = '';
   for (const panel of state.webPanels) {
     const btn = document.createElement('button');
-    btn.className = 'web-icon';
+    btn.className = 'web-icon' + (panel.id === state.activeWebId ? ' active' : '');
     btn.title = panel.title || panel.url;
     btn.appendChild(faviconEl(panel.favicon, panel.title));
     btn.addEventListener('click', () => window.roopieInternal.openWebPanel(panel.id));
@@ -232,22 +208,12 @@ function renderPinnedWebPanels() {
   }
 }
 
-function renderWebHeader() {
-  webIconsEl.textContent = '';
-  for (const panel of state.webPanels) {
-    const active = panel.id === state.activeWebId;
-    const btn = document.createElement('button');
-    btn.className = 'web-icon' + (active ? ' active' : '');
-    btn.title = panel.title || panel.url;
-    btn.appendChild(faviconEl(panel.favicon, panel.title));
-    // 表示中のものをもう一度押すとパネルごと収納する(Vivaldi同様)
-    btn.addEventListener('click', () => {
-      if (active) window.roopieInternal.toggleSidePanel();
-      else window.roopieInternal.openWebPanel(panel.id);
-    });
-    webIconsEl.appendChild(btn);
-  }
-}
+$('web-reload').addEventListener('click', () => window.roopieInternal.reloadWebPanel());
+$('web-open-tab').addEventListener('click', () => {
+  const active = state.webPanels.find((p) => p.id === state.activeWebId);
+  if (!active) return;
+  window.roopieInternal.openTab(active.url);
+});
 
 // ---- 再生中 ----
 let mediaState = null;
@@ -256,7 +222,10 @@ let seekingNowPlaying = false;
 
 function renderNowPlaying() {
   nowPlayingTab.classList.toggle('hidden', !mediaState);
-  if (section === 'now-playing' && !mediaState) showSection('bookmarks');
+  // 再生が止まったのに「再生中」を表示中なら、折りたたんで空振りを解消する
+  if (state.activeSection === 'now-playing' && !mediaState) {
+    window.roopieInternal.openSidePanelSection('now-playing');
+  }
   // シークバーをドラッグ中に描画し直すと操作中の値が飛ぶため、いったん保留する
   if (seekingNowPlaying) return;
 
@@ -387,10 +356,26 @@ function applySidePanelSide(position) {
 }
 
 // ---- 状態の反映 ----
+// activeSection(組み込みセクション)/activeWebId(Webパネル)のどちらか一方だけが有効。
+// どちらも無ければレールのみ(折りたたみ)の状態
 function render() {
-  document.body.classList.toggle('web-mode', !!state.activeWebId);
+  const activeWeb = state.webPanels.find((p) => p.id === state.activeWebId);
+
+  for (const btn of document.querySelectorAll('.section-tab[data-section]')) {
+    btn.classList.toggle('active', !state.activeWebId && btn.dataset.section === state.activeSection);
+  }
+  for (const el of document.querySelectorAll('.section')) {
+    el.classList.toggle('active', !state.activeWebId && el.id === `section-${state.activeSection}`);
+  }
+
+  panelHeaderTitle.textContent = activeWeb ? activeWeb.title || activeWeb.url : SECTION_LABELS[state.activeSection] ?? '';
+  webReloadBtn.classList.toggle('hidden', !activeWeb);
+  webOpenTabBtn.classList.toggle('hidden', !activeWeb);
+
+  if (state.activeSection === 'history') refreshHistory();
+  if (state.activeSection === 'bookmarks') refreshBookmarks();
+
   renderWebList();
-  renderWebHeader();
   renderPinnedWebPanels();
   // 入力中のメモは上書きしない
   if (document.activeElement !== notesEl) notesEl.value = state.notes;
@@ -409,7 +394,6 @@ window.roopieInternal.onSidePanelState((next) => {
   if (next) state = next;
   mediaSettings.mediaDocked = settings.mediaDocked === true;
   applySidePanelSide(settings.sidePanelPosition);
-  showSection('bookmarks');
   render();
   refreshBookmarks();
 })();

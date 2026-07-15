@@ -414,12 +414,16 @@ body {
 
 .chrome-body.vertical-tabs #drag-strip {
   display: flex;
+  align-items: center;
+  gap: 4px;
   height: 40px;
+  padding: 5px 8px;
   flex-shrink: 0;
   background: var(--bg);
   -webkit-app-region: drag;
   /* 右上のウィンドウ操作ボタン(OSオーバーレイ)と重ならないように空ける */
   padding-right: calc(100vw - env(titlebar-area-width, 100vw) + 8px);
+  box-sizing: border-box;
 }
 
 .chrome-body.vertical-tabs #tab-bar {
@@ -433,13 +437,6 @@ body {
   align-items: stretch;
   padding: 8px 6px;
   -webkit-app-region: no-drag;
-}
-
-.chrome-body.vertical-tabs #tab-bar-position-btn,
-.chrome-body.vertical-tabs #workspace-btn {
-  margin-right: 0;
-  margin-bottom: 4px;
-  align-self: flex-start;
 }
 
 .chrome-body.vertical-tabs #tabs {
@@ -1769,13 +1766,23 @@ body {
 }
 
 /* セクションのヘッダー(Edge/Vivaldiのパネルタイトル相当) */
+/* 高さはside-panel.jsのPANEL_HEADER_HEIGHTと一致させる(Webパネル表示中のwebViewの位置計算に使う) */
 #panel-header {
+  display: flex;
+  align-items: center;
   flex-shrink: 0;
-  padding: 10px 12px;
+  height: 40px;
+  padding: 0 6px 0 12px;
+  box-sizing: border-box;
   border-bottom: 1px solid var(--border);
 }
 
 #panel-header-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-dim);
@@ -1991,24 +1998,6 @@ body {
   font-size: 12px;
 }
 
-/* Webパネルモードのヘッダー */
-#web-header {
-  display: none;
-  align-items: center;
-  gap: 4px;
-  height: 44px;
-  padding: 0 8px;
-  border-bottom: 1px solid var(--border);
-}
-
-.panel-body.web-mode #home {
-  display: none;
-}
-
-.panel-body.web-mode #web-header {
-  display: flex;
-}
-
 .hbtn {
   display: flex;
   align-items: center;
@@ -2027,14 +2016,6 @@ body {
 .hbtn:hover {
   background: var(--card-hover);
   color: var(--text);
-}
-
-#web-icons {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  overflow-x: auto;
-  min-width: 0;
 }
 
 .web-icon {

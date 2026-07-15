@@ -75,6 +75,9 @@ if (location.protocol === 'roopie:') {
     // サイドパネル
     getSidePanel: () => ipcRenderer.invoke('sidepanel:state'),
     toggleSidePanel: () => ipcRenderer.send('sidepanel:toggle'),
+    hideSidePanel: () => ipcRenderer.send('sidepanel:hide'),
+    openSidePanelSection: (key) => ipcRenderer.send('sidepanel:open-section', key),
+    sidePanelRailContextMenu: () => ipcRenderer.send('sidepanel:rail-context-menu'),
     addWebPanel: (url) => ipcRenderer.send('sidepanel:add-web', url),
     removeWebPanel: (id) => ipcRenderer.send('sidepanel:remove-web', id),
     openWebPanel: (id) => ipcRenderer.send('sidepanel:open-web', id),

@@ -7,18 +7,19 @@ const PANEL_URL = 'roopie://sidepanel';
 const DEFAULT_WIDTH = 360;
 const MIN_WIDTH = 280;
 const MAX_WIDTH = 640;
-const WEB_HEADER_HEIGHT = 44; // Webパネル表示中に上部へ残すヘッダーの高さ
-const RESIZE_HANDLE_WIDTH = 6; // 左端のリサイズハンドル分(CSSの#resize-handleと合わせる)
+const RAIL_WIDTH = 44; // アイコンレールの幅(CSSの.section-tabsと合わせる。常時表示)
+const PANEL_HEADER_HEIGHT = 40; // セクション見出しの高さ(CSSの#panel-headerと合わせる)
+const RESIZE_HANDLE_WIDTH = 6; // リサイズハンドル分(CSSの#resize-handleと合わせる)
 
 const clampWidth = (w) => Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, Math.round(w)));
 
 const INTERNAL_PRELOAD = path.join(__dirname, '..', 'preload', 'internal-preload.js');
 
 /**
- * ページ右側のサイドパネル。
- * - panelView: パネルUI(roopie://sidepanel、内部ページ)
- * - webView:   Webパネル(登録したサイトを常駐表示する通常のWebコンテンツ)
- * Webパネル表示中は panelView をヘッダー分だけ残して縮め、下に webView を置く。
+ * ページ右(または左)のサイドパネル。Vivaldi風に、アイコンレールは常時表示。
+ * - panelView: パネルUI(roopie://sidepanel、内部ページ)。レール+セクション見出し+コンテンツを描画
+ * - webView:   Webパネル(登録したサイトを常駐表示する通常のWebコンテンツ)。アクティブなときだけpanelViewの上に重ねる
+ * 幅は3段階: 非表示(0) / レールのみ(RAIL_WIDTH) / 展開(保存された幅)
  */
 class SidePanel {
   constructor(window, { session, store, tabManager, onState }) {
@@ -27,7 +28,8 @@ class SidePanel {
     this.store = store;
     this.tabManager = tabManager;
     this.onState = onState; // 状態変更をUI/内部ページへ配信するコールバック
-    this.open = false;
+    this.open = true; // レール自体は既定で常時表示
+    this.activeSection = null; // 展開中の組み込みセクション('bookmarks'等)。nullならレールのみ
     this.activeWebId = null;
     this.panelView = null;
     this.webView = null;
@@ -49,10 +51,15 @@ class SidePanel {
     return {
       open: this.open,
       webPanels: this.webPanels,
+      activeSection: this.activeSection,
       activeWebId: this.activeWebId,
       notes: this.store.data.notes,
       width: this.store.data.width,
     };
+  }
+
+  hasExpandedPane() {
+    return !!(this.activeSection || this.activeWebId);
   }
 
   notify() {
@@ -65,8 +72,13 @@ class SidePanel {
     if (wc && !wc.isDestroyed()) wc.send(channel, payload);
   }
 
+  // サイドバー全体(レール込み)の表示/非表示。Ctrl+Shift+S・非表示中だけツールバーに出るボタン用
   toggle() {
     this.setOpen(!this.open);
+  }
+
+  hide() {
+    this.setOpen(false);
   }
 
   setOpen(open) {
@@ -77,9 +89,10 @@ class SidePanel {
     this.notify();
   }
 
-  // 表示中のパネル幅。狭いウィンドウではページ側を最低半分残す
+  // 表示中のパネル幅。3段階: 非表示(0) / レールのみ(RAIL_WIDTH) / 展開(保存幅、狭いウィンドウではページ側を最低半分残す)
   widthFor(totalWidth) {
     if (!this.open) return 0;
+    if (!this.hasExpandedPane()) return RAIL_WIDTH;
     return Math.min(this.store.data.width, Math.floor(totalWidth / 2));
   }
 
@@ -102,23 +115,25 @@ class SidePanel {
       this.webView?.setVisible(false);
       return;
     }
+    this.ensurePanelView();
 
-    // パネルUIは常に領域全体に敷く。Webパネル表示中はその上にWebコンテンツを重ねる。
+    // パネルUIは常に領域全体に敷く(レールは常時表示のため)。Webパネル表示中はその上にWebコンテンツを重ねる。
     // (こうするとWebコンテンツの角丸から透けるのが「額縁」ではなくパネルの背景色になる)
     this.panelView.setVisible(true);
     this.panelView.setBounds(bounds);
     this.panelView.setBorderRadius(radius);
 
     if (this.activeWebId && this.webView) {
-      // リサイズハンドル分の帯を残す(Webパネル表示中も幅を変えられるように)。
-      // ハンドルは常にページ側との境界(右ドックなら左端、左ドックなら右端)にある
-      const handleOnLeft = this.tabManager.sidePanelSide !== 'left';
+      // レール(常に外側の縁)とリサイズハンドル(常にページ側との境界)の分を差し引く
+      const railOnLeft = this.tabManager.sidePanelSide === 'left';
+      const leftInset = railOnLeft ? RAIL_WIDTH : RESIZE_HANDLE_WIDTH;
+      const rightInset = railOnLeft ? RESIZE_HANDLE_WIDTH : RAIL_WIDTH;
       this.webView.setVisible(true);
       this.webView.setBounds({
-        x: bounds.x + (handleOnLeft ? RESIZE_HANDLE_WIDTH : 0),
-        y: bounds.y + WEB_HEADER_HEIGHT,
-        width: Math.max(0, bounds.width - RESIZE_HANDLE_WIDTH),
-        height: Math.max(0, bounds.height - WEB_HEADER_HEIGHT),
+        x: bounds.x + leftInset,
+        y: bounds.y + PANEL_HEADER_HEIGHT,
+        width: Math.max(0, bounds.width - leftInset - rightInset),
+        height: Math.max(0, bounds.height - PANEL_HEADER_HEIGHT),
       });
       this.webView.setBorderRadius(radius);
     } else {
@@ -140,6 +155,20 @@ class SidePanel {
     this.window.contentView.addChildView(this.panelView);
     this.panelView.webContents.loadURL(PANEL_URL);
     this.tabManager.raiseOverlay();
+  }
+
+  // ---- 組み込みセクション(ブックマーク/履歴/メモ/Webパネル管理/再生中) ----
+  // 同じセクションをもう一度選ぶとレールのみに折りたたむ(Vivaldi同様)
+  openSection(key) {
+    if (this.activeSection === key && !this.activeWebId) {
+      this.activeSection = null;
+    } else {
+      this.activeSection = key;
+      this.activeWebId = null;
+      this.destroyWebView();
+    }
+    this.tabManager.layout();
+    this.notify();
   }
 
   // ---- Webパネル ----
@@ -165,9 +194,15 @@ class SidePanel {
     }
   }
 
+  // 同じWebパネルをもう一度選ぶとレールのみに折りたたむ(Vivaldi同様)
   openWeb(id) {
+    if (this.activeWebId === id) {
+      this.closeWeb();
+      return;
+    }
     const entry = this.webPanels.find((p) => p.id === id);
     if (!entry) return;
+    this.activeSection = null;
     this.activeWebId = id;
     this.ensureWebView();
     this.webView.webContents.loadURL(entry.url);
@@ -257,6 +292,7 @@ class SidePanel {
   switchSession(session) {
     this.session = session;
     const wasOpen = this.open;
+    this.activeSection = null;
     this.activeWebId = null;
     this.destroyWebView();
     this.destroyPanelView();

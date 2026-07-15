@@ -1,4 +1,5 @@
 const { Menu, MenuItem, clipboard, shell } = require('electron');
+const windows = require('./windows');
 
 const SEARCH_URL = 'https://www.google.com/search?q=';
 const IMAGE_SEARCH_URL = 'https://lens.google.com/uploadbyurl?url=';
@@ -35,6 +36,10 @@ function attachContextMenu(webContents, tabManager) {
       }
       add({ label: 'リンクのアドレスをコピー', click: () => clipboard.writeText(params.linkURL) });
       add({ label: 'リンク先を保存', click: () => webContents.downloadURL(params.linkURL) });
+      add({
+        label: 'サイドパネルで開く',
+        click: () => windows.contextFor(webContents)?.sidePanel?.addWeb(params.linkURL),
+      });
       separator();
     }
 
@@ -150,6 +155,10 @@ function attachContextMenu(webContents, tabManager) {
       add({
         label: isBookmarked ? 'ブックマークを解除' : 'このページをブックマーク',
         click: () => tabManager.bookmarks.toggle(url, webContents.getTitle() || url, ownTab?.favicon ?? null),
+      });
+      add({
+        label: 'サイドパネルで開く',
+        click: () => windows.contextFor(webContents)?.sidePanel?.addWeb(url),
       });
       add({ label: '印刷', click: () => webContents.print() });
       add({ label: 'ページのソースを表示', click: () => tabManager.createTab(`view-source:${url}`) });
