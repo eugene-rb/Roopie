@@ -74,6 +74,33 @@
     </div>
   </div>
 
+  <!-- Webパネルの編集(名前/URL/アイコン)。右クリックメニューから開く -->
+  <div id="web-edit" class="modal-backdrop hidden">
+    <div class="modal">
+      <div class="modal-title" id="web-edit-title"></div>
+
+      <div id="web-edit-text-mode">
+        <input id="web-edit-input" class="panel-input" type="text" spellcheck="false" autocomplete="off" />
+      </div>
+
+      <div id="web-edit-icon-mode" class="hidden">
+        <div id="web-edit-emoji" class="emoji-grid"></div>
+        <input id="web-edit-emoji-input" class="panel-input" type="text" placeholder="絵文字を直接入力" />
+        <div class="modal-btn-row">
+          <button id="web-edit-upload" class="btn">画像を選択</button>
+          <button id="web-edit-reset-icon" class="btn">faviconに戻す</button>
+        </div>
+      </div>
+
+      <div id="web-edit-error" class="modal-error hidden"></div>
+
+      <div class="modal-actions">
+        <button id="web-edit-cancel" class="btn">キャンセル</button>
+        <button id="web-edit-apply" class="btn primary">適用</button>
+      </div>
+    </div>
+  </div>
+
   <script src="theme.js"></script>
   <script src="sidepanel.js"></script>
 </body>

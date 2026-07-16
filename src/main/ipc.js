@@ -5,7 +5,12 @@ const browser = require('./browser');
 const GoogleAccounts = require('./google-accounts');
 const Passwords = require('./passwords');
 const { showTabMenu } = require('./tab-context-menu');
-const { showSidePanelPositionMenu, showSidePanelRailMenu, showToolbarMenu } = require('./toolbar-context-menu');
+const {
+  showSidePanelPositionMenu,
+  showSidePanelRailMenu,
+  showToolbarMenu,
+  showWebPanelMenu,
+} = require('./toolbar-context-menu');
 const { searchUrl } = require('./search-engines');
 const { normalizeToolbarItems } = require('./toolbar-items');
 
@@ -217,6 +222,8 @@ function registerIpc() {
   ipcMain.handle('sidepanel:state', (e) => panelOf(e)?.state() ?? null);
   ipcMain.on('sidepanel:add-web', (e, url) => panelOf(e)?.addWeb(url));
   ipcMain.on('sidepanel:remove-web', (e, id) => panelOf(e)?.removeWeb(id));
+  ipcMain.on('sidepanel:web-context-menu', (e, id) => showWebPanelMenu(panelOf(e), id));
+  ipcMain.on('sidepanel:set-web', (e, id, patch) => panelOf(e)?.setWebPanel(id, patch));
   ipcMain.on('sidepanel:open-web', (e, id) => panelOf(e)?.openWeb(id));
   ipcMain.on('sidepanel:close-web', (e) => panelOf(e)?.closeWeb());
   ipcMain.on('sidepanel:reload-web', (e) => panelOf(e)?.reloadWeb());

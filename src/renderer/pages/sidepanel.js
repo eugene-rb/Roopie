@@ -65,6 +65,23 @@ function emptyNote(text) {
   return el;
 }
 
+// Webパネルのアイコン。カスタムアイコン(絵文字/画像)があればそれ、なければfavicon
+function webIconEl(panel) {
+  const icon = panel.icon;
+  if (icon?.type === 'emoji' && icon.value) {
+    const span = document.createElement('span');
+    span.className = 'letter emoji';
+    span.textContent = icon.value;
+    return span;
+  }
+  if (icon?.type === 'image' && icon.value) {
+    const img = document.createElement('img');
+    img.src = icon.value;
+    return img;
+  }
+  return faviconEl(panel.favicon, panel.title);
+}
+
 // ---- アイコンレール(常時表示)。クリックで開閉はメインプロセス側(SidePanel)が判断する ----
 for (const btn of document.querySelectorAll('.section-tab[data-section]')) {
   btn.addEventListener('click', () => window.roopieInternal.openSidePanelSection(btn.dataset.section));
@@ -169,7 +186,7 @@ function renderWebList() {
     const item = document.createElement('div');
     item.className = 'panel-item';
     item.title = panel.url;
-    item.appendChild(faviconEl(panel.favicon, panel.title));
+    item.appendChild(webIconEl(panel));
 
     const label = document.createElement('span');
     label.className = 'label';
@@ -190,6 +207,11 @@ function renderWebList() {
     item.appendChild(removeBtn);
 
     item.addEventListener('click', () => window.roopieInternal.openWebPanel(panel.id));
+    // 右クリックで名前/アイコン/URLの変更・削除
+    item.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      window.roopieInternal.webPanelContextMenu(panel.id);
+    });
     webListEl.appendChild(item);
   }
 }
@@ -202,8 +224,13 @@ function renderPinnedWebPanels() {
     const btn = document.createElement('button');
     btn.className = 'web-icon' + (panel.id === state.activeWebId ? ' active' : '');
     btn.title = panel.title || panel.url;
-    btn.appendChild(faviconEl(panel.favicon, panel.title));
+    btn.appendChild(webIconEl(panel));
     btn.addEventListener('click', () => window.roopieInternal.openWebPanel(panel.id));
+    // 右クリックで名前/アイコン/URLの変更・削除
+    btn.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      window.roopieInternal.webPanelContextMenu(panel.id);
+    });
     webPinListEl.appendChild(btn);
   }
 }
@@ -214,6 +241,158 @@ $('web-open-tab').addEventListener('click', () => {
   if (!active) return;
   window.roopieInternal.openTab(active.url);
 });
+
+// ---- Webパネルの編集モーダル(名前/URL/アイコン) ----
+// 右クリックメニュー→メイン(section-webを開く=パネルを広げる)→ここでモーダルを開く
+const WEB_EDIT_EMOJI = [
+  '⭐', '🔖', '📮', '💬', '🎵', '📺',
+  '🛒', '📰', '💼', '📅', '☁', '🌐',
+  '🔧', '🎮', '📚', '☕', '💡', '❤',
+];
+const webEditModal = $('web-edit');
+const webEditTitle = $('web-edit-title');
+const webEditInput = $('web-edit-input');
+const webEditEmojiInput = $('web-edit-emoji-input');
+const webEditError = $('web-edit-error');
+const webEditTextMode = $('web-edit-text-mode');
+const webEditIconMode = $('web-edit-icon-mode');
+let webEdit = null; // { id, field, pendingIcon }
+
+function looksLikeUrl(text) {
+  const t = text.trim();
+  if (!t || /\s/.test(t)) return false;
+  try {
+    new URL(/^https?:/i.test(t) ? t : `https://${t}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function setPendingIcon(icon) {
+  if (!webEdit) return;
+  webEdit.pendingIcon = icon;
+  for (const b of $('web-edit-emoji').children) {
+    b.classList.toggle('selected', icon?.type === 'emoji' && b.textContent === icon.value);
+  }
+}
+
+function openWebEditModal(id, field) {
+  const entry = state.webPanels.find((p) => p.id === id);
+  if (!entry) return;
+  webEdit = { id, field, pendingIcon: entry.icon ?? null };
+  webEditError.classList.add('hidden');
+  const isIcon = field === 'icon';
+  webEditTextMode.classList.toggle('hidden', isIcon);
+  webEditIconMode.classList.toggle('hidden', !isIcon);
+
+  if (field === 'name') {
+    webEditTitle.textContent = '名前を変更';
+    webEditInput.value = entry.title || '';
+  } else if (field === 'url') {
+    webEditTitle.textContent = 'URLを変更';
+    webEditInput.value = entry.url || '';
+  } else {
+    webEditTitle.textContent = 'アイコンを変更';
+    renderEmojiGrid();
+    webEditEmojiInput.value = entry.icon?.type === 'emoji' ? entry.icon.value : '';
+  }
+
+  webEditModal.classList.remove('hidden');
+  if (!isIcon) {
+    webEditInput.focus();
+    webEditInput.select();
+  }
+}
+
+function renderEmojiGrid() {
+  const grid = $('web-edit-emoji');
+  grid.textContent = '';
+  for (const emoji of WEB_EDIT_EMOJI) {
+    const b = document.createElement('button');
+    b.className = 'emoji-btn';
+    b.textContent = emoji;
+    b.addEventListener('click', () => {
+      webEditEmojiInput.value = emoji;
+      setPendingIcon({ type: 'emoji', value: emoji });
+    });
+    grid.appendChild(b);
+  }
+}
+
+function closeWebEditModal() {
+  webEditModal.classList.add('hidden');
+  webEdit = null;
+}
+
+function applyWebEdit() {
+  if (!webEdit) return;
+  const { id, field } = webEdit;
+  if (field === 'name') {
+    window.roopieInternal.setWebPanel(id, { title: webEditInput.value });
+  } else if (field === 'url') {
+    if (!looksLikeUrl(webEditInput.value)) {
+      webEditError.textContent = '正しいURLを入力してください';
+      webEditError.classList.remove('hidden');
+      return;
+    }
+    window.roopieInternal.setWebPanel(id, { url: webEditInput.value });
+  } else {
+    // 絵文字入力欄が優先(直接入力を拾う)。空なら現在のpendingIcon(グリッド選択/画像/reset)
+    const typed = webEditEmojiInput.value.trim();
+    const icon = typed ? { type: 'emoji', value: typed } : webEdit.pendingIcon;
+    window.roopieInternal.setWebPanel(id, { icon: icon ?? null });
+  }
+  closeWebEditModal();
+}
+
+// 画像を選んで中央基準の正方形にクロップ→128pxのdata URIに
+$('web-edit-upload').addEventListener('click', () => {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.addEventListener('change', () => {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const SIZE = 128;
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = SIZE;
+        const ctx = canvas.getContext('2d');
+        const s = Math.min(img.width, img.height);
+        ctx.drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, SIZE, SIZE);
+        webEditEmojiInput.value = '';
+        setPendingIcon({ type: 'image', value: canvas.toDataURL('image/png') });
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+  input.click();
+});
+
+$('web-edit-reset-icon').addEventListener('click', () => {
+  webEditEmojiInput.value = '';
+  setPendingIcon(null);
+});
+webEditEmojiInput.addEventListener('input', () => {
+  const v = webEditEmojiInput.value.trim();
+  setPendingIcon(v ? { type: 'emoji', value: v } : null);
+});
+$('web-edit-apply').addEventListener('click', applyWebEdit);
+$('web-edit-cancel').addEventListener('click', closeWebEditModal);
+webEditModal.addEventListener('click', (e) => {
+  if (e.target === webEditModal) closeWebEditModal(); // 背景クリックで閉じる
+});
+webEditInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') applyWebEdit();
+  else if (e.key === 'Escape') closeWebEditModal();
+});
+
+window.roopieInternal.onEditWebPanel(({ id, field }) => openWebEditModal(id, field));
 
 // ---- 再生中 ----
 let mediaState = null;

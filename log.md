@@ -543,4 +543,16 @@ Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP
 - 検証: 純ロジックを単体27ケース(正規化・検証・競合・予約・無効化・未知ID破棄・onChange)確認。`setupMenu`が壊れた上書き値でも例外なく再構築され不正値がundefinedに落ちることをelectronスタブで確認。CDP(再起動して確認)で、設定画面の描画(25項目/6カテゴリ/目次)、純関数(codeToAccelKey・displayAccel)、合成キー入力での**割り当て・競合エラー・予約エラー・修飾なしエラー・無効化・全リセット**の往復を確認
   - **CDPの限界(要ユーザー確認)**: `Input.dispatchKeyEvent`はメニューアクセラレータを発火しない(log既知の制約)。「割り当てたキーを実際に押すとアクションが起きるか」はCDPで検証不能なため、**実キーでの最終確認はユーザー側で必要**(ジェスチャー軌跡と同じ扱い)
 
-(次にやることは冒頭の「今後の計画」を参照。8件のうち要望6・7は完了。残りはWebパネルアイコンの右クリック管理(名前/アイコン/URL変更・削除)。マウスジェスチャー軌跡と、ショートカット実キー発火は実マウス/実キーでの最終確認待ち)
+### 2026-07-16: Webパネルアイコンの右クリック管理(名前/アイコン/URL変更・削除)
+
+サイドバー再設計時に見送っていた「個々のWebパネルアイコンの右クリック管理」を実装。
+
+- **右クリックメニュー**(ネイティブ): レールのピン留めアイコン(`#web-pin-list`)と「Webパネル」管理一覧の両方の項目を右クリック→「名前を変更/アイコンを変更/URLを変更/削除」(`toolbar-context-menu.js`の`showWebPanelMenu`、IPC`sidepanel:web-context-menu`)
+- **編集モーダル**(パネルUI内): 名前・URLはテキスト入力、アイコンは絵文字グリッド18種+直接入力+画像アップロード(中央基準の正方形クロップ→128px data URI)+faviconに戻す。URLは不正ならエラー表示・モーダル継続
+- **重要な設計判断**(advisor指摘で回避したバグ): パネルが狭い(レール44px)ためモーダルにはパネル展開が必要。単純な「展開フラグ」ではなく`SidePanel.editWeb(id, field)`が**`activeSection='web'`にして`destroyWebView()`する**。理由: Webパネル表示中は`webView`が`panelView`より後に`addChildView`されて手前に描画されるため、そのままモーダルを出すと**live webViewの背後に隠れて壊れて見える**。管理セクションを開くと`activeWebId=null`+webView破棄で、パネル拡張と遮蔽解消を1手で行える(既存の`openSection`と同じ実績ある機構)
+- **データ**: Webパネルエントリに任意の`icon`フィールド追加(`{type:'emoji'|'image', value}`、既定はfavicon)。`side-panel.js`の`setWebPanel(id, patch)`でメイン側検証(URLは既存の`normalizeUrl`、絵文字16文字まで、画像は`data:image/`かつ40万文字まで。不正は無視)。`profiles.js`の`setIcon`と同じ方針。sidepanel.htmlのCSPは既に`img-src ... data:`のためアップロードアイコンもそのまま乗る
+- 変更/追加ファイル: `side-panel.js`(setWebPanel/editWeb/normalizeWebIcon)、`toolbar-context-menu.js`(showWebPanelMenu)、`ipc.js`(web-context-menu/set-web)、`internal-preload.js`(API)、`sidepanel.{html,js}`(モーダル+webIconEl+右クリック)、`tailwind.css`(`.modal-*`/`.emoji-*`/`.letter.emoji`→build:css済み)
+- 検証(CDP): テスト用パネル追加→名前変更(「マイサイト」)/URL変更(不正はエラー継続・正常はhttps補完)/絵文字アイコン(🚀がピンに反映)/不正アイコン(50文字絵文字→メインが拒否しnull)/後始末までの往復を確認。`showWebPanelMenu`はelectronスタブで4項目のメニュー構築+各clickが`editWeb(name/icon/url)`・`removeWeb`を正しく呼ぶことを確認。`editWeb`の遮蔽回避機構(section-webを開くと`activeWebId`がnullに戻りwebViewが破棄される)を同一機構の`openSidePanelSection('web')`経由でライブ確認
+  - 唯一CDP不能なのはOSネイティブメニュー項目のクリック自体(既存のタブ/ツールバーメニューと同じ制約)。メニューが呼ぶ関数は個別に検証済み
+
+(要望8件のうち6・7・8とWebパネル右クリック管理は完了。要望1〜5も完了済み。残る恒久タスクは冒頭「今後の計画」参照。マウスジェスチャー軌跡と、ショートカット実キー発火は実マウス/実キーでの最終確認待ち)

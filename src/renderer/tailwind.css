@@ -2178,6 +2178,86 @@ body {
   font-weight: 700;
 }
 
+/* カスタムアイコンが絵文字のときは下地を出さず、絵文字だけ見せる */
+.letter.emoji {
+  background: transparent !important;
+  color: inherit;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+/* Webパネル編集モーダル(名前/URL/アイコン) */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.modal {
+  width: 100%;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+.modal-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.modal-error {
+  font-size: 11px;
+  color: #ff7a7a;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.modal-btn-row {
+  display: flex;
+  gap: 8px;
+}
+
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+}
+
+.emoji-btn {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  background: var(--card-hover);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.emoji-btn:hover {
+  background: var(--hover);
+}
+
+.emoji-btn.selected {
+  border-color: var(--accent);
+}
+
 /* =========================================================
    フローティングのミニプレイヤー — .player-body
    ========================================================= */

@@ -194,6 +194,37 @@ class SidePanel {
     }
   }
 
+  // 名前/URL/アイコンの変更(値はメイン側で検証。不正なら無視)
+  setWebPanel(id, patch) {
+    const entry = this.webPanels.find((p) => p.id === id);
+    if (!entry || !patch || typeof patch !== 'object') return;
+    if (typeof patch.title === 'string') {
+      entry.title = patch.title.trim().slice(0, 200) || hostOf(entry.url);
+    }
+    if (typeof patch.url === 'string') {
+      const url = normalizeUrl(patch.url);
+      if (url) {
+        entry.url = url;
+        if (this.activeWebId === id) this.webView?.webContents.loadURL(url);
+      }
+    }
+    if ('icon' in patch) entry.icon = normalizeWebIcon(patch.icon);
+    this.store.save();
+    this.notify();
+  }
+
+  // Webパネルアイコンの右クリック→編集。管理セクション(section-web)を開くことで
+  // パネルを広げ、かつ手前を覆うwebViewを破棄してから、パネルUIにモーダル表示を指示する
+  editWeb(id, field) {
+    if (!this.webPanels.find((p) => p.id === id)) return;
+    this.activeSection = 'web';
+    this.activeWebId = null;
+    this.destroyWebView();
+    this.tabManager.layout();
+    this.notify();
+    this.sendToPanel('sidepanel:edit-web', { id, field });
+  }
+
   // 同じWebパネルをもう一度選ぶとレールのみに折りたたむ(Vivaldi同様)
   openWeb(id) {
     if (this.activeWebId === id) {
@@ -322,6 +353,21 @@ function hostOf(url) {
   } catch {
     return url;
   }
+}
+
+// Webパネルのカスタムアイコン。null は favicon に戻す。profiles.js の setIcon と同様に検証する
+function normalizeWebIcon(icon) {
+  if (!icon || typeof icon !== 'object') return null;
+  if (icon.type === 'emoji' && typeof icon.value === 'string') {
+    const value = icon.value.trim();
+    return value && value.length <= 16 ? { type: 'emoji', value } : null;
+  }
+  if (icon.type === 'image' && typeof icon.value === 'string') {
+    return icon.value.startsWith('data:image/') && icon.value.length <= 400_000
+      ? { type: 'image', value: icon.value }
+      : null;
+  }
+  return null;
 }
 
 module.exports = SidePanel;

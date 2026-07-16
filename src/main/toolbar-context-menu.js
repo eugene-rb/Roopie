@@ -56,6 +56,21 @@ function showSidePanelRailMenu(panel) {
 }
 
 /**
+ * Webパネルのアイコン(レールのピン留め/管理一覧)を右クリックしたときのメニュー。
+ * 名前・アイコン・URLの変更はパネルUIのモーダルへ、削除はその場で実行する。
+ */
+function showWebPanelMenu(panel, id) {
+  if (!panel || !panel.webPanels.find((p) => p.id === id)) return;
+  const menu = new Menu();
+  menu.append(new MenuItem({ label: '名前を変更...', click: () => panel.editWeb(id, 'name') }));
+  menu.append(new MenuItem({ label: 'アイコンを変更...', click: () => panel.editWeb(id, 'icon') }));
+  menu.append(new MenuItem({ label: 'URLを変更...', click: () => panel.editWeb(id, 'url') }));
+  menu.append(new MenuItem({ type: 'separator' }));
+  menu.append(new MenuItem({ label: '削除', click: () => panel.removeWeb(id) }));
+  menu.popup();
+}
+
+/**
  * ツールバーのユーティリティ群を右クリックしたときのメニュー。
  * 各項目の表示/非表示をチェックボックスで切り替え、設定画面(並び替え)へも誘導する。
  */
@@ -89,4 +104,4 @@ function showToolbarMenu(ctx) {
   menu.popup();
 }
 
-module.exports = { showSidePanelPositionMenu, showSidePanelRailMenu, showToolbarMenu };
+module.exports = { showSidePanelPositionMenu, showSidePanelRailMenu, showToolbarMenu, showWebPanelMenu };
