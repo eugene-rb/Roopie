@@ -57,6 +57,11 @@ function registerIpc() {
   ipcMain.on('tabs:split-toggle-direction', (e) => tabsOf(e)?.toggleSplitDirection());
   ipcMain.on('tabs:split-close', (e) => tabsOf(e)?.closeSplit());
 
+  // ペイン間リサイズ(仕切りViewから)
+  ipcMain.on('split:resize-start', (e) => tabsOf(e)?.splitResizeStart());
+  ipcMain.on('split:resize', (e, dx, dy) => tabsOf(e)?.splitResizeBy(dx, dy));
+  ipcMain.on('split:resize-end', (e) => tabsOf(e)?.splitResizeEnd());
+
   // ---- ウィンドウ ----
   ipcMain.on('window:new', () => browser.createWindow());
   ipcMain.on('window:new-incognito', () => browser.createWindow({ incognito: true }));

@@ -14,6 +14,12 @@ const ZOOM_LEVELS = [-3, -2, -1.5, -1, -0.5, 0, 0.5, 1, 1.5, 2, 2.5, 3];
 
 const INTERNAL_PRELOAD = path.join(__dirname, '..', 'preload', 'internal-preload.js');
 
+// 画面分割のペイン間リサイズ
+const SPLIT_DIVIDER_URL = 'roopie://splitdivider';
+const SPLIT_DIVIDER_HIT = 16; // 仕切りのヒット領域(見た目のグリップより広く取る)
+const MIN_SPLIT_RATIO = 0.15; // 片方のペインが消えないよう下限/上限を設ける
+const MAX_SPLIT_RATIO = 0.85;
+
 // メディアの next/prev 用。ページのmain worldに setActionHandler の wrapper を仕込み、
 // サイトが登録したハンドラを退避する(APIにハンドラ読み出しが無いため)。
 // 退避したハンドラは media:control の 'next'/'prev' で呼ぶ。登録されている種類は
@@ -55,6 +61,8 @@ class TabManager {
     this.activeTabId = null;
     this.splitTabId = null; // 画面分割で並べて表示しているタブ(nullなら分割なし)
     this.splitDirection = 'row'; // 'row'(左右) | 'column'(上下)
+    this.splitRatio = 0.5; // 主ペインの割合(ペイン間リサイズで変わる)
+    this.splitDivider = null; // ペイン間の仕切り(リサイズ用の小さいView)
     this.chromeHeight = DEFAULT_CHROME_HEIGHT;
     this.chromeLeft = 0; // タブバーを左側(縦)表示にしたときの左オフセット
     this.sidePanelSide = 'right'; // サイドパネルを表示する側('left' | 'right')
@@ -89,7 +97,7 @@ class TabManager {
     this.onTabCreated?.(tab); // 拡張機能システム等への通知
     view.webContents.loadURL(url);
     this.switchTab(id);
-    this.raiseOverlay(); // 新しいタブを載せた後もメニューが手前に来るようにする
+    this.raiseTopViews(); // 新しいタブを載せた後も仕切り/プレイヤー/メニューが手前に来るようにする
     return tab;
   }
 
@@ -117,6 +125,45 @@ class TabManager {
   raiseOverlay() {
     if (!this.overlay || this.window.isDestroyed()) return;
     this.window.contentView.addChildView(this.overlay);
+  }
+
+  // タブより手前に載るView群を、正しい重なり順(仕切り<プレイヤー<オーバーレイ)で最前面へ戻す。
+  // 新しいタブを追加するとそのタブが最前面に来てしまうため、生成後に呼ぶ
+  raiseTopViews() {
+    if (this.window.isDestroyed()) return;
+    const cv = this.window.contentView;
+    if (this.splitDivider) cv.addChildView(this.splitDivider);
+    if (this.mediaPlayer?.view) cv.addChildView(this.mediaPlayer.view);
+    if (this.overlay) cv.addChildView(this.overlay);
+  }
+
+  // ペイン間リサイズ用の仕切りViewを用意する(分割中だけ使う)
+  ensureSplitDivider() {
+    if (this.splitDivider || this.window.isDestroyed()) return;
+    const view = new WebContentsView({
+      webPreferences: {
+        preload: INTERNAL_PRELOAD,
+        session: this.session,
+        transparent: true,
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+      },
+    });
+    view.setBackgroundColor('#00000000');
+    this.splitDivider = view;
+    this.window.contentView.addChildView(view);
+    view.webContents.loadURL(SPLIT_DIVIDER_URL);
+    // ページ読込前に送った方向メッセージは失われるため、読込後に再レイアウトして送り直す
+    view.webContents.once('did-finish-load', () => this.layout());
+    this.raiseOverlay(); // 仕切りの上にオーバーレイ(メニュー)を戻す
+  }
+
+  destroySplitDivider() {
+    if (!this.splitDivider) return;
+    this.window.contentView.removeChildView(this.splitDivider);
+    this.splitDivider.webContents.close();
+    this.splitDivider = null;
   }
 
   showOverlay(visible) {
@@ -269,6 +316,7 @@ class TabManager {
     if (id === this.activeTabId || !this.getTab(id)) return;
     this.splitTabId = id;
     this.splitDirection = direction === 'column' ? 'column' : 'row';
+    this.splitRatio = 0.5; // 新しい分割は毎回半々から始める
     this.updateVisibility();
     this.layout();
     this.sendState();
@@ -287,6 +335,24 @@ class TabManager {
     this.updateVisibility();
     this.layout();
     this.sendState();
+  }
+
+  // ---- ペイン間リサイズ(仕切りViewのドラッグから呼ばれる) ----
+  splitResizeStart() {
+    this._resizeStartRatio = this.splitRatio;
+  }
+
+  // 仕切りが送ってくるドラッグ開始からの累積移動量(dx, dy)を分割比率へ変換する
+  splitResizeBy(dx, dy) {
+    if (this._resizeStartRatio == null || !this._splitAxis) return;
+    const delta = this.splitDirection === 'column' ? dy : dx;
+    const ratio = this._resizeStartRatio + delta / this._splitAxis;
+    this.splitRatio = Math.max(MIN_SPLIT_RATIO, Math.min(MAX_SPLIT_RATIO, ratio));
+    this.layout();
+  }
+
+  splitResizeEnd() {
+    this._resizeStartRatio = null;
   }
 
   switchRelative(offset) {
@@ -391,6 +457,7 @@ class TabManager {
     this.isSwitchingProfile = true;
     this.session = session;
     this.splitTabId = null;
+    this.destroySplitDivider(); // 仕切りは旧セッションのViewなので作り直す
     for (const id of this.tabs.map((t) => t.id)) {
       this.closeTab(id);
     }
@@ -471,34 +538,63 @@ class TabManager {
 
     const activeView = this.getTab(this.activeTabId)?.view;
     const splitView = this.splitTabId ? this.getTab(this.splitTabId)?.view : null;
+    let dividerBounds = null; // 仕切りを置く位置(分割中のみ)
 
     if (activeView) {
       if (splitView) {
-        // 2ペインの間にも余白を入れて、それぞれ独立したカードに見せる
+        // 2ペインの間にも余白を入れて、それぞれ独立したカードに見せる。
+        // splitRatio(主ペインの割合)で分割位置が変わる(ペイン間リサイズ)
         if (this.splitDirection === 'column') {
-          const paneHeight = Math.max(0, (areaHeight - m) / 2);
+          const axis = Math.max(0, areaHeight - m); // gap控除後の2ペイン合計高さ
+          this._splitAxis = axis;
+          const paneHeight = Math.round(axis * this.splitRatio);
           activeView.setBounds({ x: pageX, y: areaY, width: pageAreaWidth, height: paneHeight });
           splitView.setBounds({
             x: pageX,
             y: areaY + paneHeight + m,
             width: pageAreaWidth,
-            height: Math.max(0, areaHeight - paneHeight - m),
+            height: Math.max(0, axis - paneHeight),
           });
+          // 仕切りは隙間(m)の中央に、ヒット領域ぶんの幅で重ねる
+          dividerBounds = {
+            x: pageX,
+            y: Math.round(areaY + paneHeight + m / 2 - SPLIT_DIVIDER_HIT / 2),
+            width: pageAreaWidth,
+            height: SPLIT_DIVIDER_HIT,
+          };
         } else {
-          const paneWidth = Math.max(0, (pageAreaWidth - m) / 2);
+          const axis = Math.max(0, pageAreaWidth - m); // gap控除後の2ペイン合計幅
+          this._splitAxis = axis;
+          const paneWidth = Math.round(axis * this.splitRatio);
           activeView.setBounds({ x: pageX, y: areaY, width: paneWidth, height: areaHeight });
           splitView.setBounds({
             x: pageX + paneWidth + m,
             y: areaY,
-            width: Math.max(0, pageAreaWidth - paneWidth - m),
+            width: Math.max(0, axis - paneWidth),
             height: areaHeight,
           });
+          dividerBounds = {
+            x: Math.round(pageX + paneWidth + m / 2 - SPLIT_DIVIDER_HIT / 2),
+            y: areaY,
+            width: SPLIT_DIVIDER_HIT,
+            height: areaHeight,
+          };
         }
         splitView.setBorderRadius(radius);
       } else {
         activeView.setBounds({ x: pageX, y: areaY, width: pageAreaWidth, height: areaHeight });
       }
       activeView.setBorderRadius(radius);
+    }
+
+    // ペイン間の仕切り: 分割中だけ用意して隙間に重ねる。方向をViewへ伝える
+    if (dividerBounds) {
+      this.ensureSplitDivider();
+      this.splitDivider.setVisible(true);
+      this.splitDivider.setBounds(dividerBounds);
+      this.splitDivider.webContents.send('split:divider', { direction: this.splitDirection });
+    } else {
+      this.splitDivider?.setVisible(false);
     }
 
     // オーバーレイ(メニュー)は余白も含めた全域を覆う(外側クリックで閉じるため)。

@@ -79,6 +79,12 @@ if (location.protocol === 'roopie:') {
     mediaPip: () => ipcRenderer.send('media:control', 'pip'),
     mediaNext: () => ipcRenderer.send('media:control', 'next'),
     mediaPrev: () => ipcRenderer.send('media:control', 'prev'),
+
+    // 画面分割のペイン間リサイズ(仕切りView)
+    onSplitDivider: (cb) => ipcRenderer.on('split:divider', (_e, info) => cb(info)),
+    splitResizeStart: () => ipcRenderer.send('split:resize-start'),
+    splitResize: (dx, dy) => ipcRenderer.send('split:resize', dx, dy),
+    splitResizeEnd: () => ipcRenderer.send('split:resize-end'),
     mediaSwitchToTab: () => ipcRenderer.send('media:switch-to-tab'),
     mediaDismiss: () => ipcRenderer.send('media:dismiss'),
     mediaDragStart: () => ipcRenderer.send('media:drag-start'),
