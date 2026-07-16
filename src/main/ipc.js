@@ -259,6 +259,8 @@ function registerIpc() {
   ipcMain.on('sidepanel:set-web', (e, id, patch) => panelOf(e)?.setWebPanel(id, patch));
   // レール最下部の「+」(Vivaldiと同じ)。パネルを広げてからURL入力モーダルを出す
   ipcMain.on('sidepanel:prompt-add-web', (e) => panelOf(e)?.promptAddWeb());
+  // 追加/編集モーダルが閉じた(モーダル用に広げたホストパネルを畳む)
+  ipcMain.on('sidepanel:edit-done', (e) => panelOf(e)?.closeEditHost());
 
   // ---- リードリスト(後で読む。ブラウザ全体・プロファイル単位) ----
   ipcMain.handle('readlist:list', () => browser.readlist?.list() ?? []);

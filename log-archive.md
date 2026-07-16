@@ -588,3 +588,11 @@
   - **「+」ボタン**: `sidepanel:prompt-add-web` IPC(新設)→ `promptAddWeb()`(パネルを広げてURL入力モーダル)
   - **サイドパネルのショートカット既定を F4 に変更**(旧: Ctrl+Shift+S。keybindingsで変更可能なのは従来どおり)
   - 呼称を「リードリスト」→「リーディングリスト」に統一
+
+## 2026-07-17(2): Webパネルの管理画面を廃止(ユーザー指示)
+
+- レールの「Webパネルを管理」アイコンと管理セクション(URL入力+一覧)を削除。追加・削除・編集の入口は右クリックメニューに集約:
+  - 追加: レール最下部の「+」/レール空きスペース右クリック/ピン留めアイコン右クリックの「ウェブパネルを追加...」(showWebPanelMenuに追加)
+  - 編集(名前/アイコン/URL)・削除: ピン留めアイコンの右クリックメニュー(従来どおり)
+- 追加/編集モーダルの表示場所として activeSection='web' を「空のホストパネル」として残す(レールにボタンは無い)。モーダルを閉じたら `sidepanel:edit-done` → `closeEditHost()` でホストパネルを畳む(追加確定で新パネルが開いた場合は畳まない)
+- 変更: `sidepanel.html`(section-web/レールボタン削除)、`sidepanel.js`(renderWebList/addWebPanel削除、closeWebEditModalでedit-done送信)、`side-panel.js`(closeEditHost)、`ipc.js`/`internal-preload.js`(sidepanel:edit-done)、`toolbar-context-menu.js`(追加項目)、`tailwind.css`(.web-add削除→build:css済み)

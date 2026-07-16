@@ -106,6 +106,7 @@ if (location.protocol === 'roopie:') {
     webPanelContextMenu: (id) => ipcRenderer.send('sidepanel:web-context-menu', id),
     setWebPanel: (id, patch) => ipcRenderer.send('sidepanel:set-web', id, patch),
     promptAddWebPanel: () => ipcRenderer.send('sidepanel:prompt-add-web'),
+    sidePanelEditDone: () => ipcRenderer.send('sidepanel:edit-done'),
     onEditWebPanel: (cb) => ipcRenderer.on('sidepanel:edit-web', (_e, payload) => cb(payload)),
     onAddWebPrompt: (cb) => ipcRenderer.on('sidepanel:add-web-prompt', () => cb()),
     openWebPanel: (id) => ipcRenderer.send('sidepanel:open-web', id),

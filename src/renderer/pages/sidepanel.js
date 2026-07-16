@@ -4,8 +4,6 @@ const bookmarkListEl = $('bookmark-list');
 const historyListEl = $('history-list');
 const historySearchEl = $('history-search');
 const notesEl = $('notes');
-const webListEl = $('web-list');
-const webUrlEl = $('web-url');
 const webPinListEl = $('web-pin-list');
 const railEl = $('rail');
 const nowPlayingTab = $('now-playing-tab');
@@ -18,13 +16,14 @@ const downloadsListEl = $('downloads-list');
 let state = { open: true, webPanels: [], activeSection: null, activeWebId: null, notes: '' };
 
 // パネル見出し・タブのtitle属性と揃えたラベル(Vivaldiのパネルヘッダー相当)
+// 'web' は管理画面ではなく、追加/編集モーダルを表示するときのホスト(空のパネル)として使う
 const SECTION_LABELS = {
   bookmarks: 'ブックマーク',
   downloads: 'ダウンロード',
   history: '履歴',
   notes: 'メモ',
   readlist: 'リーディングリスト',
-  web: 'Webパネルを管理',
+  web: 'ウェブパネル',
   'now-playing': '再生中',
 };
 
@@ -256,19 +255,6 @@ notesEl.addEventListener('input', () => {
   notesTimer = setTimeout(() => window.roopieInternal.setSidePanelNotes(notesEl.value), 400);
 });
 
-// ---- Webパネル ----
-function addWebPanel() {
-  const url = webUrlEl.value.trim();
-  if (!url) return;
-  window.roopieInternal.addWebPanel(url);
-  webUrlEl.value = '';
-}
-
-$('web-add-btn').addEventListener('click', addWebPanel);
-webUrlEl.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') addWebPanel();
-});
-
 // ---- ダウンロード(Vivaldiのダウンロードパネル相当) ----
 let downloadItems = [];
 
@@ -348,46 +334,6 @@ window.roopieInternal.onDownloadsState(({ items }) => {
   if (state.activeSection === 'downloads') renderDownloads();
 });
 
-function renderWebList() {
-  webListEl.textContent = '';
-  if (!state.webPanels.length) {
-    webListEl.appendChild(emptyNote('まだ登録されていません', 'globe'));
-    return;
-  }
-  for (const panel of state.webPanels) {
-    const item = document.createElement('div');
-    item.className = 'panel-item';
-    item.title = panel.url;
-    item.appendChild(webIconEl(panel));
-
-    const label = document.createElement('span');
-    label.className = 'label';
-    label.textContent = panel.title || panel.url;
-    const sub = document.createElement('span');
-    sub.className = 'sub';
-    sub.textContent = panel.url;
-    label.appendChild(sub);
-    item.appendChild(label);
-
-    const removeBtn = document.createElement('button');
-    removeBtn.className = 'item-btn';
-    removeBtn.textContent = '削除';
-    removeBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      window.roopieInternal.removeWebPanel(panel.id);
-    });
-    item.appendChild(removeBtn);
-
-    item.addEventListener('click', () => window.roopieInternal.openWebPanel(panel.id));
-    // 右クリックで名前/アイコン/URLの変更・削除
-    item.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      window.roopieInternal.webPanelContextMenu(panel.id);
-    });
-    webListEl.appendChild(item);
-  }
-}
-
 // アイコンレールへの直接ピン留め表示。クリックで即座にそのWebパネルを開く
 // (表示中のものをもう一度押すとメイン側の判断で折りたたまれ、activeWebIdがnullに戻って反映される)
 function renderPinnedWebPanels() {
@@ -415,7 +361,7 @@ $('web-open-tab').addEventListener('click', () => {
 });
 
 // ---- Webパネルの編集モーダル(名前/URL/アイコン) ----
-// 右クリックメニュー→メイン(section-webを開く=パネルを広げる)→ここでモーダルを開く
+// 右クリックメニュー→メイン(ホストパネル'web'を広げる)→ここでモーダルを開く
 const WEB_EDIT_EMOJI = [
   '⭐', '🔖', '📮', '💬', '🎵', '📺',
   '🛒', '📰', '💼', '📅', '☁', '🌐',
@@ -509,6 +455,8 @@ function renderEmojiGrid() {
 function closeWebEditModal() {
   webEditModal.classList.add('hidden');
   webEdit = null;
+  // モーダルのために広げたホストパネル('web')を畳む(判定はメイン側で行う)
+  window.roopieInternal.sidePanelEditDone();
 }
 
 function applyWebEdit() {
@@ -758,7 +706,6 @@ function render() {
   if (state.activeSection === 'bookmarks') refreshBookmarks();
   if (state.activeSection === 'downloads') refreshDownloads();
 
-  renderWebList();
   renderPinnedWebPanels();
   // 入力中のメモは上書きしない
   if (document.activeElement !== notesEl) notesEl.value = state.notes;

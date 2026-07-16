@@ -216,8 +216,9 @@ class SidePanel {
     this.notify();
   }
 
-  // Webパネルアイコンの右クリック→編集。管理セクション(section-web)を開くことで
-  // パネルを広げ、かつ手前を覆うwebViewを破棄してから、パネルUIにモーダル表示を指示する
+  // Webパネルアイコンの右クリック→編集。モーダルの表示場所を確保するため
+  // ホストセクション('web'。中身は空)でパネルを広げ、手前を覆うwebViewを破棄してから
+  // パネルUIにモーダル表示を指示する
   editWeb(id, field) {
     if (!this.webPanels.find((p) => p.id === id)) return;
     this.activeSection = 'web';
@@ -228,7 +229,7 @@ class SidePanel {
     this.sendToPanel('sidepanel:edit-web', { id, field });
   }
 
-  // レール右クリックの「ウェブパネルを追加」。編集と同様に、パネルを広げ手前のwebViewを
+  // レール右クリック/「+」の「ウェブパネルを追加」。編集と同様に、パネルを広げ手前のwebViewを
   // 破棄してから、URL入力モーダルの表示をパネルUIへ指示する
   promptAddWeb() {
     this.activeSection = 'web';
@@ -237,6 +238,15 @@ class SidePanel {
     this.tabManager.layout();
     this.notify();
     this.sendToPanel('sidepanel:add-web-prompt');
+  }
+
+  // 追加/編集モーダルが閉じたとき。モーダルのために広げただけのホストパネルなら畳む
+  // (追加確定でそのWebパネルが開かれた場合はactiveWebIdが立っているので何もしない)
+  closeEditHost() {
+    if (this.activeSection !== 'web' || this.activeWebId) return;
+    this.activeSection = null;
+    this.tabManager.layout();
+    this.notify();
   }
 
   // 同じWebパネルをもう一度選ぶとレールのみに折りたたむ(Vivaldi同様)

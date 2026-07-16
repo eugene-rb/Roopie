@@ -56,7 +56,8 @@ function showSidePanelRailMenu(panel) {
 }
 
 /**
- * Webパネルのアイコン(レールのピン留め/管理一覧)を右クリックしたときのメニュー。
+ * Webパネルのアイコン(レールのピン留め)を右クリックしたときのメニュー。
+ * 追加・削除・編集はすべてこのメニュー(+レール右クリック/「+」)から行う(管理画面は無い)。
  * 名前・アイコン・URLの変更はパネルUIのモーダルへ、削除はその場で実行する。
  */
 function showWebPanelMenu(panel, id) {
@@ -65,6 +66,8 @@ function showWebPanelMenu(panel, id) {
   menu.append(new MenuItem({ label: '名前を変更...', click: () => panel.editWeb(id, 'name') }));
   menu.append(new MenuItem({ label: 'アイコンを変更...', click: () => panel.editWeb(id, 'icon') }));
   menu.append(new MenuItem({ label: 'URLを変更...', click: () => panel.editWeb(id, 'url') }));
+  menu.append(new MenuItem({ type: 'separator' }));
+  menu.append(new MenuItem({ label: 'ウェブパネルを追加...', click: () => panel.promptAddWeb() }));
   menu.append(new MenuItem({ type: 'separator' }));
   menu.append(new MenuItem({ label: '削除', click: () => panel.removeWeb(id) }));
   menu.popup();
