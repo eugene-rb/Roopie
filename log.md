@@ -529,4 +529,18 @@ Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP
 - 検証: 正規化ロジックを単体で7ケース確認。CDP(**再起動して確認**。メインUIは`Page.reload()`で状態を再取得しないため)で、setSetting経由の並べ替え(split-controlsの位置保持を含む)+表示切替、設定画面のリスト描画(4項目・目次・セクション)、設定画面チェックボックス→メインUIへの反映(往復)を確認。`showToolbarMenu`はelectronスタブで例外なくメニュー構築されることを確認(ネイティブメニューのクリック自体はCDP不可のため既存方針を踏襲)
   - **ハマりどころ**: 前セッションの古いElectronインスタンスが9222を占有しており、最初その古いUI(applyToolbarItems未定義)に接続してしまった。`taskkill /F /IM electron.exe`で一掃してから再起動して解消
 
-(次にやることは冒頭の「今後の計画」を参照。8件のうち7(右クリックメニューへのショートカット割当)と、Webパネルアイコンの右クリック管理(名前/アイコン/URL変更・削除)が残作業。要望6は完了。マウスジェスチャー軌跡は実マウスでの最終確認待ち)
+### 2026-07-16: ショートカットキーのカスタマイズ(要望7)
+
+ユーザー確認済みの要望「既存のメニュー項目(戻る・新しいタブ等)にキーを割り当てる」を実装。
+
+- **仕組み**: アプリメニューのアクセラレータを差し替える方式(既存のショートカット機構をそのまま使う。`globalShortcut`や`before-input-event`は使わない)。**ブラウザ全体で共通**(アプリメニューはグローバルなため。gestures/themeはプロファイル別だが、ショートカットは全プロファイル共通。要ユーザー確認だが技術的にこれが自然)
+- **保存**: `%APPDATA%/Roopie/keybindings.json`(google-accountsと同じブラウザ全体ストア)。上書きのみ保存(既定と同じなら未保存)。`''`は「割り当てなし」
+- **`src/main/keybindings.js`(新規・electron非依存の純ロジック)**: 25コマンドの定義(id/label/category/既定アクセラレータ=唯一の定義源)、`normalizeAccel`(競合比較用の正規化。CmdOrCtrl↔Ctrl等を同一視・修飾子順不同)、`isValidAccelerator`(修飾子なしの印字キーは通常入力を奪うため禁止、Fキー/Escは可)、`Keybindings`クラス(set/reset/resetAll/accelFor/config)。**競合検出**(他コマンドの実効アクセラレータと正規形が一致したら理由付きで拒否。自分自身への再割り当ては競合扱いしない)、**予約**(Ctrl+C/V/X/A/Z/Y・Ctrl+1〜9を拒否)、読み込み時に未知IDの上書きを破棄
+- **menu.js**: 各項目の`accelerator: '...'`を`accel(id)`に置換(clickはインラインのまま=低リスク最小変更)。`accel()`は**ビルド時にisValidAcceleratorで検証**し、不正値は割り当てなしに落とす(1件の壊れた値が全ショートカットを巻き込まない)
+- **menu再構築**: `browser.onKeybindingsChanged`(main.jsで`setupMenu()`+`sendKeybindings()`を設定)。keybindings変更時に呼ばれる。browser→menu/ipcの循環依存は無い(keybindings.jsは依存が軽い)
+- **設定画面に「ショートカット」セクション**(目次+全プロファイル共通バッジ): カテゴリ別に25項目を一覧。項目をクリック→キー入力待ち→**押した組み合わせをキャプチャ**(`e.code`使用でJP配列/IMEの影響を避ける。修飾のみ・Escでキャンセル・Backspaceで無効化・修飾なし印字キーは弾く)。競合/予約/不正は行にエラー表示。各行に「既定に戻す」、全体に「すべて既定に戻す」
+- 変更/追加ファイル: `keybindings.js`(新規)、`browser.js`(init/flush/sendKeybindings)、`main.js`(onKeybindingsChanged)、`menu.js`(accel化)、`ipc.js`(keybindings:get/set/reset/reset-all)、`internal-preload.js`(API)、`settings.{html,js}`(セクション+キャプチャ)、`tailwind.css`(`.shortcut-*`→build:css済み)
+- 検証: 純ロジックを単体27ケース(正規化・検証・競合・予約・無効化・未知ID破棄・onChange)確認。`setupMenu`が壊れた上書き値でも例外なく再構築され不正値がundefinedに落ちることをelectronスタブで確認。CDP(再起動して確認)で、設定画面の描画(25項目/6カテゴリ/目次)、純関数(codeToAccelKey・displayAccel)、合成キー入力での**割り当て・競合エラー・予約エラー・修飾なしエラー・無効化・全リセット**の往復を確認
+  - **CDPの限界(要ユーザー確認)**: `Input.dispatchKeyEvent`はメニューアクセラレータを発火しない(log既知の制約)。「割り当てたキーを実際に押すとアクションが起きるか」はCDPで検証不能なため、**実キーでの最終確認はユーザー側で必要**(ジェスチャー軌跡と同じ扱い)
+
+(次にやることは冒頭の「今後の計画」を参照。8件のうち要望6・7は完了。残りはWebパネルアイコンの右クリック管理(名前/アイコン/URL変更・削除)。マウスジェスチャー軌跡と、ショートカット実キー発火は実マウス/実キーでの最終確認待ち)

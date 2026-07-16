@@ -372,6 +372,19 @@ function registerIpc() {
     browser.sendSettings();
   });
 
+  // ---- ショートカット割り当て(アプリ全体) ----
+  // set/reset は onKeybindingsChanged 経由でメニュー再構築 + 設定画面へ配信される
+  ipcMain.handle('keybindings:get', () => browser.keybindings?.config() ?? []);
+  ipcMain.handle('keybindings:set', (_e, id, accel) => browser.keybindings?.set(id, accel) ?? { ok: false });
+  ipcMain.handle('keybindings:reset', (_e, id) => {
+    browser.keybindings?.reset(id);
+    return browser.keybindings?.config() ?? [];
+  });
+  ipcMain.handle('keybindings:reset-all', () => {
+    browser.keybindings?.resetAll();
+    return browser.keybindings?.config() ?? [];
+  });
+
   // ---- メディアプレイヤー ----
   ipcMain.on('media:state', (e, payload) => {
     const ctx = ctxOf(e);

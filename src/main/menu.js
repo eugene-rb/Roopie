@@ -1,10 +1,18 @@
 const { Menu } = require('electron');
 const windows = require('./windows');
 const browser = require('./browser');
+const { isValidAccelerator } = require('./keybindings');
 
 // メニュー操作はフォーカス中のウィンドウに対して行う
 const tabs = () => windows.focused()?.tabManager ?? null;
 const ui = () => windows.focused()?.window.webContents ?? null;
+
+// コマンドの実効アクセラレータ。不正値(旧データ・手編集)は割り当てなしに落として、
+// 1件の壊れた値が全ショートカットを巻き込まないようにする
+const accel = (id) => {
+  const a = browser.keybindings?.accelFor(id);
+  return a && isValidAccelerator(a) ? a : undefined;
+};
 
 /** キーボードショートカット(Chrome準拠)をメニューで定義する */
 function setupMenu() {
@@ -19,22 +27,22 @@ function setupMenu() {
     {
       label: 'ファイル',
       submenu: [
-        { label: '新しいタブ', accelerator: 'CmdOrCtrl+T', click: () => tabs()?.createTab() },
-        { label: '新しいウィンドウ', accelerator: 'CmdOrCtrl+N', click: () => browser.createWindow() },
+        { label: '新しいタブ', accelerator: accel('newTab'), click: () => tabs()?.createTab() },
+        { label: '新しいウィンドウ', accelerator: accel('newWindow'), click: () => browser.createWindow() },
         {
           label: '新しいシークレットウィンドウ',
-          accelerator: 'CmdOrCtrl+Shift+N',
+          accelerator: accel('newIncognito'),
           click: () => browser.createWindow({ incognito: true }),
         },
         { type: 'separator' },
-        { label: 'タブを閉じる', accelerator: 'CmdOrCtrl+W', click: () => tabs()?.closeActiveTab() },
+        { label: 'タブを閉じる', accelerator: accel('closeTab'), click: () => tabs()?.closeActiveTab() },
         {
           label: 'ウィンドウを閉じる',
-          accelerator: 'CmdOrCtrl+Shift+W',
+          accelerator: accel('closeWindow'),
           click: () => windows.focused()?.window.close(),
         },
         { type: 'separator' },
-        { label: '印刷', accelerator: 'CmdOrCtrl+P', click: () => tabs()?.activeWebContents()?.print() },
+        { label: '印刷', accelerator: accel('print'), click: () => tabs()?.activeWebContents()?.print() },
         { type: 'separator' },
         { label: '終了', role: 'quit' },
       ],
@@ -52,7 +60,7 @@ function setupMenu() {
         { type: 'separator' },
         {
           label: 'ページ内を検索',
-          accelerator: 'CmdOrCtrl+F',
+          accelerator: accel('find'),
           click: () => ui()?.send('ui:open-find'),
         },
       ],
@@ -60,42 +68,42 @@ function setupMenu() {
     {
       label: '表示',
       submenu: [
-        { label: '再読み込み', accelerator: 'CmdOrCtrl+R', click: () => tabs()?.reload() },
-        { label: '戻る', accelerator: 'Alt+Left', click: () => tabs()?.goBack() },
-        { label: '進む', accelerator: 'Alt+Right', click: () => tabs()?.goForward() },
+        { label: '再読み込み', accelerator: accel('reload'), click: () => tabs()?.reload() },
+        { label: '戻る', accelerator: accel('back'), click: () => tabs()?.goBack() },
+        { label: '進む', accelerator: accel('forward'), click: () => tabs()?.goForward() },
         { type: 'separator' },
-        { label: '拡大', accelerator: 'CmdOrCtrl+Plus', click: () => tabs()?.zoom(1) },
+        { label: '拡大', accelerator: accel('zoomIn'), click: () => tabs()?.zoom(1) },
         { label: '拡大 ', accelerator: 'CmdOrCtrl+=', visible: false, click: () => tabs()?.zoom(1) },
-        { label: '縮小', accelerator: 'CmdOrCtrl+-', click: () => tabs()?.zoom(-1) },
-        { label: '実際のサイズ', accelerator: 'CmdOrCtrl+0', click: () => tabs()?.zoom(0) },
+        { label: '縮小', accelerator: accel('zoomOut'), click: () => tabs()?.zoom(-1) },
+        { label: '実際のサイズ', accelerator: accel('zoomReset'), click: () => tabs()?.zoom(0) },
         { type: 'separator' },
         { label: '全画面表示', role: 'togglefullscreen' },
         {
           label: 'ブックマークバーを表示',
-          accelerator: 'CmdOrCtrl+Shift+B',
+          accelerator: accel('toggleBookmarkBar'),
           click: () => browser.toggleBookmarkBar(),
         },
         {
           label: 'サイドパネル',
-          accelerator: 'CmdOrCtrl+Shift+S',
+          accelerator: accel('toggleSidePanel'),
           click: () => windows.focused()?.sidePanel.toggle(),
         },
         {
           label: 'UIを隠す(集中モード)',
-          accelerator: 'CmdOrCtrl+Shift+H',
+          accelerator: accel('toggleCompact'),
           click: () => ui()?.send('ui:toggle-compact'),
         },
         { type: 'separator' },
         {
           label: 'アドレスバーにフォーカス',
-          accelerator: 'CmdOrCtrl+L',
+          accelerator: accel('focusAddressBar'),
           click: () => ui()?.send('ui:focus-address-bar'),
         },
-        { label: '次のタブ', accelerator: 'Ctrl+Tab', click: () => tabs()?.switchRelative(1) },
-        { label: '前のタブ', accelerator: 'Ctrl+Shift+Tab', click: () => tabs()?.switchRelative(-1) },
+        { label: '次のタブ', accelerator: accel('nextTab'), click: () => tabs()?.switchRelative(1) },
+        { label: '前のタブ', accelerator: accel('prevTab'), click: () => tabs()?.switchRelative(-1) },
         ...tabNumberShortcuts,
         { type: 'separator' },
-        { label: 'デベロッパーツール', accelerator: 'F12', click: () => tabs()?.toggleDevTools() },
+        { label: 'デベロッパーツール', accelerator: accel('devTools'), click: () => tabs()?.toggleDevTools() },
       ],
     },
     {
@@ -103,12 +111,12 @@ function setupMenu() {
       submenu: [
         {
           label: 'このページをブックマーク',
-          accelerator: 'CmdOrCtrl+D',
+          accelerator: accel('bookmarkPage'),
           click: () => tabs()?.toggleBookmarkForActiveTab(),
         },
         {
           label: 'ブックマークマネージャ',
-          accelerator: 'CmdOrCtrl+Shift+O',
+          accelerator: accel('bookmarkManager'),
           click: () => tabs()?.createTab('roopie://bookmarks'),
         },
       ],
@@ -116,8 +124,8 @@ function setupMenu() {
     {
       label: '履歴',
       submenu: [
-        { label: '履歴を表示', accelerator: 'CmdOrCtrl+H', click: () => tabs()?.createTab('roopie://history') },
-        { label: 'ダウンロード', accelerator: 'CmdOrCtrl+J', click: () => tabs()?.createTab('roopie://downloads') },
+        { label: '履歴を表示', accelerator: accel('history'), click: () => tabs()?.createTab('roopie://history') },
+        { label: 'ダウンロード', accelerator: accel('downloads'), click: () => tabs()?.createTab('roopie://downloads') },
       ],
     },
     {
@@ -125,7 +133,7 @@ function setupMenu() {
       submenu: [
         {
           label: 'プロファイルと設定',
-          accelerator: 'CmdOrCtrl+,',
+          accelerator: accel('settings'),
           click: () => tabs()?.createTab('roopie://settings'),
         },
       ],

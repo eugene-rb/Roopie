@@ -888,6 +888,170 @@ function renderToolbarItems(items) {
   });
 }
 
+// ---- ショートカット割り当て ----
+const shortcutsList = document.getElementById('shortcuts-list');
+const shortcutsResetAllBtn = document.getElementById('shortcuts-reset-all');
+let keybindingsState = [];
+let capturingId = null; // キー入力待ちのコマンドID
+let captureError = '';
+
+// keydownのe.code → Electronアクセラレータのキートークン(JP配列/IMEに影響されないようcodeを使う)
+const CODE_TO_KEY = {
+  ArrowLeft: 'Left', ArrowRight: 'Right', ArrowUp: 'Up', ArrowDown: 'Down',
+  Space: 'Space', Tab: 'Tab', Enter: 'Return', NumpadEnter: 'Return',
+  Delete: 'Delete', Insert: 'Insert', Home: 'Home', End: 'End',
+  PageUp: 'PageUp', PageDown: 'PageDown',
+  Minus: '-', Equal: '=', Comma: ',', Period: '.', Slash: '/',
+  Semicolon: ';', Quote: "'", BracketLeft: '[', BracketRight: ']',
+  Backslash: '\\', Backquote: '`', NumpadAdd: 'Plus', NumpadSubtract: '-',
+};
+function codeToAccelKey(code) {
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+  if (/^Digit[0-9]$/.test(code)) return code.slice(5);
+  if (/^Numpad[0-9]$/.test(code)) return code.slice(6);
+  if (/^F([1-9]|1[0-9]|2[0-4])$/.test(code)) return code;
+  return CODE_TO_KEY[code] || null;
+}
+
+// 保存形式(CmdOrCtrl+Plus など)を見やすい表記に
+function displayAccel(accel) {
+  if (!accel) return 'なし';
+  return accel
+    .replace(/CmdOrCtrl|CommandOrControl|Command|Cmd/gi, 'Ctrl')
+    .replace(/\bPlus\b/g, '+')
+    .replace(/\bReturn\b/g, 'Enter')
+    .replace(/\bLeft\b/g, '←').replace(/\bRight\b/g, '→')
+    .replace(/\bUp\b/g, '↑').replace(/\bDown\b/g, '↓');
+}
+
+function renderKeybindings(config) {
+  if (Array.isArray(config)) keybindingsState = config;
+  shortcutsList.textContent = '';
+  const byCat = new Map();
+  for (const cmd of keybindingsState) {
+    if (!byCat.has(cmd.category)) byCat.set(cmd.category, []);
+    byCat.get(cmd.category).push(cmd);
+  }
+  for (const [cat, cmds] of byCat) {
+    const head = document.createElement('div');
+    head.className = 'shortcuts-cat';
+    head.textContent = cat;
+    shortcutsList.appendChild(head);
+    for (const cmd of cmds) {
+      const row = document.createElement('div');
+      row.className = 'shortcut-row';
+
+      const label = document.createElement('span');
+      label.className = 'shortcut-label';
+      label.textContent = cmd.label;
+      row.appendChild(label);
+
+      if (capturingId === cmd.id && captureError) {
+        const err = document.createElement('span');
+        err.className = 'shortcut-error';
+        err.textContent = captureError;
+        row.appendChild(err);
+      }
+
+      const keyBtn = document.createElement('button');
+      keyBtn.className = 'shortcut-key' + (cmd.isDefault ? '' : ' custom');
+      if (capturingId === cmd.id) {
+        keyBtn.classList.add('capturing');
+        keyBtn.textContent = 'キーを押す…';
+      } else {
+        keyBtn.textContent = displayAccel(cmd.accelerator);
+      }
+      keyBtn.addEventListener('click', () => startCapture(cmd.id));
+      row.appendChild(keyBtn);
+
+      const resetBtn = document.createElement('button');
+      resetBtn.className = 'shortcut-reset';
+      resetBtn.title = '既定に戻す';
+      resetBtn.textContent = '↺';
+      resetBtn.disabled = cmd.isDefault;
+      resetBtn.addEventListener('click', async () => {
+        if (capturingId) stopCapture();
+        renderKeybindings(await window.roopieInternal.resetKeybinding(cmd.id));
+      });
+      row.appendChild(resetBtn);
+
+      shortcutsList.appendChild(row);
+    }
+  }
+}
+
+function startCapture(id) {
+  if (capturingId === id) return;
+  capturingId = id;
+  captureError = '';
+  renderKeybindings();
+  window.addEventListener('keydown', captureKeydown, true);
+}
+function stopCapture() {
+  capturingId = null;
+  captureError = '';
+  window.removeEventListener('keydown', captureKeydown, true);
+}
+
+async function captureKeydown(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  const id = capturingId;
+  if (!id) return;
+  // Escで取り消し
+  if (e.code === 'Escape') {
+    stopCapture();
+    renderKeybindings();
+    return;
+  }
+  // 修飾なしBackspaceで無効化(ショートカットなし)
+  if (e.code === 'Backspace' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+    keybindingsState = keybindingsState.map((c) => (c.id === id ? { ...c, accelerator: '', isDefault: false } : c));
+    stopCapture();
+    await window.roopieInternal.setKeybinding(id, '');
+    renderKeybindings();
+    return;
+  }
+  const key = codeToAccelKey(e.code);
+  if (!key) return; // 修飾キーのみ → まだ待つ
+  const mods = [];
+  if (e.ctrlKey || e.metaKey) mods.push('CmdOrCtrl');
+  if (e.altKey) mods.push('Alt');
+  if (e.shiftKey) mods.push('Shift');
+  const isFn = /^F([1-9]|1[0-9]|2[0-4])$/.test(key);
+  if (!mods.length && !isFn) {
+    captureError = '修飾キー(Ctrl / Alt / Shift)と組み合わせてください';
+    renderKeybindings();
+    return;
+  }
+  const accelerator = [...mods, key].join('+');
+  const r = await window.roopieInternal.setKeybinding(id, accelerator);
+  if (!r.ok) {
+    captureError =
+      r.reason === 'conflict'
+        ? `「${r.conflict.label}」と重複しています`
+        : r.reason === 'reserved'
+          ? 'この組み合わせは使用できません'
+          : '使用できないキーです';
+    renderKeybindings();
+    return;
+  }
+  keybindingsState = keybindingsState.map((c) => (c.id === id ? { ...c, accelerator, isDefault: false } : c));
+  stopCapture();
+  renderKeybindings();
+}
+
+shortcutsResetAllBtn.addEventListener('click', async () => {
+  if (capturingId) stopCapture();
+  renderKeybindings(await window.roopieInternal.resetAllKeybindings());
+});
+
+// メインからの配信(他ウィンドウでの変更・メニュー再構築後の同期)
+window.roopieInternal.onKeybindings((config) => {
+  if (capturingId) return; // 入力待ち中は上書きしない
+  renderKeybindings(config);
+});
+
 // ---- 拡張機能 ----
 const extensionIdEl = document.getElementById('extension-id');
 const extensionInstallBtn = document.getElementById('extension-install-btn');
@@ -1335,15 +1499,17 @@ document.addEventListener('visibilitychange', () => {
 });
 
 (async () => {
-  const [profileState, accounts, settings, gestureConfig, themeConfig, extensions, tor] = await Promise.all([
-    window.roopieInternal.listProfiles(),
-    window.roopieInternal.listGoogleAccounts(),
-    window.roopieInternal.getSettings(),
-    window.roopieInternal.getGestures(),
-    window.roopieInternal.getTheme(),
-    window.roopieInternal.listExtensions(),
-    window.roopieInternal.getTorStatus(),
-  ]);
+  const [profileState, accounts, settings, gestureConfig, themeConfig, extensions, tor, keybindings] =
+    await Promise.all([
+      window.roopieInternal.listProfiles(),
+      window.roopieInternal.listGoogleAccounts(),
+      window.roopieInternal.getSettings(),
+      window.roopieInternal.getGestures(),
+      window.roopieInternal.getTheme(),
+      window.roopieInternal.listExtensions(),
+      window.roopieInternal.getTorStatus(),
+      window.roopieInternal.getKeybindings(),
+    ]);
   if (tor) torStatus = tor;
   renderExtensions(extensions);
   state = { ...profileState, googleAccounts: accounts };
@@ -1358,6 +1524,7 @@ document.addEventListener('visibilitychange', () => {
   render();
   renderGestures();
   renderTheme();
+  renderKeybindings(keybindings);
   refreshSignedIn();
   refreshProfileThemes();
 

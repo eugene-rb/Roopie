@@ -18,6 +18,7 @@ const Passwords = require('./passwords');
 const Store = require('./store');
 const windows = require('./windows');
 const { defaultToolbarItems, normalizeToolbarItems } = require('./toolbar-items');
+const { Keybindings } = require('./keybindings');
 
 const PAGES_DIR = path.join(__dirname, '..', 'renderer', 'pages');
 const PRELOAD_DIR = path.join(__dirname, '..', 'preload');
@@ -131,6 +132,12 @@ browser.initData = () => {
     () => browser.sendProfiles()
   );
 
+  // ショートカット割り当てもブラウザ全体で共有(アプリメニューはグローバルなため)
+  browser.keybindings = new Keybindings(
+    new Store(path.join(app.getPath('userData'), 'keybindings.json'), {}),
+    () => browser.onKeybindingsChanged?.()
+  );
+
   browser.history = new History(store(profile, 'history', []));
   browser.bookmarks = new Bookmarks(store(profile, 'bookmarks', []), () => browser.sendBookmarks());
   browser.downloads = new Downloads(store(profile, 'downloads', []), () => browser.sendDownloads());
@@ -150,6 +157,7 @@ browser.flushAll = () => {
   browser.gestures?.store.flush();
   browser.theme?.flush();
   browser.passwords?.store.flush();
+  browser.keybindings?.store.flush();
   for (const ctx of windows.all()) {
     if (!ctx.incognito) ctx.sidePanel.store.flush();
   }
@@ -627,6 +635,11 @@ browser.sendSettings = () => {
   // 全ての利用側が正しい形の配列を受け取れるよう、配信前に正規化して保持する
   browser.settings.data.toolbarItems = normalizeToolbarItems(browser.settings.data.toolbarItems);
   broadcast('ui:settings', browser.settings.data);
+};
+
+browser.sendKeybindings = () => {
+  if (!browser.keybindings) return;
+  broadcast('keybindings:state', browser.keybindings.config());
 };
 
 browser.sendGestures = () => {

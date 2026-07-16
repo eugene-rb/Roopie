@@ -1544,6 +1544,83 @@ body {
   box-shadow: inset 0 -2px 0 var(--accent);
 }
 
+/* ショートカット割り当て */
+.shortcuts-list {
+  margin-top: 8px;
+}
+
+.shortcuts-cat {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin: 14px 0 4px;
+}
+
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 2px;
+}
+
+.shortcut-label {
+  flex: 1;
+  font-size: 13px;
+}
+
+.shortcut-error {
+  font-size: 11px;
+  color: #ff7a7a;
+}
+
+.shortcut-key {
+  min-width: 132px;
+  text-align: center;
+  font-size: 12px;
+  font-family: inherit;
+  padding: 5px 10px;
+  border-radius: 6px;
+  background: var(--card-hover);
+  border: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.shortcut-key:hover {
+  border-color: var(--text-dim);
+}
+
+.shortcut-key.custom {
+  border-color: var(--accent);
+}
+
+.shortcut-key.capturing {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.shortcut-reset {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.shortcut-reset:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.shortcut-reset:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
 .switch {
   position: relative;
   width: 38px;

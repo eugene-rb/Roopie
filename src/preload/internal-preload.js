@@ -61,6 +61,13 @@ if (location.protocol === 'roopie:') {
     setSetting: (key, value) => ipcRenderer.send('settings:set', key, value),
     pickDownloadFolder: () => ipcRenderer.invoke('fs:pick-folder'),
 
+    // ショートカット割り当て
+    getKeybindings: () => ipcRenderer.invoke('keybindings:get'),
+    setKeybinding: (id, accelerator) => ipcRenderer.invoke('keybindings:set', id, accelerator),
+    resetKeybinding: (id) => ipcRenderer.invoke('keybindings:reset', id),
+    resetAllKeybindings: () => ipcRenderer.invoke('keybindings:reset-all'),
+    onKeybindings: (cb) => ipcRenderer.on('keybindings:state', (_e, config) => cb(config)),
+
     // メディアプレイヤー
     onMediaState: (cb) => ipcRenderer.on('media:state', (_e, state) => cb(state)),
     mediaToggle: () => ipcRenderer.send('media:control', 'toggle'),

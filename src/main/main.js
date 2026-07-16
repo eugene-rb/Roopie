@@ -10,6 +10,11 @@ registerIpc();
 app.whenReady().then(() => {
   browser.initData();
   setupMenu();
+  // ショートカット割り当てが変わったらメニュー(アクセラレータ)を作り直し、設定画面へ配信する
+  browser.onKeybindingsChanged = () => {
+    setupMenu();
+    browser.sendKeybindings();
+  };
   browser.createWindow();
 });
 
