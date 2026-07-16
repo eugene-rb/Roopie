@@ -589,3 +589,16 @@ Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP
 - **サイドパネルに「リードリスト」セクション**(レールにbook型アイコン): 未読/既読の切替(既読は淡色)、未読のみフィルタ、既読を消す、項目クリックで現在タブに開いて既読化・中クリックで新タブ、個別削除。データはbookmarksセクションと同じくIPC取得(`listReadlist`)+`onReadlistState`ブロードキャストで同期
 - 変更/追加ファイル: `readlist.js`(新規)、`browser.js`(init/flush/setStore/sendReadlist/sendAllTo)、`ipc.js`(list/add-current/remove/set-read/clear-read)、`context-menu.js`(ページ・リンクに項目)、`internal-preload.js`(API)、`sidepanel.{html,js}`(セクション+レール)、`tailwind.css`(`.readlist-*`→build:css済み)
 - 検証: `readlist.js`を単体12ケース(add/重複バンプ/setRead/clearRead/onChange/空URL)確認。CDP(再起動)でレールアイコン・現在ページ追加・セクション描画(broadcast経由)・既読化・未読フィルタ・既読削除・後始末の往復を確認。ページ右クリックメニューはelectronスタブで「リーディングリストに追加」がページ分岐に構築され、クリックで`readlist.add(url,title,favicon)`が呼ばれることを確認(ネイティブメニューのクリック自体はCDP不能のため。合成DOMの`contextmenu`はネイティブcontext-menuを発火しない点にも注意)
+
+### 2026-07-16: メディアnext/prev + 画面分割の発展(ペイン間リサイズ・D&D分割)
+
+「今後の計画」の発展課題3つのうち2つ(画面分割の発展・メディアプレイヤーの発展)を実装。1機能=1コミット。
+
+- **メディアプレイヤーの前へ/次へ**: 過去ログの結論「MediaSession Action Handlerの都合上、汎用実装は不可」を再検証して覆した。**main worldで`navigator.mediaSession.setActionHandler`をラップ**し、サイトが登録した`nexttrack`/`previoustrack`ハンドラを`window.__roopieMediaActions`へ退避 → `media:control`の'next'/'prev'で退避ハンドラを呼ぶ方式(`webContents.executeJavaScript`はmain world実行=page CSPを無視するため、既存のtoggle/seek/pipと同じ経路で動く)。可否は`<html data-roopie-media>`属性に書き出し、isolated worldの`media-preload.js`が読んで`canNext`/`canPrev`をstateに載せ、登録があるサイトでのみボタン表示。フローティングプレイヤー+サイドパネル両方に対応
+  - **spike検証済み**: dom-ready注入したラッパが後続の登録を捕捉 → dataset反映 → 退避ハンドラ呼び出しで実際に発火、をElectronスタンドアロンで確認(PASS)。**注意**: ラッパ導入前に登録済みのハンドラは取れない(初回取りこぼし)が、YouTube/Spotify等はトラック切替のたび再登録するのでdom-ready注入で次の再登録から点灯する=best-effort。`sendInputEvent`のMediaNextTrackはbrowserプロセス処理で合成キーが届かないため不採用。**実YouTube等での最終確認はユーザー側**
+  - 変更: `tab-manager.js`(MEDIA_HOOK注入をdom-readyで)、`media-preload.js`(canNext/canPrev)、`ipc.js`(next/prev)、`internal-preload.js`/`mediaplayer.{html,js}`/`sidepanel.js`/`tailwind.css`
+- **画面分割のペイン間リサイズ**: 2ペインの隙間(8px)に透明な仕切りView`roopie://splitdivider`を重ね、ドラッグの物理移動量(movementX/Y、media playerと同じView再配置に強い方式)を`splitRatio`へ変換して`layout()`し直す。比率は0.15〜0.85でクランプ、縦分割では縦ドラッグに追従。ヒット領域はSPLIT_DIVIDER_HIT=16px(見た目のグリップより広め)。新規タブ生成時に仕切り/プレイヤー/メニューの重なり順を保つ`raiseTopViews()`を追加(従来`raiseOverlay`だけだったのを拡張)
+  - **検証済み**: 実WebContentsViewでlayoutを走らせるハーネスで、分割50/50・仕切り位置・+150pxドラッグでのペイン比例変化・上限クランプ・縦分割の軸切替・解除を確認(全PASS)。実マウスでのドラッグ感の最終確認はユーザー側
+- **D&D分割**: タブをページ領域へドラッグ→オーバーレイ(`roopie://menu`)に上下左右のドロップゾーン+着地プレビューを表示。ドロップした辺で分割(left/topはドラッグしたタブを主ペイン=先頭に、`dropSplit()`でアクティブ昇格→相方を並べる)。中央はゾーンなし=従来どおりタブバー下への切り離しに回す
+  - **競合対策**(advisor指摘): 分割ゾーンへのドロップ(`split:drop`、オーバーレイView発)と切り離し判定(`tabs:drag-end`、メインレンダラー発)は別Viewから届き到達順が不定。→ **切り離し/分割の確定をメインに一本化し、drag-endを40ms遅延**させて`pendingSplitZone`が届くのを待ってから分岐(先に切り離してしまう競合を防ぐ)。切り離しも従来のレンダラー直呼びからメイン経由に変更
+  - **検証済み**: `dropSplit`の4ゾーン(主ペイン/方向/自己分割拒否)を実Viewで確認。**実アプリCDPで通し検証**(Node24のglobal WebSocket): drag-startでゾーン表示→`splitDrop('right')`→drag-endで分割成立(splitTabId=ドラッグタブ, row)、drag-end後ゾーン非表示、さらに切り離し経路(belowBar→新ウィンドウ+元タブ減)も回帰確認。全PASS。**OSレベルの実ドラッグ配送(実際にマウスでタブをページへ落とす)だけはCDP不能=ユーザー最終確認**(既存のD&D/ジェスチャーと同じ扱い)
