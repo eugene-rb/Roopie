@@ -1925,6 +1925,9 @@ body {
 }
 
 .section-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 32px;
   height: 32px;
   flex-shrink: 0;
@@ -1955,7 +1958,9 @@ body {
 #web-pin-list {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 4px;
+  width: 100%;
 }
 
 .section {
@@ -2167,8 +2172,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   border: none;
   border-radius: 8px;
   background: transparent;
