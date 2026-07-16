@@ -356,9 +356,9 @@ let sidePanelPosition = 'right';
 window.roopie.onSettings((settings) => {
   bookmarkBarEl.classList.toggle('hidden', !settings.showBookmarkBar);
   tabBarPosition = settings.tabBarPosition || 'top';
+  // 縦横のレイアウト差はCSS(.vertical-tabs と #tab-bar-head)だけで完結する
   document.body.classList.toggle('vertical-tabs', tabBarPosition === 'left');
   $('tab-bar-position-btn').classList.toggle('active', tabBarPosition === 'left');
-  applyTabBarLayout();
   sidePanelPosition = settings.sidePanelPosition === 'left' ? 'left' : 'right';
   applySidePanelButtonPosition();
   applyToolbarItems(settings.toolbarItems);
@@ -402,23 +402,6 @@ $('toolbar-utility').addEventListener('contextmenu', (e) => {
   e.preventDefault();
   window.roopie.toolbarContextMenu();
 });
-
-// 縦タブ時は上部ストリップ(#drag-strip)が空きスペースになるため、
-// タブ切替ボタン+ワークスペースピルをそちらへ移して余白をなくす
-// (ネイティブのウィンドウ操作ボタン自体はOS描画のため移動できない。周りを埋めるだけ)
-function applyTabBarLayout() {
-  const dragStrip = $('drag-strip');
-  const tabBar = $('tab-bar');
-  const posBtn = $('tab-bar-position-btn');
-  const workspaceBtn = $('workspace-btn');
-  if (tabBarPosition === 'left') {
-    dragStrip.appendChild(posBtn);
-    dragStrip.appendChild(workspaceBtn);
-  } else {
-    tabBar.insertBefore(posBtn, tabBar.firstChild);
-    tabBar.insertBefore(workspaceBtn, posBtn.nextSibling);
-  }
-}
 
 $('tab-bar-position-btn').addEventListener('click', () => {
   window.roopie.setSetting('tabBarPosition', tabBarPosition === 'left' ? 'top' : 'left');

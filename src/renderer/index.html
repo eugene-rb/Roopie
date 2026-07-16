@@ -9,21 +9,21 @@
 </head>
 <body class="chrome-body">
   <div id="chrome">
-    <!-- 縦タブ表示のときだけ使う、ウィンドウ移動用の上部ストリップ(タブバーが左に移るため) -->
-    <div id="drag-strip"></div>
-
     <!-- タブバー(通常は上部でタイトルバーを兼ねる。縦タブ表示では左側の固定レールになる) -->
     <div id="tab-bar">
-      <button id="tab-bar-position-btn" class="icon-btn" title="タブバーの位置を切り替え">
-        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="6" height="16" rx="1.5"/><rect x="11" y="4" width="10" height="16" rx="1.5"/></svg>
-      </button>
-      <!-- Edgeの「ワークスペース」に相当するプロファイル切り替え。プロファイル色で着色したピル -->
-      <button id="workspace-btn" title="プロファイルを切り替え">
-        <span id="workspace-avatar" class="avatar"></span>
-        <span id="workspace-name"></span>
-        <span id="workspace-tor" class="hidden" title="Torで接続中">🧅</span>
-        <svg class="workspace-chevron" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
-      </button>
+      <!-- 横タブでは透過(display:contents)、縦タブではレール最上部の1行になるヘッダー -->
+      <div id="tab-bar-head">
+        <button id="tab-bar-position-btn" class="icon-btn" title="タブバーの位置を切り替え">
+          <svg viewBox="0 0 24 24"><rect x="3" y="4" width="6" height="16" rx="1.5"/><rect x="11" y="4" width="10" height="16" rx="1.5"/></svg>
+        </button>
+        <!-- Edgeの「ワークスペース」に相当するプロファイル切り替え。プロファイル色で着色したピル -->
+        <button id="workspace-btn" title="プロファイルを切り替え">
+          <span id="workspace-avatar" class="avatar"></span>
+          <span id="workspace-name"></span>
+          <span id="workspace-tor" class="hidden" title="Torで接続中">🧅</span>
+          <svg class="workspace-chevron" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+      </div>
       <div id="tabs"></div>
       <button id="new-tab-btn" class="icon-btn" title="新しいタブ (Ctrl+T)">
         <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>

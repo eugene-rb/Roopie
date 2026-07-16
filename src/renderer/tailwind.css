@@ -405,30 +405,18 @@ body {
    縦タブ表示(タブバーを左側の固定レールにする)
    ========================================================= */
 
-/* 上部表示(既定)では非表示。ウィンドウ移動用の役目はタブバー自身が持つ。
-   縦タブ時は#tab-barがposition:fixedで文書フローから抜けるため、
-   #chromeの高さはdrag-strip + toolbar + bookmark-bar等だけになる(タブバー分は含まない) */
-#drag-strip {
-  display: none;
+/* タブバー先頭のヘッダー(位置切替ボタン+ワークスペースピル)。
+   横タブでは透過(display:contents)し、従来どおりタブバーの行に直接並ぶ */
+#tab-bar-head {
+  display: contents;
 }
 
-.chrome-body.vertical-tabs #drag-strip {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  height: 40px;
-  padding: 5px 8px;
-  flex-shrink: 0;
-  background: var(--bg);
-  -webkit-app-region: drag;
-  /* 右上のウィンドウ操作ボタン(OSオーバーレイ)と重ならないように空ける */
-  padding-right: calc(100vw - env(titlebar-area-width, 100vw) + 8px);
-  box-sizing: border-box;
-}
-
+/* 縦タブ時は#tab-barがposition:fixedで文書フローから抜けるため、
+   #chromeの高さはtoolbar + bookmark-bar等だけになる(タブバー分は含まない)。
+   上部にデッドスペースを作らないよう、専用ストリップは置かずツールバーがタイトルバーを兼ねる */
 .chrome-body.vertical-tabs #tab-bar {
   position: fixed;
-  top: 40px;
+  top: 0;
   left: 0;
   bottom: 0;
   width: 220px;
@@ -436,6 +424,34 @@ body {
   flex-direction: column;
   align-items: stretch;
   padding: 8px 6px;
+  -webkit-app-region: no-drag;
+}
+
+/* レール最上部の1行(位置切替+ワークスペースピル)。空き部分でウィンドウを移動できる */
+.chrome-body.vertical-tabs #tab-bar-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-bottom: 4px;
+  -webkit-app-region: drag;
+}
+
+.chrome-body.vertical-tabs #workspace-btn {
+  flex: 1;
+  min-width: 0;
+  margin-right: 0;
+}
+
+/* 縦タブ時はツールバーがタイトルバーを兼ねる(空き領域のドラッグでウィンドウ移動、
+   右端はOSのウィンドウ操作ボタンのオーバーレイと重ならないよう空ける) */
+.chrome-body.vertical-tabs #toolbar {
+  -webkit-app-region: drag;
+  padding-right: calc(100vw - env(titlebar-area-width, 100vw) + 8px);
+  box-sizing: border-box;
+}
+
+.chrome-body.vertical-tabs #toolbar > * {
   -webkit-app-region: no-drag;
 }
 

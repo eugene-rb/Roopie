@@ -605,3 +605,11 @@
 - **スタートのショートカット**(newtab): アイコン既定を**リンク先のfavicon**に変更(訪問済みならその favicon、なければ `google.com/s2/favicons`、失敗時は頭文字)。編集モーダルの絵文字テキスト入力を「プレビュー+アイコンを変更」ボタン(共通ピッカー)に置き換え。画像アイコン対応のため `bookmarks.js` の `normalizeIcon` をimage型(data URI・400KB上限)対応に拡張。アップロード画像はタイル全面表示(.custom-image)
 - **サイドバー右クリックの修正**: ピン留めWebパネルアイコンの contextmenu が親レールのメニューにも伝播して2つのメニューが競合していた(stopPropagation追加)。ピン留めアイコンのメニューに「ウェブパネルを追加...」も追加(追加/削除/編集がアイコン右クリックで完結)
 - CSS: `.icon-picker-backdrop`(中央モーダル版, z70)追加、`.crop-backdrop` z60→80(ショートカットモーダルz60より手前に)。旧web-editアイコンUI(.emoji-grid/.emoji-btn/.modal-btn-row)と `.web-add` を削除。newtab.cssに `.shortcut-icon-row`/`.shortcut-icon-preview`/`.custom-image` を追加
+
+## 2026-07-17(4): 縦タブ時の上部デッドスペースを解消(ユーザー指示)
+
+- 縦タブ専用だった上部の `#drag-strip`(40pxのウィンドウ移動用ストリップ)を廃止。縦タブ時のクローム高さが 40px 減り、ページ領域が広がる
+- 代わりに縦タブ時は**ツールバーがタイトルバーを兼ねる**: `-webkit-app-region: drag` + 直下の子要素は no-drag、右端はOSウィンドウ操作ボタンのオーバーレイ分を `env(titlebar-area-width)` で空ける
+- タブ位置切替ボタン+ワークスペースピルは新設の `#tab-bar-head` に格納。横タブでは `display: contents` で従来どおりタブバーの行に並び、縦タブではレール最上部の1行(ドラッグ領域)になる。ピルはレール幅いっぱいに伸長
+- レールは `top: 40px` → `top: 0`(全高)
+- renderer.js の `applyTabBarLayout()`(縦横切替時にDOMを移動していた処理)を削除。縦横差はCSSのみで完結
