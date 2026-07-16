@@ -59,11 +59,8 @@ function linkItem({ favicon, title, url }) {
   return item;
 }
 
-function emptyNote(text) {
-  const el = document.createElement('div');
-  el.className = 'empty-note';
-  el.textContent = text;
-  return el;
+function emptyNote(text, icon = 'inbox') {
+  return window.roopieEmptyState(text, { variant: 'note', icon });
 }
 
 // Webパネルのアイコン。カスタムアイコン(絵文字/画像)があればそれ、なければfavicon
@@ -123,7 +120,7 @@ async function refreshBookmarks() {
 function renderBookmarks(items) {
   bookmarkListEl.textContent = '';
   if (!items.length) {
-    bookmarkListEl.appendChild(emptyNote('ブックマークはまだありません(Ctrl+D で追加)'));
+    bookmarkListEl.appendChild(emptyNote('ブックマークはまだありません(Ctrl+D で追加)', 'bookmark'));
     return;
   }
   for (const bookmark of items) {
@@ -140,7 +137,7 @@ async function refreshHistory() {
   const items = await window.roopieInternal.listHistory(historySearchEl.value);
   historyListEl.textContent = '';
   if (!items.length) {
-    historyListEl.appendChild(emptyNote('履歴はありません'));
+    historyListEl.appendChild(emptyNote('履歴はありません', 'clock'));
     return;
   }
   for (const entry of items.slice(0, 100)) {
@@ -170,7 +167,8 @@ function renderReadlist() {
       emptyNote(
         readlistUnreadOnly
           ? '未読はありません'
-          : 'まだありません(ページを右クリック→「リーディングリストに追加」)'
+          : 'まだありません(ページを右クリック→「リーディングリストに追加」)',
+        'book'
       )
     );
     return;
@@ -269,7 +267,7 @@ webUrlEl.addEventListener('keydown', (e) => {
 function renderWebList() {
   webListEl.textContent = '';
   if (!state.webPanels.length) {
-    webListEl.appendChild(emptyNote('まだ登録されていません'));
+    webListEl.appendChild(emptyNote('まだ登録されていません', 'globe'));
     return;
   }
   for (const panel of state.webPanels) {
@@ -525,7 +523,7 @@ function renderNowPlaying() {
 
   nowPlayingBody.textContent = '';
   if (!mediaState) {
-    nowPlayingBody.appendChild(emptyNote('再生中のメディアはありません'));
+    nowPlayingBody.appendChild(emptyNote('再生中のメディアはありません', 'music'));
     return;
   }
 

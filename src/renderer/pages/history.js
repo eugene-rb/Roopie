@@ -26,10 +26,11 @@ async function render() {
   listEl.textContent = '';
 
   if (entries.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'empty';
-    empty.textContent = searchEl.value ? '一致する履歴はありません' : '履歴はまだありません';
-    listEl.appendChild(empty);
+    listEl.appendChild(
+      searchEl.value
+        ? window.roopieEmptyState('一致する履歴はありません', { icon: 'search' })
+        : window.roopieEmptyState('履歴はまだありません', { icon: 'clock' })
+    );
     return;
   }
 

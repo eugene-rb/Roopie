@@ -20,10 +20,7 @@ function render(items) {
   listEl.textContent = '';
 
   if (items.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'empty';
-    empty.textContent = 'ダウンロードしたファイルはありません';
-    listEl.appendChild(empty);
+    listEl.appendChild(window.roopieEmptyState('ダウンロードしたファイルはありません', { icon: 'download' }));
     return;
   }
 

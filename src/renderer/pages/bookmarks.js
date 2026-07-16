@@ -20,12 +20,11 @@ function render() {
   listEl.textContent = '';
 
   if (items.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'empty';
-    empty.textContent = query
-      ? '一致するブックマークはありません'
-      : 'ブックマークはまだありません(Ctrl+D で追加できます)';
-    listEl.appendChild(empty);
+    listEl.appendChild(
+      query
+        ? window.roopieEmptyState('一致するブックマークはありません', { icon: 'search' })
+        : window.roopieEmptyState('ブックマークはまだありません(Ctrl+D で追加できます)', { icon: 'bookmark' })
+    );
     return;
   }
 
