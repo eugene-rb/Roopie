@@ -105,10 +105,7 @@ if (location.protocol === 'roopie:') {
     removeWebPanel: (id) => ipcRenderer.send('sidepanel:remove-web', id),
     webPanelContextMenu: (id) => ipcRenderer.send('sidepanel:web-context-menu', id),
     setWebPanel: (id, patch) => ipcRenderer.send('sidepanel:set-web', id, patch),
-    // AIアシスタント(Copilot風)
-    listAiProviders: () => ipcRenderer.invoke('sidepanel:ai-providers'),
-    addAiPanel: (providerId) => ipcRenderer.send('sidepanel:add-ai', providerId),
-    askPage: (opts) => ipcRenderer.invoke('sidepanel:ask-page', opts),
+    promptAddWebPanel: () => ipcRenderer.send('sidepanel:prompt-add-web'),
     onEditWebPanel: (cb) => ipcRenderer.on('sidepanel:edit-web', (_e, payload) => cb(payload)),
     onAddWebPrompt: (cb) => ipcRenderer.on('sidepanel:add-web-prompt', () => cb()),
     openWebPanel: (id) => ipcRenderer.send('sidepanel:open-web', id),

@@ -4,8 +4,26 @@ const { app, BrowserWindow } = require('electron');
 const browser = require('./browser');
 const { registerIpc } = require('./ipc');
 const { setupMenu } = require('./menu');
+const { setupVerifyLog } = require('./verify-log');
+
+// 二重起動を防ぐ(2つ目のインスタンスはプロファイルのキャッシュ等を壊すため)。
+// 既に起動中なら、そのインスタンスのウィンドウを前面に出して終了する。
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    const window = BrowserWindow.getAllWindows()[0];
+    if (window) {
+      if (window.isMinimized()) window.restore();
+      window.focus();
+    } else {
+      browser.createWindow();
+    }
+  });
+}
 
 registerIpc();
+setupVerifyLog();
 
 app.whenReady().then(() => {
   browser.initData();

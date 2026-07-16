@@ -6,6 +6,7 @@
   "scripts": {
     "start": "electron .",
     "start:debug": "electron . --remote-debugging-port=9222",
+    "start:verify": "set ROOPIE_LOG_CONSOLE=1&& electron .",
     "build:css": "tailwindcss -i src/renderer/tailwind.css -o src/renderer/pages/app.css --minify",
     "watch:css": "tailwindcss -i src/renderer/tailwind.css -o src/renderer/pages/app.css --watch"
   },

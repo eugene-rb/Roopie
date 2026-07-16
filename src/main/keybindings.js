@@ -19,7 +19,7 @@ const COMMANDS = [
   { id: 'zoomOut', label: '縮小', category: '表示', default: 'CmdOrCtrl+-' },
   { id: 'zoomReset', label: '実際のサイズ', category: '表示', default: 'CmdOrCtrl+0' },
   { id: 'toggleBookmarkBar', label: 'ブックマークバーを表示', category: '表示', default: 'CmdOrCtrl+Shift+B' },
-  { id: 'toggleSidePanel', label: 'サイドパネル', category: '表示', default: 'CmdOrCtrl+Shift+S' },
+  { id: 'toggleSidePanel', label: 'サイドパネル', category: '表示', default: 'F4' }, // Vivaldiのパネルと同じ
   { id: 'toggleCompact', label: 'UIを隠す(集中モード)', category: '表示', default: 'CmdOrCtrl+Shift+H' },
   { id: 'focusAddressBar', label: 'アドレスバーにフォーカス', category: '表示', default: 'CmdOrCtrl+L' },
   { id: 'nextTab', label: '次のタブ', category: '表示', default: 'Ctrl+Tab' },

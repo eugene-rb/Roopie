@@ -114,19 +114,23 @@ class Tor extends EventEmitter {
     const dataDir = path.join(app.getPath('userData'), 'tor', 'data');
     fs.mkdirSync(dataDir, { recursive: true });
 
-    this.process = spawn(
-      torExe,
-      ['--SocksPort', String(OWN_SOCKS_PORT), '--DataDirectory', dataDir],
-      { stdio: 'ignore', windowsHide: true }
-    );
-    this.process.on('exit', () => {
-      this.process = null;
-      // 実行中に落ちたらエラー状態にする(利用中のプロファイルは直接接続に戻す判断は呼び出し側)
-      if (this.status === 'ready') this.setStatus('error', { error: 'Torプロセスが終了しました' });
-    });
-    this.process.on('error', (err) => {
-      this.process = null;
-      throw err;
+    return new Promise((resolve, reject) => {
+      this.process = spawn(
+        torExe,
+        ['--SocksPort', String(OWN_SOCKS_PORT), '--DataDirectory', dataDir],
+        { stdio: 'ignore', windowsHide: true }
+      );
+      this.process.once('spawn', resolve);
+      // イベントハンドラ内でthrowするとuncaughtExceptionでアプリごと落ちるため、rejectで返す
+      this.process.once('error', (err) => {
+        this.process = null;
+        reject(new Error(`Torを起動できません: ${err.message}`));
+      });
+      this.process.on('exit', () => {
+        this.process = null;
+        // 実行中に落ちたらエラー状態にする(利用中のプロファイルは直接接続に戻す判断は呼び出し側)
+        if (this.status === 'ready') this.setStatus('error', { error: 'Torプロセスが終了しました' });
+      });
     });
   }
 

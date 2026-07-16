@@ -568,3 +568,23 @@
 - 変更/追加: `ai-providers.js`(新規)、`side-panel.js`(addAiPanel/askAboutPage/composePrompt/injectComposerJs/AI_BAR_HEIGHT+layoutのwebViewオフセット)、`tab-manager.js`(captureActivePageContext)、`ipc.js`(ai-providers/add-ai/ask-page)、`internal-preload.js`(API)、`sidepanel.{html,js}`(レール/セクション/Copilotバー)、`tailwind.css`(`.ai-*`→build:css済み)
 - 検証: **注入機構をspike**(ローカルHTML): textarea経路/contenteditable経路(execCommandでinputイベント発火・挿入)/ページ取得(selection||innerText)を確認(全PASS)。**通し検証**(実SidePanel+実TabManager、file://ページ): captureActivePageContext本文取得→addAiPanelでai:trueエントリ→askAboutPageでtextareaコンポーザーに合成プロンプト(タイトル/URL/本文/指示)注入→質問モード→コンポーザー無しでcopiedフォールバック、を確認(全PASS)。**実アプリCDP**: プロバイダ5枚描画・レールAIアイコン・AIパネル追加でCopilotバー表示+ヘッダー反映・後始末を確認。**実AIサイトでの実注入/着弾はログイン必須のためユーザー最終確認**(YouTube等と同じ扱い)
 - **今後の拡張案**: 右クリック「選択/ページをAIに質問」(要:デフォルトAIパネルの決定)、URLクエリprefill(Perplexity `?q=`等でnew questionを堅牢化)、プロバイダ別のコンポーザーセレクタ
+
+## 2026-07-17: 製品化に向けた安定化 + サイドバーのAI機能廃止・Vivaldi準拠化
+
+### エラー排除(製品レベル対応)
+
+- **単一インスタンスロック追加**(`main.js`): `app.requestSingleInstanceLock()`。従来は2つ目のインスタンスが同じuserDataを掴み、`Unable to move the cache: アクセスが拒否されました` / `Gpu Cache Creation failed` / `Failed to delete the database: Database IO error` が多発していた。2つ目の起動は既存ウィンドウをフォーカスして終了する
+- **CSP違反の修正**(`index.html`): 拡張機能アイコン `<browser-action-list>`(electron-chrome-extensions)がインラインstyleを使うため `style-src 'self' 'unsafe-inline'` に変更(メインUIのみ。他の内部ページは 'self' のまま)
+- **レール右クリックメニューのクラッシュ修正**(`toolbar-context-menu.js`): `menu.append()` に生オブジェクトを渡していて `TypeError: Invalid item`(uncaughtException)。`new MenuItem(...)` に修正。※この右クリックメニューは実装以来一度も動いていなかった
+- **Tor起動失敗時のクラッシュ修正**(`tor.js`): `spawn` の `error` イベントハンドラ内で `throw` するとuncaughtExceptionでアプリごと落ちる。Promiseの `reject` に変更(`spawnTor` がPromiseを返す形に)
+- **検証手段の整備**: `npm run start:verify`(`ROOPIE_LOG_CONSOLE=1`)で全レンダラーの console-message / render-process-gone / preload-error / did-fail-load とメインの unhandledRejection / uncaughtException をターミナルへ出力(`src/main/verify-log.js`、製品動作には無影響)。`scripts/verify-console.js`(CDP接続の収集スクリプト)も追加したが、**Electron 43ではCDPのHTTP/WSエンドポイントが応答しない現象を確認**(原因未特定)。当面は start:verify を使う
+
+### サイドバーのAI機能廃止 + Vivaldi準拠化(ユーザー指示)
+
+- **AI機能の削除**: `ai-providers.js` 削除、`side-panel.js`(addAiPanel/activeAiEntry/askAboutPage/composePrompt/injectComposerJs/AI_BAR_HEIGHT)、`ipc.js`(3チャンネル)、`internal-preload.js`(3API)、`sidepanel.{html,js}`(Copilotバー/AIセクション/レールアイコン)、`tailwind.css`(.ai-*)、`tab-manager.js`(captureActivePageContext)。保存済みの ai:true Webパネルは `normalizeStore()` で読み込み時に除去(マイグレーション)
+- **Vivaldi準拠**:
+  - レールの並びをVivaldiのパネルと同じに: ブックマーク→**ダウンロード(新設)**→履歴→メモ→リーディングリスト→Webパネル管理→ピン留めWebパネル→**「+」ボタン(新設。ウェブパネル追加)**
+  - **ダウンロードパネル新設**(`sidepanel.{html,js}`): 進行中(%表示・中止)/完了(クリックで開く・フォルダ)/一時停止/中断/キャンセルを表示。`downloads:state` 購読でリアルタイム更新
+  - **「+」ボタン**: `sidepanel:prompt-add-web` IPC(新設)→ `promptAddWeb()`(パネルを広げてURL入力モーダル)
+  - **サイドパネルのショートカット既定を F4 に変更**(旧: Ctrl+Shift+S。keybindingsで変更可能なのは従来どおり)
+  - 呼称を「リードリスト」→「リーディングリスト」に統一

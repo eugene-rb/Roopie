@@ -13,21 +13,18 @@ const nowPlayingBody = $('now-playing-body');
 const panelHeaderTitle = $('panel-header-title');
 const webReloadBtn = $('web-reload');
 const webOpenTabBtn = $('web-open-tab');
-const aiBar = $('ai-bar');
-const aiQuestion = $('ai-question');
-const aiStatus = $('ai-status');
-const aiProviderList = $('ai-provider-list');
+const downloadsListEl = $('downloads-list');
 
 let state = { open: true, webPanels: [], activeSection: null, activeWebId: null, notes: '' };
 
-// パネル見出し・タブのtitle属性と揃えたラベル(Edge/Vivaldiのパネルヘッダー相当)
+// パネル見出し・タブのtitle属性と揃えたラベル(Vivaldiのパネルヘッダー相当)
 const SECTION_LABELS = {
   bookmarks: 'ブックマーク',
+  downloads: 'ダウンロード',
   history: '履歴',
   notes: 'メモ',
-  readlist: 'リードリスト',
-  web: 'Webパネルを追加・管理',
-  ai: 'AIアシスタント',
+  readlist: 'リーディングリスト',
+  web: 'Webパネルを管理',
   'now-playing': '再生中',
 };
 
@@ -89,6 +86,9 @@ function webIconEl(panel) {
 for (const btn of document.querySelectorAll('.section-tab[data-section]')) {
   btn.addEventListener('click', () => window.roopieInternal.openSidePanelSection(btn.dataset.section));
 }
+
+// レール最下部の「+」: ウェブパネルの追加(Vivaldiと同じ)
+$('web-add-tab').addEventListener('click', () => window.roopieInternal.promptAddWebPanel());
 
 // 何もないところを右クリック: 左右切替/アイコンの追加/非表示のメニュー
 railEl.addEventListener('contextmenu', (e) => {
@@ -269,55 +269,83 @@ webUrlEl.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') addWebPanel();
 });
 
-// ---- AIアシスタント(Copilot風) ----
-// プロバイダ一覧はプリセット(固定)なので初回に1度だけ描画する
-(async () => {
-  const providers = await window.roopieInternal.listAiProviders();
-  aiProviderList.textContent = '';
-  for (const p of providers ?? []) {
-    const btn = document.createElement('button');
-    btn.className = 'ai-provider';
-    const dot = document.createElement('span');
-    dot.className = 'ai-provider-dot';
-    dot.textContent = (p.name[0] || 'A').toUpperCase();
+// ---- ダウンロード(Vivaldiのダウンロードパネル相当) ----
+let downloadItems = [];
+
+function formatBytes(n) {
+  if (!Number.isFinite(n) || n <= 0) return '';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let i = 0;
+  while (n >= 1024 && i < units.length - 1) {
+    n /= 1024;
+    i++;
+  }
+  return `${n < 10 && i > 0 ? n.toFixed(1) : Math.round(n)} ${units[i]}`;
+}
+
+function renderDownloads() {
+  downloadsListEl.textContent = '';
+  if (!downloadItems.length) {
+    downloadsListEl.appendChild(emptyNote('ダウンロードはありません', 'download'));
+    return;
+  }
+  for (const entry of downloadItems) {
+    const item = document.createElement('div');
+    item.className = 'panel-item';
+    item.title = entry.filename;
+
     const label = document.createElement('span');
     label.className = 'label';
-    label.textContent = p.name;
-    btn.append(dot, label);
-    btn.addEventListener('click', () => window.roopieInternal.addAiPanel(p.id));
-    aiProviderList.appendChild(btn);
-  }
-})();
+    label.textContent = entry.filename;
+    const sub = document.createElement('span');
+    sub.className = 'sub';
+    if (entry.state === 'progressing') {
+      const percent = entry.totalBytes > 0 ? Math.round((entry.receivedBytes / entry.totalBytes) * 100) : null;
+      sub.textContent = percent === null ? 'ダウンロード中...' : `${percent}%(${formatBytes(entry.receivedBytes)} / ${formatBytes(entry.totalBytes)})`;
+    } else if (entry.state === 'paused') {
+      sub.textContent = '一時停止中';
+    } else if (entry.state === 'completed') {
+      sub.textContent = formatBytes(entry.totalBytes) || '完了';
+    } else if (entry.state === 'cancelled') {
+      sub.textContent = 'キャンセル済み';
+    } else {
+      sub.textContent = '中断されました';
+    }
+    label.appendChild(sub);
+    item.appendChild(label);
 
-let aiStatusTimer = null;
-function showAiStatus(text) {
-  aiStatus.textContent = text;
-  aiStatus.classList.remove('hidden');
-  clearTimeout(aiStatusTimer);
-  aiStatusTimer = setTimeout(() => aiStatus.classList.add('hidden'), 2600);
+    if (entry.state === 'completed') {
+      const folderBtn = document.createElement('button');
+      folderBtn.className = 'item-btn';
+      folderBtn.textContent = 'フォルダ';
+      folderBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        window.roopieInternal.showDownloadInFolder(entry.id);
+      });
+      item.appendChild(folderBtn);
+      item.addEventListener('click', () => window.roopieInternal.openDownload(entry.id));
+    } else if (entry.state === 'progressing') {
+      const cancelBtn = document.createElement('button');
+      cancelBtn.className = 'item-btn';
+      cancelBtn.textContent = '中止';
+      cancelBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        window.roopieInternal.cancelDownload(entry.id);
+      });
+      item.appendChild(cancelBtn);
+    }
+    downloadsListEl.appendChild(item);
+  }
 }
 
-async function askPage(opts) {
-  const result = await window.roopieInternal.askPage(opts);
-  if (result?.ok) {
-    showAiStatus('ページを添付しました');
-  } else if (result?.copied) {
-    showAiStatus('入力欄が見つからないためコピーしました');
-  } else {
-    showAiStatus('送信できませんでした');
-  }
+async function refreshDownloads() {
+  downloadItems = await window.roopieInternal.listDownloads();
+  renderDownloads();
 }
 
-$('ai-summarize').addEventListener('click', () => askPage({ mode: 'summarize' }));
-$('ai-send').addEventListener('click', () => {
-  askPage({ mode: 'ask', question: aiQuestion.value });
-  aiQuestion.value = '';
-});
-aiQuestion.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
-    askPage({ mode: 'ask', question: aiQuestion.value });
-    aiQuestion.value = '';
-  }
+window.roopieInternal.onDownloadsState(({ items }) => {
+  downloadItems = items;
+  if (state.activeSection === 'downloads') renderDownloads();
 });
 
 function renderWebList() {
@@ -725,12 +753,10 @@ function render() {
   panelHeaderTitle.textContent = activeWeb ? activeWeb.title || activeWeb.url : SECTION_LABELS[state.activeSection] ?? '';
   webReloadBtn.classList.toggle('hidden', !activeWeb);
   webOpenTabBtn.classList.toggle('hidden', !activeWeb);
-  // AIアシスタント(ai:true)のパネル表示中だけCopilotバーを出す
-  aiBar.classList.toggle('hidden', !activeWeb?.ai);
-  if (!activeWeb?.ai) aiStatus.classList.add('hidden');
 
   if (state.activeSection === 'history') refreshHistory();
   if (state.activeSection === 'bookmarks') refreshBookmarks();
+  if (state.activeSection === 'downloads') refreshDownloads();
 
   renderWebList();
   renderPinnedWebPanels();

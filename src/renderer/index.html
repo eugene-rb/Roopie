@@ -2,7 +2,8 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https: data: crx:; style-src 'self'" />
+  <!-- style-srcの'unsafe-inline'は拡張機能アイコン(<browser-action-list>)がインラインstyleを使うため必要 -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https: data: crx:; style-src 'self' 'unsafe-inline'" />
   <title>Roopie</title>
   <link rel="stylesheet" href="pages/app.css" />
 </head>
@@ -67,7 +68,7 @@
         <button id="downloads-btn" class="icon-btn" title="ダウンロード (Ctrl+J)">
           <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
         </button>
-        <button id="sidepanel-btn" class="icon-btn" title="サイドパネル (Ctrl+Shift+S)">
+        <button id="sidepanel-btn" class="icon-btn" title="サイドパネル (F4)">
           <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg>
         </button>
         <button id="history-btn" class="icon-btn" title="履歴 (Ctrl+H)">
