@@ -40,6 +40,10 @@ function attachContextMenu(webContents, tabManager) {
         label: 'サイドパネルで開く',
         click: () => windows.contextFor(webContents)?.sidePanel?.addWeb(params.linkURL),
       });
+      add({
+        label: 'リーディングリストに追加',
+        click: () => browser.readlist?.add(params.linkURL, params.linkText || params.linkURL, null),
+      });
       separator();
     }
 
@@ -161,6 +165,10 @@ function attachContextMenu(webContents, tabManager) {
       add({
         label: 'サイドパネルで開く',
         click: () => windows.contextFor(webContents)?.sidePanel?.addWeb(url),
+      });
+      add({
+        label: 'リーディングリストに追加',
+        click: () => browser.readlist?.add(url, webContents.getTitle() || url, ownTab?.favicon ?? null),
       });
       add({ label: '印刷', click: () => webContents.print() });
       add({ label: 'ページのソースを表示', click: () => tabManager.createTab(`view-source:${url}`) });

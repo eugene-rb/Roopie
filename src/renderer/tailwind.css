@@ -2052,6 +2052,31 @@ body {
   color: var(--text);
 }
 
+/* リードリスト(後で読む) */
+.readlist-add {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.readlist-toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.readlist-toolbar .item-btn {
+  border: 1px solid var(--border);
+}
+
+.readlist-toolbar .item-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.readlist-item.read .label {
+  opacity: 0.5;
+}
+
 .panel-input {
   height: 30px;
   padding: 0 10px;

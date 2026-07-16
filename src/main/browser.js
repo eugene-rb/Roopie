@@ -5,6 +5,7 @@ const { pathToFileURL } = require('url');
 const TabManager = require('./tab-manager');
 const History = require('./history');
 const Bookmarks = require('./bookmarks');
+const Readlist = require('./readlist');
 const Downloads = require('./downloads');
 const Profiles = require('./profiles');
 const GoogleAccounts = require('./google-accounts');
@@ -60,6 +61,7 @@ const browser = {
   googleAccounts: null,
   history: null,
   bookmarks: null,
+  readlist: null,
   downloads: null,
   settings: null,
   gestures: null,
@@ -140,6 +142,7 @@ browser.initData = () => {
 
   browser.history = new History(store(profile, 'history', []));
   browser.bookmarks = new Bookmarks(store(profile, 'bookmarks', []), () => browser.sendBookmarks());
+  browser.readlist = new Readlist(store(profile, 'readlist', []), () => browser.sendReadlist());
   browser.downloads = new Downloads(store(profile, 'downloads', []), () => browser.sendDownloads());
   browser.settings = store(profile, 'settings', { ...DEFAULT_SETTINGS });
   browser.gestures = new Gestures(store(profile, 'gestures', Gestures.defaults()));
@@ -152,6 +155,7 @@ browser.flushAll = () => {
   browser.googleAccounts?.store.flush();
   browser.history?.store.flush();
   browser.bookmarks?.store.flush();
+  browser.readlist?.store.flush();
   browser.downloads?.store.flush();
   browser.settings?.flush();
   browser.gestures?.store.flush();
@@ -506,6 +510,7 @@ browser.applyActiveProfile = ({ recreateTabs, previousProfileId } = {}) => {
 
   browser.history.setStore(store(profile, 'history', []));
   browser.bookmarks.setStore(store(profile, 'bookmarks', []));
+  browser.readlist.setStore(store(profile, 'readlist', []));
   browser.downloads.setStore(store(profile, 'downloads', []));
   browser.settings.flush();
   browser.settings = store(profile, 'settings', { ...DEFAULT_SETTINGS });
@@ -620,6 +625,11 @@ browser.sendBookmarks = () => {
   for (const ctx of windows.all()) ctx.tabManager.sendState(); // スターボタンの状態を更新
 };
 
+browser.sendReadlist = () => {
+  if (!browser.readlist) return;
+  broadcast('readlist:state', browser.readlist.list());
+};
+
 browser.sendDownloads = () => {
   if (!browser.downloads) return;
   broadcast('downloads:state', downloadsPayload());
@@ -709,6 +719,7 @@ browser.sendAllTo = (ctx) => {
   sendToContext(ctx, 'ui:settings', browser.settings.data);
   sendToContext(ctx, 'gestures:state', browser.gestures.config());
   sendToContext(ctx, 'bookmarks:state', browser.bookmarks.list());
+  sendToContext(ctx, 'readlist:state', browser.readlist.list());
   sendToContext(ctx, 'downloads:state', downloadsPayload());
   sendToContext(ctx, 'theme:state', browser.theme.data);
   sendToContext(ctx, 'tor:status', browser.tor.state());

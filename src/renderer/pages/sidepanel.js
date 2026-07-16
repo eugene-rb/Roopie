@@ -21,6 +21,7 @@ const SECTION_LABELS = {
   bookmarks: 'ブックマーク',
   history: '履歴',
   notes: 'メモ',
+  readlist: 'リードリスト',
   web: 'Webパネルを追加・管理',
   'now-playing': '再生中',
 };
@@ -153,6 +154,95 @@ async function refreshHistory() {
 historySearchEl.addEventListener('input', () => {
   clearTimeout(historyTimer);
   historyTimer = setTimeout(refreshHistory, 200);
+});
+
+// ---- リードリスト(後で読む) ----
+const readlistListEl = $('readlist-list');
+const readlistFilterBtn = $('readlist-filter-btn');
+let readlist = [];
+let readlistUnreadOnly = false;
+
+function renderReadlist() {
+  readlistListEl.textContent = '';
+  const items = readlistUnreadOnly ? readlist.filter((e) => !e.read) : readlist;
+  if (!items.length) {
+    readlistListEl.appendChild(
+      emptyNote(
+        readlistUnreadOnly
+          ? '未読はありません'
+          : 'まだありません(ページを右クリック→「リーディングリストに追加」)'
+      )
+    );
+    return;
+  }
+  for (const entry of items) {
+    const item = document.createElement('div');
+    item.className = 'panel-item readlist-item' + (entry.read ? ' read' : '');
+    item.title = `${entry.title}\n${entry.url}`;
+    item.appendChild(faviconEl(entry.favicon, entry.title));
+
+    const label = document.createElement('span');
+    label.className = 'label';
+    label.textContent = entry.title || entry.url;
+    const sub = document.createElement('span');
+    sub.className = 'sub';
+    try {
+      sub.textContent = new URL(entry.url).host;
+    } catch {
+      sub.textContent = entry.url;
+    }
+    label.appendChild(sub);
+    item.appendChild(label);
+
+    const readBtn = document.createElement('button');
+    readBtn.className = 'item-btn';
+    readBtn.textContent = entry.read ? '未読に' : '既読に';
+    readBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      window.roopieInternal.setReadlistRead(entry.id, !entry.read);
+    });
+    item.appendChild(readBtn);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'item-btn';
+    removeBtn.textContent = '削除';
+    removeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      window.roopieInternal.removeReadlist(entry.id);
+    });
+    item.appendChild(removeBtn);
+
+    // クリックで現在のタブに開いて既読に、中クリックで新しいタブ
+    item.addEventListener('click', () => {
+      window.roopieInternal.navigate(entry.url);
+      window.roopieInternal.setReadlistRead(entry.id, true);
+    });
+    item.addEventListener('auxclick', (e) => {
+      if (e.button === 1) {
+        window.roopieInternal.openTab(entry.url);
+        window.roopieInternal.setReadlistRead(entry.id, true);
+      }
+    });
+    readlistListEl.appendChild(item);
+  }
+}
+
+$('readlist-add-btn').addEventListener('click', () => window.roopieInternal.addCurrentToReadlist());
+readlistFilterBtn.addEventListener('click', () => {
+  readlistUnreadOnly = !readlistUnreadOnly;
+  readlistFilterBtn.textContent = readlistUnreadOnly ? 'すべて表示' : '未読のみ';
+  readlistFilterBtn.classList.toggle('active', readlistUnreadOnly);
+  renderReadlist();
+});
+$('readlist-clear-btn').addEventListener('click', () => window.roopieInternal.clearReadReadlist());
+
+async function refreshReadlist() {
+  readlist = await window.roopieInternal.listReadlist();
+  renderReadlist();
+}
+window.roopieInternal.onReadlistState((items) => {
+  readlist = items;
+  renderReadlist();
 });
 
 // ---- メモ(自動保存) ----
@@ -575,4 +665,5 @@ window.roopieInternal.onSidePanelState((next) => {
   applySidePanelSide(settings.sidePanelPosition);
   render();
   refreshBookmarks();
+  refreshReadlist();
 })();

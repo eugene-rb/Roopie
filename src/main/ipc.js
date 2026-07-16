@@ -224,6 +224,20 @@ function registerIpc() {
   ipcMain.on('sidepanel:remove-web', (e, id) => panelOf(e)?.removeWeb(id));
   ipcMain.on('sidepanel:web-context-menu', (e, id) => showWebPanelMenu(panelOf(e), id));
   ipcMain.on('sidepanel:set-web', (e, id, patch) => panelOf(e)?.setWebPanel(id, patch));
+
+  // ---- リードリスト(後で読む。ブラウザ全体・プロファイル単位) ----
+  ipcMain.handle('readlist:list', () => browser.readlist?.list() ?? []);
+  ipcMain.on('readlist:add-current', (e) => {
+    const tabManager = tabsOf(e);
+    const tab = tabManager?.getTab(tabManager.activeTabId);
+    if (!tab || tab.isInternal) return;
+    const wc = tab.view.webContents;
+    const url = wc.getURL();
+    if (url) browser.readlist?.add(url, wc.getTitle() || url, tab.favicon ?? null);
+  });
+  ipcMain.on('readlist:remove', (_e, id) => browser.readlist?.remove(id));
+  ipcMain.on('readlist:set-read', (_e, id, read) => browser.readlist?.setRead(id, read));
+  ipcMain.on('readlist:clear-read', () => browser.readlist?.clearRead());
   ipcMain.on('sidepanel:open-web', (e, id) => panelOf(e)?.openWeb(id));
   ipcMain.on('sidepanel:close-web', (e) => panelOf(e)?.closeWeb());
   ipcMain.on('sidepanel:reload-web', (e) => panelOf(e)?.reloadWeb());

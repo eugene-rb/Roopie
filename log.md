@@ -57,7 +57,7 @@ Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP
 
 要件定義書のPhase 1〜6は一通り完了。残りは以下。
 
-1. サイドパネルの残り機能(AIチャット、カレンダー/TODO、リードリスト。要件定義書 4.2)
+1. サイドパネルの残り機能(AIチャット、カレンダー/TODO。要件定義書 4.2)※リードリストは完了
 2. デザインの継続改善(Preline UIのコンポーネントパターン適用を広げる)
 3. 画面分割の発展: ドラッグ&ドロップでの分割(タブを別タブへドロップ)、ペイン間リサイズ、非アクティブペインからの戻る/進む/ズーム操作
 4. メディアプレイヤーの発展: next/previous操作(MediaSession Action Handlerの都合上、汎用的な実装は不可。サイト個別対応が必要)、複数メディア同時再生時のUI改善
@@ -556,3 +556,14 @@ Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP
   - 唯一CDP不能なのはOSネイティブメニュー項目のクリック自体(既存のタブ/ツールバーメニューと同じ制約)。メニューが呼ぶ関数は個別に検証済み
 
 (要望8件のうち6・7・8とWebパネル右クリック管理は完了。要望1〜5も完了済み。残る恒久タスクは冒頭「今後の計画」参照。マウスジェスチャー軌跡と、ショートカット実キー発火は実マウス/実キーでの最終確認待ち)
+
+### 2026-07-16: リードリスト(後で読む)
+
+要件定義書4.2のサイドパネル機能のうち「リードリスト」を実装(残りはAIチャット・カレンダー/TODO)。
+
+- **保存方式の設計判断**(advisor指摘で回避したデータ消失バグ): サイドパネルの`store`はウィンドウごとに別インスタンス(同一ファイルを各窓が読む=last-writer-wins)。リードリストを`sidepanel.json`に入れると、ある窓でページを保存→別窓のパネル保存(メモ編集・幅変更)で**保存したページが黙って消える**。「後で読むために保存」機能でこれは致命的。→ **bookmarks.jsと同じブラウザ全体の単一インスタンス方式**にし、`broadcast('readlist:state')`で全窓同期。ファイルは`profiles/<id>/readlist.json`。**SHARABLE_KEYSには入れない**(プロファイル単位でよい)
+- **`src/main/readlist.js`(新規)**: bookmarks.jsを踏襲。`add`(既存URLは先頭へ移動+未読に戻す=「もう一度読みたい」意図)/`remove`/`setRead`/`clearRead`(既読を一括削除)。エントリは`{id, url, title, favicon, read, addedAt}`。electron非依存
+- **追加経路**: (1)ページ/リンクの右クリック「リーディングリストに追加」(`context-menu.js`)、(2)パネルの「現在のページを追加」ボタン(`readlist:add-current`がアクティブタブのURL/タイトル/faviconを取得)。**ツールバーのボタンは今回は付けていない**(ツールバーが手狭で、かつ表示項目をカスタム可にしたばかりのため。必要なら追加可能)
+- **サイドパネルに「リードリスト」セクション**(レールにbook型アイコン): 未読/既読の切替(既読は淡色)、未読のみフィルタ、既読を消す、項目クリックで現在タブに開いて既読化・中クリックで新タブ、個別削除。データはbookmarksセクションと同じくIPC取得(`listReadlist`)+`onReadlistState`ブロードキャストで同期
+- 変更/追加ファイル: `readlist.js`(新規)、`browser.js`(init/flush/setStore/sendReadlist/sendAllTo)、`ipc.js`(list/add-current/remove/set-read/clear-read)、`context-menu.js`(ページ・リンクに項目)、`internal-preload.js`(API)、`sidepanel.{html,js}`(セクション+レール)、`tailwind.css`(`.readlist-*`→build:css済み)
+- 検証: `readlist.js`を単体12ケース(add/重複バンプ/setRead/clearRead/onChange/空URL)確認。CDP(再起動)でレールアイコン・現在ページ追加・セクション描画(broadcast経由)・既読化・未読フィルタ・既読削除・後始末の往復を確認。ページ右クリックメニューはelectronスタブで「リーディングリストに追加」がページ分岐に構築され、クリックで`readlist.add(url,title,favicon)`が呼ばれることを確認(ネイティブメニューのクリック自体はCDP不能のため。合成DOMの`contextmenu`はネイティブcontext-menuを発火しない点にも注意)

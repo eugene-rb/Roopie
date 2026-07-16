@@ -97,6 +97,14 @@ if (location.protocol === 'roopie:') {
     resizeSidePanel: (deltaX) => ipcRenderer.send('sidepanel:resize', deltaX),
     onSidePanelState: (cb) => ipcRenderer.on('sidepanel:state', (_e, s) => cb(s)),
 
+    // リードリスト(後で読む)
+    listReadlist: () => ipcRenderer.invoke('readlist:list'),
+    addCurrentToReadlist: () => ipcRenderer.send('readlist:add-current'),
+    removeReadlist: (id) => ipcRenderer.send('readlist:remove', id),
+    setReadlistRead: (id, read) => ipcRenderer.send('readlist:set-read', id, read),
+    clearReadReadlist: () => ipcRenderer.send('readlist:clear-read'),
+    onReadlistState: (cb) => ipcRenderer.on('readlist:state', (_e, items) => cb(items)),
+
     // 保存パスワード(管理画面用)
     listPasswords: () => ipcRenderer.invoke('passwords:list'),
     revealPassword: (id) => ipcRenderer.invoke('passwords:reveal', id),
