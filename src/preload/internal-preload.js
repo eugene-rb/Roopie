@@ -61,6 +61,10 @@ if (location.protocol === 'roopie:') {
     setSetting: (key, value) => ipcRenderer.send('settings:set', key, value),
     pickDownloadFolder: () => ipcRenderer.invoke('fs:pick-folder'),
 
+    // ローカルサーバー検知(スタートページのサジェスト)
+    listLocalServers: () => ipcRenderer.invoke('local-servers:list'),
+    dismissLocalServer: (port) => ipcRenderer.send('local-servers:dismiss', port),
+
     // ショートカット割り当て
     getKeybindings: () => ipcRenderer.invoke('keybindings:get'),
     setKeybinding: (id, accelerator) => ipcRenderer.invoke('keybindings:set', id, accelerator),

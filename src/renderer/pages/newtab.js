@@ -335,6 +335,107 @@ function openShortcutModal(existing) {
   document.addEventListener('keydown', onKeydown);
 }
 
+// ---- ローカルサーバーのサジェスト(起動中の localhost:PORT を検知して表示) ----
+// 走査するのは代表的な開発ポートのみ。HTTP応答が返ったものだけを候補にする。
+const localServersEl = document.getElementById('local-servers');
+let localServerMenu = null;
+
+function closeLocalServerMenu() {
+  if (localServerMenu) {
+    localServerMenu.remove();
+    localServerMenu = null;
+    document.removeEventListener('mousedown', onLocalServerDocDown, true);
+    document.removeEventListener('keydown', onLocalServerKeydown, true);
+  }
+}
+function onLocalServerDocDown(e) {
+  if (localServerMenu && !localServerMenu.contains(e.target)) closeLocalServerMenu();
+}
+function onLocalServerKeydown(e) {
+  if (e.key === 'Escape') closeLocalServerMenu();
+}
+
+// 右クリック:このサーバーを非表示にする(以後サジェストしない)
+function showLocalServerMenu(x, y, port) {
+  closeLocalServerMenu();
+  const menu = document.createElement('div');
+  menu.className = 'ls-menu';
+  menu.style.left = `${x}px`;
+  menu.style.top = `${y}px`;
+  const hide = document.createElement('button');
+  hide.className = 'ls-menu-item';
+  hide.textContent = '非表示にする';
+  hide.addEventListener('click', () => {
+    window.roopieInternal.dismissLocalServer(port);
+    closeLocalServerMenu();
+    loadLocalServers();
+  });
+  menu.appendChild(hide);
+  document.body.appendChild(menu);
+  localServerMenu = menu;
+  // 生成直後の同一クリックで閉じないよう、次のtickでリスナーを張る
+  setTimeout(() => {
+    document.addEventListener('mousedown', onLocalServerDocDown, true);
+    document.addEventListener('keydown', onLocalServerKeydown, true);
+  });
+}
+
+function localServerTile(server) {
+  const a = document.createElement('a');
+  a.className = 'quick-link';
+  a.href = server.url;
+  a.title = `${server.title || ''}\n${server.url}`.trim();
+
+  const tile = document.createElement('div');
+  tile.className = 'tile';
+  if (server.favicon) {
+    const img = document.createElement('img');
+    img.src = server.favicon;
+    tile.appendChild(img);
+  } else {
+    // faviconが無ければポート番号をプレースホルダに(ショートカットの頭文字と同じ見た目)
+    const ph = document.createElement('span');
+    ph.className = 'placeholder ls-port';
+    ph.textContent = String(server.port);
+    tile.appendChild(ph);
+  }
+  a.appendChild(tile);
+
+  const label = document.createElement('span');
+  label.className = 'label';
+  // タイトルは信頼できない任意プロセスの文字列なので textContent で入れる
+  label.textContent = server.title || `localhost:${server.port}`;
+  a.appendChild(label);
+
+  a.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    showLocalServerMenu(e.clientX, e.clientY, server.port);
+  });
+  return a;
+}
+
+async function loadLocalServers() {
+  const servers = await window.roopieInternal.listLocalServers();
+  localServersEl.textContent = '';
+  if (!servers.length) return;
+
+  const heading = document.createElement('div');
+  heading.className = 'ls-heading';
+  heading.textContent = 'ローカルサーバー';
+  localServersEl.appendChild(heading);
+
+  const grid = document.createElement('div');
+  grid.className = 'ls-grid';
+  for (const server of servers) grid.appendChild(localServerTile(server));
+  localServersEl.appendChild(grid);
+}
+
+// 長く開きっぱなしのタブでも、後から起動したサーバーを反映する
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) loadLocalServers();
+});
+
 // 他のタブでの変更(追加/削除/名前変更など)を拾って再読み込みする
 window.roopieInternal.onBookmarksState(() => loadPages());
 loadPages();
+loadLocalServers();

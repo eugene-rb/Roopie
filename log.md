@@ -557,6 +557,18 @@ Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP
 
 (要望8件のうち6・7・8とWebパネル右クリック管理は完了。要望1〜5も完了済み。残る恒久タスクは冒頭「今後の計画」参照。マウスジェスチャー軌跡と、ショートカット実キー発火は実マウス/実キーでの最終確認待ち)
 
+### 2026-07-16: スタートページにローカルサーバーのサジェスト
+
+ユーザー要望「localhostで起動中のアクセス可能なサーバーを検知して、スタートページのショートカットの下に同じようなアイコンでサジェスト。右クリックで非表示も」。
+
+- **検知方式**(`src/main/local-servers.js`新規): 代表的な**Web開発ポート**(3000/3001/4200/5173/8080/8000/4321等16個。DB等の非Webポートは含めない)に**HTTP GETでプローブ**し、**HTTP応答が返ったポートだけ**を候補にする(TCP開通だけだとpostgres等が誤検知され開いても壊れるため)。**127.0.0.1と::1の両系統を試す**(Vite/NextはIPv4のみ/IPv6のみでbindすることがあるため。Promise.anyで先に応答した方を採用)。タイトルは`<title>`から、faviconは`/favicon.ico`をdata URI化(CSPがhttp画像を弾くため)。プローブは`net.fetch`ではなく**素のnode http**(Torプロキシ等のセッション設定を経由させないため)。タイムアウト600ms
+- **セキュリティ/プライバシー**: 走査対象は自マシンのlocalhostのみ・curatedなポートのみ。`<title>`は任意プロセスの文字列=信頼できないため`textContent`で描画(innerHTML不可)
+- **保存**: 非表示(dismiss)ポートは`%APPDATA%/Roopie/local-servers.json`にブラウザ全体(マシン単位)で記憶。readlistと同じく単一ストア
+- **スタートページ**(`newtab.{html,js,css}`): ショートカットの下に`#local-servers`。見出し「ローカルサーバー」+ ショートカットと同じ`.quick-link/.tile/.label`のタイル(faviconか、無ければポート番号のプレースホルダ)。クリックで`http://localhost:PORT`を開く。**タイルを右クリック→アプリ内メニュー「非表示にする」**(`preventDefault`でネイティブメニューを抑止し、自前の`.ls-menu`を表示。外側クリック/Escで閉じる)。長時間開いたタブでも後から起動したサーバーを拾えるよう`visibilitychange`で再走査
+- 変更/追加ファイル: `local-servers.js`(新規)、`browser.js`(init/flush)、`ipc.js`(list/dismiss)、`internal-preload.js`(API)、`newtab.{html,js,css}`(サジェスト表示+右クリックメニュー)
+- 検知の制約: 走査は**代表ポートのみ**(任意ポートは拾わない)。必要なら`WEB_PORTS`に追加
+- 検証: `local-servers.js`を実サーバーで単体9ケース確認 — IPv4 HTTP(title+favicon)/**IPv6専用HTTP(両系統プローブの確認)**/**生TCP非HTTPは非検知(HTTP応答のみ採用)**/dismissの除外・永続化。CDPでダミー5173(Vite App)起動→スタートページにタイル+favicon表示→右クリックで「非表示にする」メニュー→クリックでタイル消滅、を確認。検証で非表示にした5173はローカルストアをリセットして残していない
+
 ### 2026-07-16: レール右クリックからのURL入力でWebパネル追加
 
 ユーザー要望「サイドバー右クリック→メニューの『ウェブパネルを追加』→その場でURL入力」。従来はレール右クリックの「アイコンを追加...」が管理セクションを開くだけ(URL入力は2手)だった。

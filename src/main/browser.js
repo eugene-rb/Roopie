@@ -20,6 +20,7 @@ const Store = require('./store');
 const windows = require('./windows');
 const { defaultToolbarItems, normalizeToolbarItems } = require('./toolbar-items');
 const { Keybindings } = require('./keybindings');
+const LocalServers = require('./local-servers');
 
 const PAGES_DIR = path.join(__dirname, '..', 'renderer', 'pages');
 const PRELOAD_DIR = path.join(__dirname, '..', 'preload');
@@ -140,6 +141,11 @@ browser.initData = () => {
     () => browser.onKeybindingsChanged?.()
   );
 
+  // ローカルサーバー検知(マシン単位。非表示ポートの記憶にストアを使う)
+  browser.localServers = new LocalServers(
+    new Store(path.join(app.getPath('userData'), 'local-servers.json'), { dismissed: [] })
+  );
+
   browser.history = new History(store(profile, 'history', []));
   browser.bookmarks = new Bookmarks(store(profile, 'bookmarks', []), () => browser.sendBookmarks());
   browser.readlist = new Readlist(store(profile, 'readlist', []), () => browser.sendReadlist());
@@ -162,6 +168,7 @@ browser.flushAll = () => {
   browser.theme?.flush();
   browser.passwords?.store.flush();
   browser.keybindings?.store.flush();
+  browser.localServers?.store.flush();
   for (const ctx of windows.all()) {
     if (!ctx.incognito) ctx.sidePanel.store.flush();
   }

@@ -238,6 +238,10 @@ function registerIpc() {
   ipcMain.on('readlist:remove', (_e, id) => browser.readlist?.remove(id));
   ipcMain.on('readlist:set-read', (_e, id, read) => browser.readlist?.setRead(id, read));
   ipcMain.on('readlist:clear-read', () => browser.readlist?.clearRead());
+
+  // ---- ローカルサーバー検知(スタートページのサジェスト) ----
+  ipcMain.handle('local-servers:list', () => browser.localServers?.detect() ?? []);
+  ipcMain.on('local-servers:dismiss', (_e, port) => browser.localServers?.dismiss(port));
   ipcMain.on('sidepanel:open-web', (e, id) => panelOf(e)?.openWeb(id));
   ipcMain.on('sidepanel:close-web', (e) => panelOf(e)?.closeWeb());
   ipcMain.on('sidepanel:reload-web', (e) => panelOf(e)?.reloadWeb());
