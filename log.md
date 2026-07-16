@@ -614,3 +614,17 @@ Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP
 - **衝突回避**: 既存の`.empty`はgesture-patternの修飾子(`.gesture-pattern.empty`)で使われているため、新デザインは別クラス`.empty-state`にして`.empty`は原状のまま維持(リグレッション防止)
 - 変更: `theme.js`(ヘルパー)、`tailwind.css`(`.empty-state`/`.empty-icon`/`.empty-title`/`.empty-note`/`.empty-inline`→build:css済み)、`downloads.js`/`history.js`/`bookmarks.js`/`sidepanel.js`
 - 検証: CDPスクショで履歴・ダウンロード・ブックマークの空状態(アイコン表示)、設定の破線プレースホルダを確認。`roopieEmptyState`が全内部ページ(sidepanel/newtab/menu)で関数として存在しアイコンSVG+文言を生成することをCDPで確認。クリーン再起動でtheme.jsが全ページで例外なく動くことを確認(theme.jsは全内部ページで読まれるため)
+
+### 2026-07-16: AIアシスタント(Edge Copilot風)をサイドパネルに追加
+
+要件定義書4.2のサイドパネル機能「AIチャット」を実装(残りはカレンダー/TODO)。ユーザー要望「既存のウェブパネルからChatGPT/Gemini/Claude/Perplexity/Manus等にアクセスし、今のページについてシームレスに質問できる(Edgeのcopilotイメージ)」。
+
+- **土台はウェブパネル**(session/ログイン/常駐表示を既に解決済み)。Webパネルエントリに`ai:true`/`provider`を持たせるだけの最小拡張
+- **プロバイダのプリセット**(`src/main/ai-providers.js`新規): ChatGPT/Gemini/Claude/Perplexity/Manusの新規チャットURL。サイドパネルに「AIアシスタント」レールアイコン+セクションを追加し、カードをクリックで`addAiPanel(id)`→Webパネルとして開く
+- **Copilotバー**: AIパネル(`ai:true`)表示中だけ、パネルヘッダー下に52pxのバーを出す(`AI_BAR_HEIGHT`、webViewをその分下げる)。「要約」ボタン+質問入力+送信。押すと現在のアクティブタブの文脈(**選択があれば選択、なければ本文innerText→textContentフォールバック**、URL/タイトル、8000字まで)を合成してAIサイトのコンポーザーへ注入
+- **注入は2経路**(advisor指摘。password-preloadのネイティブsetterはtextarea専用): textarea=ネイティブvalue setter+inputイベント / **contenteditable=focus+`document.execCommand('insertText')`**(ChatGPT/Gemini/ClaudeのProseMirror系リッチエディタはこれで拾う)。可視の末尾要素を対象にする
+- **設計方針**(advisor): **自動送信しない**(prefill+focusのみ。Enter/送信合成は脆く誤送信事故のリスク)。**ユーザー操作時のみ注入**(ナビゲーションごとの自動注入=第三者へのデータ送出は禁止)。**コンポーザー未検出時はクリップボードにフォールバック**(無言で失敗しない)
+- **ページ取得の対象**: http/https/**file**(ローカルファイル閲覧時も質問可)。内部ページ(roopie://)はURL/タイトルのみ
+- 変更/追加: `ai-providers.js`(新規)、`side-panel.js`(addAiPanel/askAboutPage/composePrompt/injectComposerJs/AI_BAR_HEIGHT+layoutのwebViewオフセット)、`tab-manager.js`(captureActivePageContext)、`ipc.js`(ai-providers/add-ai/ask-page)、`internal-preload.js`(API)、`sidepanel.{html,js}`(レール/セクション/Copilotバー)、`tailwind.css`(`.ai-*`→build:css済み)
+- 検証: **注入機構をspike**(ローカルHTML): textarea経路/contenteditable経路(execCommandでinputイベント発火・挿入)/ページ取得(selection||innerText)を確認(全PASS)。**通し検証**(実SidePanel+実TabManager、file://ページ): captureActivePageContext本文取得→addAiPanelでai:trueエントリ→askAboutPageでtextareaコンポーザーに合成プロンプト(タイトル/URL/本文/指示)注入→質問モード→コンポーザー無しでcopiedフォールバック、を確認(全PASS)。**実アプリCDP**: プロバイダ5枚描画・レールAIアイコン・AIパネル追加でCopilotバー表示+ヘッダー反映・後始末を確認。**実AIサイトでの実注入/着弾はログイン必須のためユーザー最終確認**(YouTube等と同じ扱い)
+- **今後の拡張案**: 右クリック「選択/ページをAIに質問」(要:デフォルトAIパネルの決定)、URLクエリprefill(Perplexity `?q=`等でnew questionを堅牢化)、プロバイダ別のコンポーザーセレクタ
