@@ -14,6 +14,30 @@ const ZOOM_LEVELS = [-3, -2, -1.5, -1, -0.5, 0, 0.5, 1, 1.5, 2, 2.5, 3];
 
 const INTERNAL_PRELOAD = path.join(__dirname, '..', 'preload', 'internal-preload.js');
 
+// メディアの next/prev 用。ページのmain worldに setActionHandler の wrapper を仕込み、
+// サイトが登録したハンドラを退避する(APIにハンドラ読み出しが無いため)。
+// 退避したハンドラは media:control の 'next'/'prev' で呼ぶ。登録されている種類は
+// <html data-roopie-media> に書き出し、isolated worldのmedia-preloadが可否を読む。
+const MEDIA_HOOK = `(() => {
+  const ms = navigator.mediaSession;
+  if (!ms || window.__roopieMediaHooked) return;
+  window.__roopieMediaHooked = true;
+  window.__roopieMediaActions = window.__roopieMediaActions || {};
+  const orig = ms.setActionHandler.bind(ms);
+  const sync = () => {
+    try {
+      const keys = Object.keys(window.__roopieMediaActions).filter((k) => window.__roopieMediaActions[k]);
+      document.documentElement.dataset.roopieMedia = keys.join(',');
+    } catch (e) {}
+  };
+  ms.setActionHandler = function (action, handler) {
+    window.__roopieMediaActions[action] = handler || null;
+    sync();
+    return orig(action, handler);
+  };
+  sync();
+})()`;
+
 let nextTabId = 1;
 
 /**
@@ -135,6 +159,15 @@ class TabManager {
       tab.favicon = favicons[favicons.length - 1] || null;
       this.history.update(wc.getURL(), null, tab.favicon);
       this.sendState();
+    });
+
+    // メディアの next/prev 用wrapperをmain worldへ注入(http/httpsのみ)。
+    // ページ側は再生開始のたびにハンドラを登録し直すため、dom-readyで先に仕込んでおけば拾える
+    wc.on('dom-ready', () => {
+      const scheme = wc.getURL().split(':')[0];
+      if (scheme === 'http' || scheme === 'https') {
+        wc.executeJavaScript(MEDIA_HOOK, true).catch(() => {});
+      }
     });
 
     wc.on('did-fail-load', (_e, code, description, url, isMainFrame) => {

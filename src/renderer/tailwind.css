@@ -2373,6 +2373,33 @@ body {
 
 #player-actions {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* 前へ/次へ: アクセント円ではなく控えめなゴーストボタン(中央の再生ボタンを目立たせる) */
+.pbtn-min {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.pbtn-min:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+
+.pbtn-min svg {
+  width: 14px;
+  height: 14px;
 }
 
 .pbtn {

@@ -455,6 +455,16 @@ function registerIpc() {
         })()`,
         true
       ).catch(() => {});
+    } else if (action === 'next' || action === 'prev') {
+      // main worldに退避したMediaSessionハンドラ(tab-manager.jsのMEDIA_HOOK)を呼ぶ
+      const evt = action === 'next' ? 'nexttrack' : 'previoustrack';
+      wc.executeJavaScript(
+        `(() => {
+          const h = window.__roopieMediaActions && window.__roopieMediaActions['${evt}'];
+          if (typeof h === 'function') { h({ action: '${evt}' }); }
+        })()`,
+        true
+      ).catch(() => {});
     }
   });
 

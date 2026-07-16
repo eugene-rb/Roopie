@@ -37,11 +37,16 @@ function initMediaWatcher() {
       ipcRenderer.send('media:state', null);
       return;
     }
+    // main worldのwrapper(tab-manager.jsのMEDIA_HOOK)が data-roopie-media に
+    // 登録済みのアクションを書き出す。next/prevボタンの表示可否に使う
+    const actions = (document.documentElement.dataset.roopieMedia || '').split(',');
     ipcRenderer.send('media:state', {
       ...metadataFor(el),
       playing: !el.paused && !el.ended,
       currentTime: el.currentTime || 0,
       duration: Number.isFinite(el.duration) ? el.duration : 0,
+      canNext: actions.includes('nexttrack'),
+      canPrev: actions.includes('previoustrack'),
     });
   }
 

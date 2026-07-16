@@ -576,7 +576,13 @@ function renderNowPlaying() {
 
   const controls = document.createElement('div');
   controls.className = 'now-playing-controls';
+  if (mediaState.canPrev) {
+    controls.appendChild(button('前へ', () => window.roopieInternal.mediaPrev()));
+  }
   controls.appendChild(button(mediaState.playing ? '一時停止' : '再生', () => window.roopieInternal.mediaToggle()));
+  if (mediaState.canNext) {
+    controls.appendChild(button('次へ', () => window.roopieInternal.mediaNext()));
+  }
   if (mediaState.hasVideo) {
     controls.appendChild(button('PinP', () => window.roopieInternal.mediaPip()));
   }

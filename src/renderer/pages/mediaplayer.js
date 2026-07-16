@@ -3,6 +3,8 @@ const artFallback = document.getElementById('player-art-fallback');
 const titleEl = document.getElementById('player-title');
 const artistEl = document.getElementById('player-artist');
 const toggleBtn = document.getElementById('player-toggle');
+const prevBtn = document.getElementById('player-prev');
+const nextBtn = document.getElementById('player-next');
 const iconPlay = document.getElementById('icon-play');
 const iconPause = document.getElementById('icon-pause');
 const rangeEl = document.getElementById('player-range');
@@ -32,6 +34,8 @@ function render() {
   iconPlay.classList.toggle('hidden', state.playing);
   iconPause.classList.toggle('hidden', !state.playing);
   pipBtn.classList.toggle('hidden', !state.hasVideo);
+  prevBtn.classList.toggle('hidden', !state.canPrev);
+  nextBtn.classList.toggle('hidden', !state.canNext);
 
   if (!seeking && state.duration > 0) {
     rangeEl.value = String(Math.round((state.currentTime / state.duration) * 1000));
@@ -45,6 +49,8 @@ window.roopieInternal.onMediaState((next) => {
 });
 
 toggleBtn.addEventListener('click', () => window.roopieInternal.mediaToggle());
+prevBtn.addEventListener('click', () => window.roopieInternal.mediaPrev());
+nextBtn.addEventListener('click', () => window.roopieInternal.mediaNext());
 pipBtn.addEventListener('click', () => window.roopieInternal.mediaPip());
 dismissBtn.addEventListener('click', () => window.roopieInternal.mediaDismiss());
 dockBtn.addEventListener('click', () => window.roopieInternal.setSetting('mediaDocked', true));

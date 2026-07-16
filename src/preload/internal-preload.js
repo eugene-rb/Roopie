@@ -77,6 +77,8 @@ if (location.protocol === 'roopie:') {
     mediaToggle: () => ipcRenderer.send('media:control', 'toggle'),
     mediaSeek: (time) => ipcRenderer.send('media:control', 'seek', time),
     mediaPip: () => ipcRenderer.send('media:control', 'pip'),
+    mediaNext: () => ipcRenderer.send('media:control', 'next'),
+    mediaPrev: () => ipcRenderer.send('media:control', 'prev'),
     mediaSwitchToTab: () => ipcRenderer.send('media:switch-to-tab'),
     mediaDismiss: () => ipcRenderer.send('media:dismiss'),
     mediaDragStart: () => ipcRenderer.send('media:drag-start'),
