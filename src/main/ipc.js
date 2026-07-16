@@ -13,6 +13,7 @@ const {
 } = require('./toolbar-context-menu');
 const { searchUrl } = require('./search-engines');
 const { normalizeToolbarItems } = require('./toolbar-items');
+const { AI_PROVIDERS } = require('./ai-providers');
 
 // IPCは「送信元のウィンドウ」に対して処理する
 const ctxOf = (e) => windows.contextFor(e.sender);
@@ -257,6 +258,12 @@ function registerIpc() {
   ipcMain.on('sidepanel:remove-web', (e, id) => panelOf(e)?.removeWeb(id));
   ipcMain.on('sidepanel:web-context-menu', (e, id) => showWebPanelMenu(panelOf(e), id));
   ipcMain.on('sidepanel:set-web', (e, id, patch) => panelOf(e)?.setWebPanel(id, patch));
+
+  // ---- AIアシスタント(Copilot風。Webパネルとして開く) ----
+  ipcMain.handle('sidepanel:ai-providers', () => AI_PROVIDERS);
+  ipcMain.on('sidepanel:add-ai', (e, providerId) => panelOf(e)?.addAiPanel(providerId));
+  // アクティブなAIパネルのコンポーザーへ、現在のページ文脈付きプロンプトを注入する
+  ipcMain.handle('sidepanel:ask-page', (e, opts) => panelOf(e)?.askAboutPage(opts) ?? { ok: false });
 
   // ---- リードリスト(後で読む。ブラウザ全体・プロファイル単位) ----
   ipcMain.handle('readlist:list', () => browser.readlist?.list() ?? []);

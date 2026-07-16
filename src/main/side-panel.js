@@ -1,7 +1,8 @@
-const { WebContentsView } = require('electron');
+const { WebContentsView, clipboard } = require('electron');
 const crypto = require('crypto');
 const path = require('path');
 const { attachContextMenu } = require('./context-menu');
+const { findProvider } = require('./ai-providers');
 
 const PANEL_URL = 'roopie://sidepanel';
 const DEFAULT_WIDTH = 360;
@@ -9,7 +10,37 @@ const MIN_WIDTH = 280;
 const MAX_WIDTH = 640;
 const RAIL_WIDTH = 44; // アイコンレールの幅(CSSの.section-tabsと合わせる。常時表示)
 const PANEL_HEADER_HEIGHT = 40; // セクション見出しの高さ(CSSの#panel-headerと合わせる)
+const AI_BAR_HEIGHT = 52; // AIパネル時のCopilotバーの高さ(CSSの#ai-barと合わせる)
 const RESIZE_HANDLE_WIDTH = 6; // リサイズハンドル分(CSSの#resize-handleと合わせる)
+const MAX_PAGE_TEXT = 8000; // AIに渡すページ本文の最大文字数(入力欄の上限に配慮)
+
+// AIコンポーザーへの注入スクリプト。2経路: textarea(ネイティブsetter)/ contenteditable(execCommand)。
+// 見つからなければ null を返す(呼び出し側でクリップボードにフォールバック)
+const injectComposerJs = (text) => `(() => {
+  const isVisible = (el) => el && (el.offsetParent !== null || el.getClientRects().length > 0);
+  const t = ${JSON.stringify(text)};
+  const ta = [...document.querySelectorAll('textarea')].filter(isVisible).pop();
+  if (ta) {
+    const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(ta), 'value')?.set;
+    setter ? setter.call(ta, t) : (ta.value = t);
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    ta.dispatchEvent(new Event('change', { bubbles: true }));
+    ta.focus();
+    return 'textarea';
+  }
+  const ce = [...document.querySelectorAll('[contenteditable="true"], [contenteditable=""]')].filter(isVisible).pop();
+  if (ce) {
+    ce.focus();
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    const range = document.createRange();
+    range.selectNodeContents(ce);
+    sel.addRange(range);
+    document.execCommand('insertText', false, t);
+    return 'contenteditable';
+  }
+  return null;
+})()`;
 
 const clampWidth = (w) => Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, Math.round(w)));
 
@@ -128,12 +159,14 @@ class SidePanel {
       const railOnLeft = this.tabManager.sidePanelSide === 'left';
       const leftInset = railOnLeft ? RAIL_WIDTH : RESIZE_HANDLE_WIDTH;
       const rightInset = railOnLeft ? RESIZE_HANDLE_WIDTH : RAIL_WIDTH;
+      // AIパネルのときはヘッダーの下にCopilotバーの分を空ける
+      const topInset = PANEL_HEADER_HEIGHT + (this.activeAiEntry() ? AI_BAR_HEIGHT : 0);
       this.webView.setVisible(true);
       this.webView.setBounds({
         x: bounds.x + leftInset,
-        y: bounds.y + PANEL_HEADER_HEIGHT,
+        y: bounds.y + topInset,
         width: Math.max(0, bounds.width - leftInset - rightInset),
-        height: Math.max(0, bounds.height - PANEL_HEADER_HEIGHT),
+        height: Math.max(0, bounds.height - topInset),
       });
       this.webView.setBorderRadius(radius);
     } else {
@@ -180,6 +213,50 @@ class SidePanel {
     this.webPanels.push(entry);
     this.store.save();
     this.openWeb(entry.id); // 追加したらすぐ表示する(notifyも行われる)
+  }
+
+  // AIアシスタント(プリセット)をWebパネルとして追加する。ai:trueでCopilotバーが出る
+  addAiPanel(providerId) {
+    const provider = findProvider(providerId);
+    if (!provider) return;
+    const entry = {
+      id: crypto.randomUUID(),
+      url: provider.url,
+      title: provider.name,
+      favicon: null,
+      ai: true,
+      provider: provider.id,
+    };
+    this.webPanels.push(entry);
+    this.store.save();
+    this.openWeb(entry.id);
+  }
+
+  // 現在アクティブなWebパネルがAIアシスタントか
+  activeAiEntry() {
+    const entry = this.webPanels.find((p) => p.id === this.activeWebId);
+    return entry?.ai ? entry : null;
+  }
+
+  // Edgeのcopilot風: アクティブなAIパネルのコンポーザーへ、現在のページ文脈付きプロンプトを注入する。
+  // mode: 'summarize'(要約) | 'ask'(question を添えて質問) | 'attach'(ページ内容だけ添付)
+  async askAboutPage({ mode = 'ask', question = '' } = {}) {
+    if (!this.activeAiEntry() || !this.webView) return { ok: false, reason: 'no-ai-panel' };
+    const ctx = await this.tabManager.captureActivePageContext();
+    const prompt = composePrompt(mode, question, ctx);
+    let target = null;
+    try {
+      target = await this.webView.webContents.executeJavaScript(injectComposerJs(prompt), true);
+    } catch {
+      target = null;
+    }
+    if (!target) {
+      // コンポーザーを見つけられない/入れられない場合はクリップボードへ(無言で失敗しない)
+      clipboard.writeText(prompt);
+      return { ok: false, reason: 'no-composer', copied: true };
+    }
+    this.webView.webContents.focus();
+    return { ok: true, target };
   }
 
   removeWeb(id) {
@@ -344,6 +421,21 @@ class SidePanel {
     }
     this.notify();
   }
+}
+
+// ページ文脈 + 指示から、AIへ渡すプロンプト文字列を組み立てる
+function composePrompt(mode, question, ctx) {
+  const parts = ['以下のウェブページについてです。'];
+  if (ctx.title) parts.push(`タイトル: ${ctx.title}`);
+  if (ctx.url) parts.push(`URL: ${ctx.url}`);
+  if (ctx.text) parts.push(`\n--- ページの内容 ---\n${ctx.text}\n--- ここまで ---`);
+  let instruction = '';
+  if (mode === 'summarize') {
+    instruction = '\nこのページの要点を日本語で簡潔に要約してください。';
+  } else if (mode === 'ask' && question.trim()) {
+    instruction = `\n質問: ${question.trim()}`;
+  }
+  return parts.join('\n') + instruction + '\n';
 }
 
 function normalizeUrl(input) {

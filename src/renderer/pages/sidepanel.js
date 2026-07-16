@@ -13,6 +13,10 @@ const nowPlayingBody = $('now-playing-body');
 const panelHeaderTitle = $('panel-header-title');
 const webReloadBtn = $('web-reload');
 const webOpenTabBtn = $('web-open-tab');
+const aiBar = $('ai-bar');
+const aiQuestion = $('ai-question');
+const aiStatus = $('ai-status');
+const aiProviderList = $('ai-provider-list');
 
 let state = { open: true, webPanels: [], activeSection: null, activeWebId: null, notes: '' };
 
@@ -23,6 +27,7 @@ const SECTION_LABELS = {
   notes: 'メモ',
   readlist: 'リードリスト',
   web: 'Webパネルを追加・管理',
+  ai: 'AIアシスタント',
   'now-playing': '再生中',
 };
 
@@ -262,6 +267,57 @@ function addWebPanel() {
 $('web-add-btn').addEventListener('click', addWebPanel);
 webUrlEl.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') addWebPanel();
+});
+
+// ---- AIアシスタント(Copilot風) ----
+// プロバイダ一覧はプリセット(固定)なので初回に1度だけ描画する
+(async () => {
+  const providers = await window.roopieInternal.listAiProviders();
+  aiProviderList.textContent = '';
+  for (const p of providers ?? []) {
+    const btn = document.createElement('button');
+    btn.className = 'ai-provider';
+    const dot = document.createElement('span');
+    dot.className = 'ai-provider-dot';
+    dot.textContent = (p.name[0] || 'A').toUpperCase();
+    const label = document.createElement('span');
+    label.className = 'label';
+    label.textContent = p.name;
+    btn.append(dot, label);
+    btn.addEventListener('click', () => window.roopieInternal.addAiPanel(p.id));
+    aiProviderList.appendChild(btn);
+  }
+})();
+
+let aiStatusTimer = null;
+function showAiStatus(text) {
+  aiStatus.textContent = text;
+  aiStatus.classList.remove('hidden');
+  clearTimeout(aiStatusTimer);
+  aiStatusTimer = setTimeout(() => aiStatus.classList.add('hidden'), 2600);
+}
+
+async function askPage(opts) {
+  const result = await window.roopieInternal.askPage(opts);
+  if (result?.ok) {
+    showAiStatus('ページを添付しました');
+  } else if (result?.copied) {
+    showAiStatus('入力欄が見つからないためコピーしました');
+  } else {
+    showAiStatus('送信できませんでした');
+  }
+}
+
+$('ai-summarize').addEventListener('click', () => askPage({ mode: 'summarize' }));
+$('ai-send').addEventListener('click', () => {
+  askPage({ mode: 'ask', question: aiQuestion.value });
+  aiQuestion.value = '';
+});
+aiQuestion.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    askPage({ mode: 'ask', question: aiQuestion.value });
+    aiQuestion.value = '';
+  }
 });
 
 function renderWebList() {
@@ -669,6 +725,9 @@ function render() {
   panelHeaderTitle.textContent = activeWeb ? activeWeb.title || activeWeb.url : SECTION_LABELS[state.activeSection] ?? '';
   webReloadBtn.classList.toggle('hidden', !activeWeb);
   webOpenTabBtn.classList.toggle('hidden', !activeWeb);
+  // AIアシスタント(ai:true)のパネル表示中だけCopilotバーを出す
+  aiBar.classList.toggle('hidden', !activeWeb?.ai);
+  if (!activeWeb?.ai) aiStatus.classList.add('hidden');
 
   if (state.activeSection === 'history') refreshHistory();
   if (state.activeSection === 'bookmarks') refreshBookmarks();

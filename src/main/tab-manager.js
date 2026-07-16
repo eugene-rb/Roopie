@@ -672,6 +672,32 @@ class TabManager {
     return this.getTab(this.activeTabId)?.view.webContents || null;
   }
 
+  // AIアシスタントに渡すため、アクティブタブの文脈(URL/タイトル/選択 or 本文)を取得する。
+  // 選択があればそれを、なければ本文innerTextを使う(http/httpsのみ。内部ページはURL/タイトルのみ)
+  async captureActivePageContext() {
+    const wc = this.activeWebContents();
+    const url = wc?.getURL() || '';
+    const title = wc?.getTitle() || '';
+    let text = '';
+    if (wc && /^(https?|file):/i.test(url)) {
+      try {
+        text = await wc.executeJavaScript(
+          `(() => {
+            const s = window.getSelection().toString();
+            if (s) return s;
+            const b = document.body;
+            // innerTextはレイアウト未完了だと空になることがあるため textContent へフォールバック
+            return b ? (b.innerText || b.textContent || '') : '';
+          })()`,
+          true
+        );
+      } catch {
+        text = '';
+      }
+    }
+    return { url, title, text: String(text || '').replace(/\n{3,}/g, '\n\n').trim().slice(0, 8000) };
+  }
+
   // タブの状態をUI(レンダラー)へ送信
   sendState() {
     if (this.window.isDestroyed()) return;
