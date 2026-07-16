@@ -337,6 +337,37 @@ class TabManager {
     this.sendState();
   }
 
+  // タブをページ領域のゾーンにドロップして分割する(D&D分割)。
+  // zone: 'left'|'right'|'top'|'bottom'。left/topはドラッグしたタブを主ペイン(先頭)にする
+  dropSplit(draggedId, zone) {
+    if (!this.getTab(draggedId) || this.tabs.length < 2) return;
+    if (draggedId === this.activeTabId) return; // 自分自身とは分割しない
+    const direction = zone === 'top' || zone === 'bottom' ? 'column' : 'row';
+    const draggedFirst = zone === 'left' || zone === 'top';
+    if (draggedFirst) {
+      // ドラッグしたタブを主(左/上)にするため、先にアクティブへ昇格させてから相方を並べる
+      const partner = this.activeTabId;
+      this.switchTab(draggedId);
+      this.splitWith(partner, direction);
+    } else {
+      this.splitWith(draggedId, direction);
+    }
+  }
+
+  // タブのドラッグ中だけ、ページ領域にドロップゾーン(オーバーレイ)を出す
+  showDropZones() {
+    if (!this.overlay || this.window.isDestroyed()) return;
+    this.raiseTopViews(); // オーバーレイを最前面に(ドロップを受け取れるように)
+    this.overlay.setVisible(true);
+    this.overlay.webContents.send('overlay:drop-zones', { show: true });
+  }
+
+  hideDropZones() {
+    if (!this.overlay || this.window.isDestroyed()) return;
+    this.overlay.webContents.send('overlay:drop-zones', { show: false });
+    this.overlay.setVisible(false);
+  }
+
   // ---- ペイン間リサイズ(仕切りViewのドラッグから呼ばれる) ----
   splitResizeStart() {
     this._resizeStartRatio = this.splitRatio;

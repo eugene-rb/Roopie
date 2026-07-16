@@ -32,14 +32,42 @@ function registerIpc() {
   ipcMain.on('tabs:switch', (e, id) => tabsOf(e)?.switchTab(id));
   ipcMain.on('tabs:move', (e, id, toIndex) => tabsOf(e)?.moveTab(id, toIndex));
 
-  // タブをドラッグして新しいウィンドウへ切り離す(最後の1枚は切り離さない)
-  ipcMain.on('tabs:detach', (e, id, pos) => {
-    const tabManager = tabsOf(e);
-    const tab = tabManager?.getTab(id);
-    if (!tabManager || !tab || tabManager.tabs.length <= 1) return;
-    const url = tab.view.webContents.getURL();
-    tabManager.closeTab(id);
-    browser.createWindow({ url, x: pos?.screenX, y: pos?.screenY });
+  // ---- タブのドラッグ(D&D分割 / 新しいウィンドウへの切り離し) ----
+  // ドラッグ中はページ領域にドロップゾーンを出す。ドロップ先で「分割」か「切り離し」かが決まる。
+  // 分割ゾーンへのドロップ(split:drop)と切り離し判定(drag-end)は別Viewから届くため、
+  // drag-end 側を少し遅延させて競合(先に切り離してしまう)を防ぐ。
+  ipcMain.on('tabs:drag-start', (e, id) => {
+    const ctx = ctxOf(e);
+    if (!ctx) return;
+    ctx.draggingTabId = id;
+    ctx.pendingSplitZone = null;
+    ctx.tabManager.showDropZones();
+  });
+
+  ipcMain.on('split:drop', (e, zone) => {
+    const ctx = ctxOf(e);
+    if (ctx) ctx.pendingSplitZone = zone; // 実行は drag-end の確定処理でまとめて行う
+  });
+
+  ipcMain.on('tabs:drag-end', (e, id, info) => {
+    const ctx = ctxOf(e);
+    if (!ctx) return;
+    ctx.tabManager.hideDropZones();
+    // split:drop が別Viewから遅れて届く可能性があるため、確定を少し遅らせる
+    setTimeout(() => {
+      const tabManager = ctx.tabManager;
+      const zone = ctx.pendingSplitZone;
+      ctx.pendingSplitZone = null;
+      ctx.draggingTabId = null;
+      if (zone) {
+        tabManager.dropSplit(id, zone);
+      } else if (info?.belowBar && tabManager.getTab(id) && tabManager.tabs.length > 1) {
+        // タブバーの下へ落とした = 新しいウィンドウへ切り離す
+        const url = tabManager.getTab(id).view.webContents.getURL();
+        tabManager.closeTab(id);
+        browser.createWindow({ url, x: info.screenX, y: info.screenY });
+      }
+    }, 40);
   });
   ipcMain.on('tabs:navigate', (e, input) => tabsOf(e)?.navigate(input));
   ipcMain.on('tabs:back', (e) => tabsOf(e)?.goBack());

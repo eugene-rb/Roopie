@@ -7,6 +7,15 @@
   <link rel="stylesheet" href="app.css" />
 </head>
 <body class="menu-body">
+  <!-- タブをドラッグして分割するためのドロップゾーン(ドラッグ中だけ表示) -->
+  <div id="drop-zones" class="hidden">
+    <div id="drop-preview"></div>
+    <div class="drop-zone" data-zone="left"></div>
+    <div class="drop-zone" data-zone="right"></div>
+    <div class="drop-zone" data-zone="top"></div>
+    <div class="drop-zone" data-zone="bottom"></div>
+  </div>
+
   <!-- ページの上に重なる透明レイヤー。外側クリックで閉じる -->
   <div id="backdrop">
     <div id="menu" class="hidden">

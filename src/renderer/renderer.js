@@ -94,8 +94,11 @@ function attachTabDrag(tabEl, tab) {
     draggingId = tab.id;
     tabEl.classList.add('dragging');
     e.dataTransfer.effectAllowed = 'move';
-    // FirefoxやChromiumでdragを成立させるにはデータが必要
+    // FirefoxやChromiumでdragを成立させるにはデータが必要。
+    // ページ領域のドロップゾーン(オーバーレイ)はこのIDを読んで分割対象を決める
     e.dataTransfer.setData('text/plain', String(tab.id));
+    // ページ領域にドロップゾーンを出す(分割 or 切り離しの受け皿)
+    window.roopie.tabDragStart(tab.id);
   });
 
   tabEl.addEventListener('dragend', (e) => {
@@ -104,13 +107,11 @@ function attachTabDrag(tabEl, tab) {
     clearDropMarkers();
     tabEl.classList.remove('dragging');
 
-    // タブバーの外(下方向にしきい値を超えて)にドロップしたら新しいウィンドウへ切り離す
-    if (!reordered && tabState.tabs.length > 1) {
-      const barBottom = tabsEl.getBoundingClientRect().bottom;
-      if (e.clientY > barBottom + DETACH_THRESHOLD) {
-        window.roopie.detachTab(tab.id, { screenX: e.screenX, screenY: e.screenY });
-      }
-    }
+    // 分割 or 切り離しの確定はメイン側が行う(ページ領域のドロップゾーンからの分割と競合しないよう、
+    // メインで少し遅延させて判定する)。ここでは切り離し候補かどうかの目安だけ渡す
+    const barBottom = tabsEl.getBoundingClientRect().bottom;
+    const belowBar = !reordered && e.clientY > barBottom + DETACH_THRESHOLD;
+    window.roopie.tabDragEnd(tab.id, { belowBar, screenX: e.screenX, screenY: e.screenY });
   });
 
   tabEl.addEventListener('dragover', (e) => {

@@ -4,6 +4,55 @@ const itemsEl = document.getElementById('items');
 const manageBtn = document.getElementById('manage');
 const qrPopup = document.getElementById('qr-popup');
 
+// =========================================================
+// D&D分割: タブのドラッグ中にページ領域へドロップゾーンを出す
+// =========================================================
+const dropZones = document.getElementById('drop-zones');
+const dropPreview = document.getElementById('drop-preview');
+
+// ドロップ先のゾーンに応じて、分割後にドラッグしたペインが入る側をプレビュー表示する
+const PREVIEW_POS = {
+  left: { left: '0', top: '0', width: '50%', height: '100%' },
+  right: { left: '50%', top: '0', width: '50%', height: '100%' },
+  top: { left: '0', top: '0', width: '100%', height: '50%' },
+  bottom: { left: '0', top: '50%', width: '100%', height: '50%' },
+};
+
+function setDropPreview(zone) {
+  const pos = zone && PREVIEW_POS[zone];
+  if (!pos) {
+    dropPreview.classList.remove('visible');
+    return;
+  }
+  Object.assign(dropPreview.style, pos);
+  dropPreview.classList.add('visible');
+}
+
+window.roopieInternal.onDropZones(({ show }) => {
+  dropZones.classList.toggle('hidden', !show);
+  setDropPreview(null);
+});
+
+for (const zone of dropZones.querySelectorAll('.drop-zone')) {
+  const name = zone.dataset.zone;
+  zone.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    setDropPreview(name);
+  });
+  zone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDropPreview(name);
+  });
+  zone.addEventListener('dragleave', () => setDropPreview(null));
+  zone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    // 対象タブIDはメインが drag-start で把握済み。ここではゾーンだけ伝える
+    window.roopieInternal.splitDrop(name);
+    setDropPreview(null);
+  });
+}
+
 const MENU_WIDTH = 260;
 const QR_WIDTH = 300;
 const MARGIN = 8;

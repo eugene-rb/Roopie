@@ -2371,6 +2371,57 @@ body {
   text-overflow: ellipsis;
 }
 
+/* ---- D&D分割: タブのドラッグ中に出すドロップゾーン(オーバーレイView上) ---- */
+#drop-zones {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none; /* 中央の隙間はドラッグを透過(=切り離しの判定に回す) */
+}
+
+.drop-zone {
+  position: absolute;
+  pointer-events: auto;
+}
+.drop-zone[data-zone="top"] {
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 32%;
+}
+.drop-zone[data-zone="bottom"] {
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 32%;
+}
+.drop-zone[data-zone="left"] {
+  left: 0;
+  top: 32%;
+  width: 32%;
+  height: 36%;
+}
+.drop-zone[data-zone="right"] {
+  right: 0;
+  top: 32%;
+  width: 32%;
+  height: 36%;
+}
+
+/* ドロップ後にドラッグしたペインが入る側のプレビュー */
+#drop-preview {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  border: 2px solid var(--accent);
+  opacity: 0;
+  transition: opacity 0.12s ease, left 0.12s ease, top 0.12s ease, width 0.12s ease, height 0.12s ease;
+}
+#drop-preview.visible {
+  opacity: 1;
+}
+
 /* ---- 画面分割のペイン間リサイズ(仕切りView) ---- */
 .divider-body {
   margin: 0;

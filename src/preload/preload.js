@@ -427,7 +427,9 @@ contextBridge.exposeInMainWorld('roopie', {
   closeTab: (id) => ipcRenderer.send('tabs:close', id),
   switchTab: (id) => ipcRenderer.send('tabs:switch', id),
   moveTab: (id, toIndex) => ipcRenderer.send('tabs:move', id, toIndex),
-  detachTab: (id, pos) => ipcRenderer.send('tabs:detach', id, pos),
+  // タブのドラッグ開始/終了(ページ領域のドロップゾーン表示と、分割 or 切り離しの確定)
+  tabDragStart: (id) => ipcRenderer.send('tabs:drag-start', id),
+  tabDragEnd: (id, info) => ipcRenderer.send('tabs:drag-end', id, info),
   tabContextMenu: (id) => ipcRenderer.send('tabs:context-menu', id),
   splitWith: (id, direction) => ipcRenderer.send('tabs:split-with', id, direction),
   toggleSplitDirection: () => ipcRenderer.send('tabs:split-toggle-direction'),

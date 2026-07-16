@@ -85,6 +85,10 @@ if (location.protocol === 'roopie:') {
     splitResizeStart: () => ipcRenderer.send('split:resize-start'),
     splitResize: (dx, dy) => ipcRenderer.send('split:resize', dx, dy),
     splitResizeEnd: () => ipcRenderer.send('split:resize-end'),
+
+    // D&D分割: タブのドラッグ中にオーバーレイへドロップゾーンを出す
+    onDropZones: (cb) => ipcRenderer.on('overlay:drop-zones', (_e, info) => cb(info)),
+    splitDrop: (zone) => ipcRenderer.send('split:drop', zone),
     mediaSwitchToTab: () => ipcRenderer.send('media:switch-to-tab'),
     mediaDismiss: () => ipcRenderer.send('media:dismiss'),
     mediaDragStart: () => ipcRenderer.send('media:drag-start'),
