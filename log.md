@@ -602,3 +602,15 @@ Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP
 - **D&D分割**: タブをページ領域へドラッグ→オーバーレイ(`roopie://menu`)に上下左右のドロップゾーン+着地プレビューを表示。ドロップした辺で分割(left/topはドラッグしたタブを主ペイン=先頭に、`dropSplit()`でアクティブ昇格→相方を並べる)。中央はゾーンなし=従来どおりタブバー下への切り離しに回す
   - **競合対策**(advisor指摘): 分割ゾーンへのドロップ(`split:drop`、オーバーレイView発)と切り離し判定(`tabs:drag-end`、メインレンダラー発)は別Viewから届き到達順が不定。→ **切り離し/分割の確定をメインに一本化し、drag-endを40ms遅延**させて`pendingSplitZone`が届くのを待ってから分岐(先に切り離してしまう競合を防ぐ)。切り離しも従来のレンダラー直呼びからメイン経由に変更
   - **検証済み**: `dropSplit`の4ゾーン(主ペイン/方向/自己分割拒否)を実Viewで確認。**実アプリCDPで通し検証**(Node24のglobal WebSocket): drag-startでゾーン表示→`splitDrop('right')`→drag-endで分割成立(splitTabId=ドラッグタブ, row)、drag-end後ゾーン非表示、さらに切り離し経路(belowBar→新ウィンドウ+元タブ減)も回帰確認。全PASS。**OSレベルの実ドラッグ配送(実際にマウスでタブをページへ落とす)だけはCDP不能=ユーザー最終確認**(既存のD&D/ジェスチャーと同じ扱い)
+
+### 2026-07-16: Preline UIパターンの適用拡大(空状態の統一)
+
+継続改善タスク。ユーザーは対象に「共通コンポーネント全体/設定画面/データ画面/サイドパネル」の全4領域を選択。既存コンポーネント(ボタン/トグル/カード/入力欄/バッジ/モーダル)はスクリーンショットで確認した結果すでにPreline風で一貫していたため、**最も見劣りしていた「空状態(empty state)」**に絞って全領域へ統一パターンを適用した(既に整っている箇所の主観的な作り直しは回帰リスクのため避けた)。
+
+- **共通ヘルパー**(`theme.js`。全内部ページが読む): `window.roopieEmptyState(text, {icon, variant})`。ソフトな角丸スクエアのアイコン(8種の静的インラインSVG=CSP適合)+文言を1関数で生成。`variant:'note'`でサイドパネル用の小型
+- **データ画面**: 履歴(clock/search)・ダウンロード(download)・ブックマーク(bookmark/search)の空表示を、素のテキストからアイコン付きの統一デザインに(`.empty-state`)
+- **サイドパネル**: `emptyNote()`をヘルパー経由に置換。各セクションに文脈アイコン(bookmark/clock/book/globe/music)
+- **設定画面**: セクション内の「項目なし」(`.empty-inline`: 拡張機能・パスワード・Googleアカウント等)を破線ボックスのプレースホルダに
+- **衝突回避**: 既存の`.empty`はgesture-patternの修飾子(`.gesture-pattern.empty`)で使われているため、新デザインは別クラス`.empty-state`にして`.empty`は原状のまま維持(リグレッション防止)
+- 変更: `theme.js`(ヘルパー)、`tailwind.css`(`.empty-state`/`.empty-icon`/`.empty-title`/`.empty-note`/`.empty-inline`→build:css済み)、`downloads.js`/`history.js`/`bookmarks.js`/`sidepanel.js`
+- 検証: CDPスクショで履歴・ダウンロード・ブックマークの空状態(アイコン表示)、設定の破線プレースホルダを確認。`roopieEmptyState`が全内部ページ(sidepanel/newtab/menu)で関数として存在しアイコンSVG+文言を生成することをCDPで確認。クリーン再起動でtheme.jsが全ページで例外なく動くことを確認(theme.jsは全内部ページで読まれるため)
