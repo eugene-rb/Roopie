@@ -557,6 +557,16 @@ Electron 43.1.0 / Windows。`npm start` で起動、`npm run start:debug` でCDP
 
 (要望8件のうち6・7・8とWebパネル右クリック管理は完了。要望1〜5も完了済み。残る恒久タスクは冒頭「今後の計画」参照。マウスジェスチャー軌跡と、ショートカット実キー発火は実マウス/実キーでの最終確認待ち)
 
+### 2026-07-16: レール右クリックからのURL入力でWebパネル追加
+
+ユーザー要望「サイドバー右クリック→メニューの『ウェブパネルを追加』→その場でURL入力」。従来はレール右クリックの「アイコンを追加...」が管理セクションを開くだけ(URL入力は2手)だった。
+
+- メニュー項目を「ウェブパネルを追加...」にリネームし、クリックで`SidePanel.promptAddWeb()`を呼ぶように変更
+- `promptAddWeb()`はeditWebと同じ機構(`activeSection='web'`+`destroyWebView()`でパネルを広げ手前のwebViewを除去)で、`sidepanel:add-web-prompt`をパネルUIへ送る
+- パネルUIはfeature 4のWebパネル編集モーダルを流用し、`field:'add'`モード(URL入力→`looksLikeUrl`検証→`addWebPanel`)を追加
+- 変更ファイル: `side-panel.js`(promptAddWeb)、`toolbar-context-menu.js`(項目名+promptAddWeb)、`internal-preload.js`(onAddWebPrompt)、`sidepanel.js`(openWebAddModal+addブランチ)。CSS変更なし
+- 検証: CDPでモーダル表示・不正URLエラー継続・正常URLの追加(https補完)・後始末を確認。レールメニューはスタブで「ウェブパネルを追加...」構築+クリックで`promptAddWeb`が呼ばれることを確認
+
 ### 2026-07-16: リードリスト(後で読む)
 
 要件定義書4.2のサイドパネル機能のうち「リードリスト」を実装(残りはAIチャット・カレンダー/TODO)。

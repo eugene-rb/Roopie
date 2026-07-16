@@ -376,6 +376,7 @@ function openWebEditModal(id, field) {
   webEditTextMode.classList.toggle('hidden', isIcon);
   webEditIconMode.classList.toggle('hidden', !isIcon);
 
+  webEditInput.placeholder = '';
   if (field === 'name') {
     webEditTitle.textContent = '名前を変更';
     webEditInput.value = entry.title || '';
@@ -393,6 +394,19 @@ function openWebEditModal(id, field) {
     webEditInput.focus();
     webEditInput.select();
   }
+}
+
+// レール右クリック「ウェブパネルを追加」からのURL入力モーダル
+function openWebAddModal() {
+  webEdit = { id: null, field: 'add' };
+  webEditError.classList.add('hidden');
+  webEditTextMode.classList.remove('hidden');
+  webEditIconMode.classList.add('hidden');
+  webEditTitle.textContent = 'ウェブパネルを追加';
+  webEditInput.value = '';
+  webEditInput.placeholder = 'URLを入力(例: gmail.com)';
+  webEditModal.classList.remove('hidden');
+  webEditInput.focus();
 }
 
 function renderEmojiGrid() {
@@ -418,6 +432,16 @@ function closeWebEditModal() {
 function applyWebEdit() {
   if (!webEdit) return;
   const { id, field } = webEdit;
+  if (field === 'add') {
+    if (!looksLikeUrl(webEditInput.value)) {
+      webEditError.textContent = '正しいURLを入力してください';
+      webEditError.classList.remove('hidden');
+      return;
+    }
+    window.roopieInternal.addWebPanel(webEditInput.value);
+    closeWebEditModal();
+    return;
+  }
   if (field === 'name') {
     window.roopieInternal.setWebPanel(id, { title: webEditInput.value });
   } else if (field === 'url') {
@@ -483,6 +507,7 @@ webEditInput.addEventListener('keydown', (e) => {
 });
 
 window.roopieInternal.onEditWebPanel(({ id, field }) => openWebEditModal(id, field));
+window.roopieInternal.onAddWebPrompt(() => openWebAddModal());
 
 // ---- 再生中 ----
 let mediaState = null;

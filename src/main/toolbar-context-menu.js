@@ -50,7 +50,7 @@ function showSidePanelRailMenu(panel) {
   const menu = new Menu();
   addPositionItems(menu);
   menu.append(new MenuItem({ type: 'separator' }));
-  menu.append({ label: 'アイコンを追加...', click: () => panel.openSection('web') });
+  menu.append({ label: 'ウェブパネルを追加...', click: () => panel.promptAddWeb() });
   menu.append({ label: 'サイドバーを非表示', click: () => panel.hide() });
   menu.popup();
 }

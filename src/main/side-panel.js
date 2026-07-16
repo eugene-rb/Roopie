@@ -225,6 +225,17 @@ class SidePanel {
     this.sendToPanel('sidepanel:edit-web', { id, field });
   }
 
+  // レール右クリックの「ウェブパネルを追加」。編集と同様に、パネルを広げ手前のwebViewを
+  // 破棄してから、URL入力モーダルの表示をパネルUIへ指示する
+  promptAddWeb() {
+    this.activeSection = 'web';
+    this.activeWebId = null;
+    this.destroyWebView();
+    this.tabManager.layout();
+    this.notify();
+    this.sendToPanel('sidepanel:add-web-prompt');
+  }
+
   // 同じWebパネルをもう一度選ぶとレールのみに折りたたむ(Vivaldi同様)
   openWeb(id) {
     if (this.activeWebId === id) {
