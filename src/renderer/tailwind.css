@@ -1223,7 +1223,7 @@ body {
   filter: brightness(1.12);
 }
 
-/* アイコン選択ポップオーバー */
+/* アイコン選択ポップオーバー(icon-picker.js。プロファイル/Webパネル/ショートカット共通) */
 .icon-picker {
   position: fixed;
   z-index: 50;
@@ -1236,6 +1236,21 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+/* アイコン選択の中央モーダル版(サイドパネル/スタートページで使う) */
+.icon-picker-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.icon-picker-backdrop .icon-picker {
+  position: static;
 }
 
 .icon-picker-grid {
@@ -1289,11 +1304,11 @@ body {
   filter: brightness(1.1);
 }
 
-/* 画像アイコンのGUIクロップ */
+/* 画像アイコンのGUIクロップ(アイコンピッカーやショートカットのモーダルより手前に出す) */
 .crop-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: 80;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2301,37 +2316,6 @@ body {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-}
-
-.modal-btn-row {
-  display: flex;
-  gap: 8px;
-}
-
-.emoji-grid {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 4px;
-}
-
-.emoji-btn {
-  aspect-ratio: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  background: var(--card-hover);
-  border: 1px solid transparent;
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.emoji-btn:hover {
-  background: var(--hover);
-}
-
-.emoji-btn.selected {
-  border-color: var(--accent);
 }
 
 /* =========================================================

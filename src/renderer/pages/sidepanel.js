@@ -344,9 +344,11 @@ function renderPinnedWebPanels() {
     btn.title = panel.title || panel.url;
     btn.appendChild(webIconEl(panel));
     btn.addEventListener('click', () => window.roopieInternal.openWebPanel(panel.id));
-    // 右クリックで名前/アイコン/URLの変更・削除
+    // 右クリックで追加/削除/編集(名前・アイコン・URL)のメニュー。
+    // 親レールのメニュー(左右切替など)が同時に出ないよう伝播を止める
     btn.addEventListener('contextmenu', (e) => {
       e.preventDefault();
+      e.stopPropagation();
       window.roopieInternal.webPanelContextMenu(panel.id);
     });
     webPinListEl.appendChild(btn);
@@ -360,21 +362,13 @@ $('web-open-tab').addEventListener('click', () => {
   window.roopieInternal.openTab(active.url);
 });
 
-// ---- Webパネルの編集モーダル(名前/URL/アイコン) ----
-// 右クリックメニュー→メイン(ホストパネル'web'を広げる)→ここでモーダルを開く
-const WEB_EDIT_EMOJI = [
-  '⭐', '🔖', '📮', '💬', '🎵', '📺',
-  '🛒', '📰', '💼', '📅', '☁', '🌐',
-  '🔧', '🎮', '📚', '☕', '💡', '❤',
-];
+// ---- Webパネルの編集(名前/URLはモーダル、アイコンは共通のicon-picker.js) ----
+// 右クリックメニュー→メイン(ホストパネル'web'を広げる)→ここでモーダル/ピッカーを開く
 const webEditModal = $('web-edit');
 const webEditTitle = $('web-edit-title');
 const webEditInput = $('web-edit-input');
-const webEditEmojiInput = $('web-edit-emoji-input');
 const webEditError = $('web-edit-error');
-const webEditTextMode = $('web-edit-text-mode');
-const webEditIconMode = $('web-edit-icon-mode');
-let webEdit = null; // { id, field, pendingIcon }
+let webEdit = null; // { id, field }
 
 function looksLikeUrl(text) {
   const t = text.trim();
@@ -387,69 +381,46 @@ function looksLikeUrl(text) {
   }
 }
 
-function setPendingIcon(icon) {
-  if (!webEdit) return;
-  webEdit.pendingIcon = icon;
-  for (const b of $('web-edit-emoji').children) {
-    b.classList.toggle('selected', icon?.type === 'emoji' && b.textContent === icon.value);
-  }
-}
-
 function openWebEditModal(id, field) {
   const entry = state.webPanels.find((p) => p.id === id);
   if (!entry) return;
-  webEdit = { id, field, pendingIcon: entry.icon ?? null };
-  webEditError.classList.add('hidden');
-  const isIcon = field === 'icon';
-  webEditTextMode.classList.toggle('hidden', isIcon);
-  webEditIconMode.classList.toggle('hidden', !isIcon);
 
+  // アイコンはプロファイルと同じ共通ピッカー(絵文字グリッド+自由入力+画像クロップ)。
+  // nullは「faviconに戻す」= 既定に戻る
+  if (field === 'icon') {
+    window.roopieIconPicker.open({
+      resetLabel: 'faviconに戻す',
+      onPick: (icon) => window.roopieInternal.setWebPanel(id, { icon }),
+      onClose: () => window.roopieInternal.sidePanelEditDone(),
+    });
+    return;
+  }
+
+  webEdit = { id, field };
+  webEditError.classList.add('hidden');
   webEditInput.placeholder = '';
   if (field === 'name') {
     webEditTitle.textContent = '名前を変更';
     webEditInput.value = entry.title || '';
-  } else if (field === 'url') {
+  } else {
     webEditTitle.textContent = 'URLを変更';
     webEditInput.value = entry.url || '';
-  } else {
-    webEditTitle.textContent = 'アイコンを変更';
-    renderEmojiGrid();
-    webEditEmojiInput.value = entry.icon?.type === 'emoji' ? entry.icon.value : '';
   }
 
   webEditModal.classList.remove('hidden');
-  if (!isIcon) {
-    webEditInput.focus();
-    webEditInput.select();
-  }
+  webEditInput.focus();
+  webEditInput.select();
 }
 
-// レール右クリック「ウェブパネルを追加」からのURL入力モーダル
+// レール右クリック/「+」からのURL入力モーダル
 function openWebAddModal() {
   webEdit = { id: null, field: 'add' };
   webEditError.classList.add('hidden');
-  webEditTextMode.classList.remove('hidden');
-  webEditIconMode.classList.add('hidden');
   webEditTitle.textContent = 'ウェブパネルを追加';
   webEditInput.value = '';
   webEditInput.placeholder = 'URLを入力(例: gmail.com)';
   webEditModal.classList.remove('hidden');
   webEditInput.focus();
-}
-
-function renderEmojiGrid() {
-  const grid = $('web-edit-emoji');
-  grid.textContent = '';
-  for (const emoji of WEB_EDIT_EMOJI) {
-    const b = document.createElement('button');
-    b.className = 'emoji-btn';
-    b.textContent = emoji;
-    b.addEventListener('click', () => {
-      webEditEmojiInput.value = emoji;
-      setPendingIcon({ type: 'emoji', value: emoji });
-    });
-    grid.appendChild(b);
-  }
 }
 
 function closeWebEditModal() {
@@ -474,58 +445,17 @@ function applyWebEdit() {
   }
   if (field === 'name') {
     window.roopieInternal.setWebPanel(id, { title: webEditInput.value });
-  } else if (field === 'url') {
+  } else {
     if (!looksLikeUrl(webEditInput.value)) {
       webEditError.textContent = '正しいURLを入力してください';
       webEditError.classList.remove('hidden');
       return;
     }
     window.roopieInternal.setWebPanel(id, { url: webEditInput.value });
-  } else {
-    // 絵文字入力欄が優先(直接入力を拾う)。空なら現在のpendingIcon(グリッド選択/画像/reset)
-    const typed = webEditEmojiInput.value.trim();
-    const icon = typed ? { type: 'emoji', value: typed } : webEdit.pendingIcon;
-    window.roopieInternal.setWebPanel(id, { icon: icon ?? null });
   }
   closeWebEditModal();
 }
 
-// 画像を選んで中央基準の正方形にクロップ→128pxのdata URIに
-$('web-edit-upload').addEventListener('click', () => {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'image/*';
-  input.addEventListener('change', () => {
-    const file = input.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const img = new Image();
-      img.onload = () => {
-        const SIZE = 128;
-        const canvas = document.createElement('canvas');
-        canvas.width = canvas.height = SIZE;
-        const ctx = canvas.getContext('2d');
-        const s = Math.min(img.width, img.height);
-        ctx.drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, SIZE, SIZE);
-        webEditEmojiInput.value = '';
-        setPendingIcon({ type: 'image', value: canvas.toDataURL('image/png') });
-      };
-      img.src = reader.result;
-    };
-    reader.readAsDataURL(file);
-  });
-  input.click();
-});
-
-$('web-edit-reset-icon').addEventListener('click', () => {
-  webEditEmojiInput.value = '';
-  setPendingIcon(null);
-});
-webEditEmojiInput.addEventListener('input', () => {
-  const v = webEditEmojiInput.value.trim();
-  setPendingIcon(v ? { type: 'emoji', value: v } : null);
-});
 $('web-edit-apply').addEventListener('click', applyWebEdit);
 $('web-edit-cancel').addEventListener('click', closeWebEditModal);
 webEditModal.addEventListener('click', (e) => {

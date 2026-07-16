@@ -596,3 +596,12 @@
   - 編集(名前/アイコン/URL)・削除: ピン留めアイコンの右クリックメニュー(従来どおり)
 - 追加/編集モーダルの表示場所として activeSection='web' を「空のホストパネル」として残す(レールにボタンは無い)。モーダルを閉じたら `sidepanel:edit-done` → `closeEditHost()` でホストパネルを畳む(追加確定で新パネルが開いた場合は畳まない)
 - 変更: `sidepanel.html`(section-web/レールボタン削除)、`sidepanel.js`(renderWebList/addWebPanel削除、closeWebEditModalでedit-done送信)、`side-panel.js`(closeEditHost)、`ipc.js`/`internal-preload.js`(sidepanel:edit-done)、`toolbar-context-menu.js`(追加項目)、`tailwind.css`(.web-add削除→build:css済み)
+
+## 2026-07-17(3): アイコン設定UIの共通化(プロファイル/Webパネル/ショートカット) + サイドバー右クリック整理
+
+- **共通アイコンピッカー `icon-picker.js` を新設**: 設定画面のプロファイル用UI(絵文字24種グリッド+自由入力+画像アップロード→ドラッグ&ズームの円形GUIクロップ+既定に戻す)を抽出して共通部品化。`window.roopieIconPicker.toggle(anchor, opts)`(ポップオーバー)/ `.open(opts)`(中央モーダル)。onPickは `{type:'emoji'|'image', value}` または `null`(既定に戻す)。クロップ中はonCloseを持ち越す(サイドパネルのホストパネルが先に畳まれないように)
+- **プロファイル**(settings.js): 自前実装を共通ピッカーに置き換え(挙動は同じ)
+- **Webパネル**(sidepanel): 旧アイコン編集モード(絵文字18種+中央固定クロップ)を廃止し共通ピッカーに。既定はfavicon(reset=faviconに戻す)。編集モーダルは名前/URL専用に簡素化
+- **スタートのショートカット**(newtab): アイコン既定を**リンク先のfavicon**に変更(訪問済みならその favicon、なければ `google.com/s2/favicons`、失敗時は頭文字)。編集モーダルの絵文字テキスト入力を「プレビュー+アイコンを変更」ボタン(共通ピッカー)に置き換え。画像アイコン対応のため `bookmarks.js` の `normalizeIcon` をimage型(data URI・400KB上限)対応に拡張。アップロード画像はタイル全面表示(.custom-image)
+- **サイドバー右クリックの修正**: ピン留めWebパネルアイコンの contextmenu が親レールのメニューにも伝播して2つのメニューが競合していた(stopPropagation追加)。ピン留めアイコンのメニューに「ウェブパネルを追加...」も追加(追加/削除/編集がアイコン右クリックで完結)
+- CSS: `.icon-picker-backdrop`(中央モーダル版, z70)追加、`.crop-backdrop` z60→80(ショートカットモーダルz60より手前に)。旧web-editアイコンUI(.emoji-grid/.emoji-btn/.modal-btn-row)と `.web-add` を削除。newtab.cssに `.shortcut-icon-row`/`.shortcut-icon-preview`/`.custom-image` を追加

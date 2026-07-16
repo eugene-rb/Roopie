@@ -75,29 +75,62 @@ function shortcutTarget(shortcut) {
   return shortcutKind(shortcut) === 'folder' ? shortcut.url.slice('file://'.length) : shortcut.url;
 }
 
-function shortcutTileEl(shortcut) {
-  const tile = document.createElement('div');
-  tile.className = 'tile';
-  const icon = shortcut.icon ?? { type: 'letter' };
+// リンク先のfavicon URL(既定アイコン)。ホストが取れないURLはnull
+function faviconUrlFor(url) {
+  try {
+    const host = new URL(url).hostname;
+    return host ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64` : null;
+  } catch {
+    return null;
+  }
+}
 
-  if (icon.type === 'emoji' && icon.value) {
+function letterPlaceholderEl(title) {
+  const placeholder = document.createElement('div');
+  placeholder.className = 'placeholder';
+  placeholder.textContent = (title[0] || '?').toUpperCase();
+  return placeholder;
+}
+
+const FOLDER_ICON_SVG =
+  '<svg class="folder-icon" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+
+// タイルの中身(アイコン部分)を作る。iconOverride はモーダルのプレビュー用
+// (undefined = shortcut.icon を使う / null = 既定に戻した状態を表示)
+function tileIconContent(tile, shortcut, iconOverride) {
+  const icon = iconOverride !== undefined ? iconOverride : shortcut.icon ?? null;
+
+  if (icon?.type === 'emoji' && icon.value) {
     const span = document.createElement('span');
     span.className = 'placeholder';
     span.textContent = icon.value;
     tile.appendChild(span);
-  } else if (shortcutKind(shortcut) === 'folder') {
-    tile.innerHTML =
-      '<svg class="folder-icon" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
-  } else if (shortcut.favicon) {
+  } else if (icon?.type === 'image' && icon.value) {
     const img = document.createElement('img');
-    img.src = shortcut.favicon;
+    img.className = 'custom-image'; // アップロード画像はタイル全体に敷く(プロファイルのアバターと同じ見せ方)
+    img.src = icon.value;
     tile.appendChild(img);
+  } else if (shortcutKind(shortcut) === 'folder') {
+    tile.innerHTML = FOLDER_ICON_SVG;
   } else {
-    const placeholder = document.createElement('div');
-    placeholder.className = 'placeholder';
-    placeholder.textContent = (shortcut.title[0] || '?').toUpperCase();
-    tile.appendChild(placeholder);
+    // 既定はリンク先のfavicon(訪問時に取得済みならそれ、なければfaviconサービス)。
+    // 読み込めなければ頭文字にフォールバック
+    const src = shortcut.favicon || faviconUrlFor(shortcut.url);
+    if (src) {
+      const img = document.createElement('img');
+      img.src = src;
+      img.addEventListener('error', () => img.replaceWith(letterPlaceholderEl(shortcut.title)));
+      tile.appendChild(img);
+    } else {
+      tile.appendChild(letterPlaceholderEl(shortcut.title));
+    }
   }
+}
+
+function shortcutTileEl(shortcut) {
+  const tile = document.createElement('div');
+  tile.className = 'tile';
+  tileIconContent(tile, shortcut, undefined);
   return tile;
 }
 
@@ -267,13 +300,50 @@ function openShortcutModal(existing) {
   kindFolder.input.addEventListener('change', syncKindVisibility);
   syncKindVisibility();
 
-  const iconInput = document.createElement('input');
-  iconInput.className = 'search';
-  iconInput.type = 'text';
-  iconInput.placeholder = 'アイコン(絵文字。空なら頭文字を使用)';
-  iconInput.maxLength = 8;
-  iconInput.value = existing?.icon?.type === 'emoji' ? existing.icon.value : '';
-  modal.appendChild(iconInput);
+  // アイコン: プロファイルと同じ共通ピッカー(絵文字グリッド+自由入力+画像クロップ)。
+  // 既定はリンク先のfavicon。pendingIcon: undefined=変更なし / null=既定に戻す / {type,value}=変更
+  let pendingIcon;
+  const iconRow = document.createElement('div');
+  iconRow.className = 'shortcut-icon-row';
+  const iconPreview = document.createElement('div');
+  iconPreview.className = 'tile shortcut-icon-preview';
+  const iconLabel = document.createElement('span');
+  iconLabel.className = 'shortcut-icon-label';
+  const iconBtn = document.createElement('button');
+  iconBtn.className = 'btn';
+  iconBtn.textContent = 'アイコンを変更';
+  iconRow.append(iconPreview, iconLabel, iconBtn);
+  modal.appendChild(iconRow);
+
+  function renderIconPreview() {
+    iconPreview.textContent = '';
+    // プレビューは現在の入力内容(URL/フォルダ)を反映した仮のショートカットで描く
+    const kind = kindFolder.input.checked ? 'folder' : 'url';
+    const target = kind === 'folder' ? pickedFolder : urlInput.value.trim();
+    const preview = {
+      title: nameInput.value.trim() || existing?.title || '?',
+      url: kind === 'folder' ? `file://${target}` : /^https?:/i.test(target) ? target : `https://${target}`,
+      favicon: existing?.favicon ?? null,
+      icon: existing?.icon ?? null,
+    };
+    tileIconContent(iconPreview, preview, pendingIcon);
+    const effective = pendingIcon !== undefined ? pendingIcon : existing?.icon ?? null;
+    iconLabel.textContent = effective ? 'カスタムアイコン' : '既定(リンク先のfavicon)';
+  }
+  urlInput.addEventListener('input', () => {
+    // 既定アイコン表示中はURLに追随してプレビューを更新する
+    if ((pendingIcon !== undefined ? pendingIcon : existing?.icon ?? null) === null) renderIconPreview();
+  });
+  iconBtn.addEventListener('click', () => {
+    window.roopieIconPicker.open({
+      resetLabel: '既定に戻す(favicon)',
+      onPick: (icon) => {
+        pendingIcon = icon; // null = 既定(favicon)に戻す
+        renderIconPreview();
+      },
+    });
+  });
+  renderIconPreview();
 
   const actions = document.createElement('div');
   actions.className = 'shortcut-actions';
@@ -305,12 +375,13 @@ function openShortcutModal(existing) {
     const name = nameInput.value.trim();
     const target = kind === 'folder' ? pickedFolder : urlInput.value.trim();
     if (!name || !target) return;
-    const icon = iconInput.value.trim() ? { type: 'emoji', value: iconInput.value.trim() } : { type: 'letter' };
 
     if (existing) {
-      window.roopieInternal.updateShortcut(existing.id, { kind, title: name, target, icon });
+      const patch = { kind, title: name, target };
+      if (pendingIcon !== undefined) patch.icon = pendingIcon; // null = 既定(favicon)に戻す
+      window.roopieInternal.updateShortcut(existing.id, patch);
     } else {
-      await window.roopieInternal.addShortcut(currentPageId, { kind, name, target, icon });
+      await window.roopieInternal.addShortcut(currentPageId, { kind, name, target, icon: pendingIcon ?? null });
     }
     await loadShortcuts();
     close();

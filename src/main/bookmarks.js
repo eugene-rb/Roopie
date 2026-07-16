@@ -185,9 +185,16 @@ function normalizeUrl(input) {
   return /^[a-z][a-z0-9+.-]*:\/\//i.test(input) ? input : `https://${input}`;
 }
 
+// null は既定(リンク先のfavicon / フォルダアイコン / 頭文字)。side-panel.js の normalizeWebIcon と同様に検証する
 function normalizeIcon(icon) {
-  if (icon && icon.type === 'emoji' && typeof icon.value === 'string' && icon.value.trim()) {
+  if (!icon || typeof icon !== 'object') return null;
+  if (icon.type === 'emoji' && typeof icon.value === 'string' && icon.value.trim()) {
     return { type: 'emoji', value: icon.value.trim().slice(0, 16) };
+  }
+  if (icon.type === 'image' && typeof icon.value === 'string') {
+    return icon.value.startsWith('data:image/') && icon.value.length <= 400_000
+      ? { type: 'image', value: icon.value }
+      : null;
   }
   return null;
 }
