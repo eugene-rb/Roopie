@@ -128,9 +128,12 @@ app.whenReady().then(async () => {
   const defaultCols = Number(await gridVar('--grid-cols'));
   check('既定の列数が正の整数', Number.isInteger(defaultCols) && defaultCols > 0, true);
 
-  // グリッド全体の横幅がウィンドウ横幅の約40%になる(この幅に収まる列数を計算しているため)
-  const gridWidthRatio = await js(`document.getElementById('quick-links').getBoundingClientRect().width / window.innerWidth`);
-  check('グリッド全体の横幅がウィンドウ横幅の30〜45%に収まる', gridWidthRatio >= 0.3 && gridWidthRatio <= 0.45, true);
+  // グリッド全体の横幅は「700pxとウィンドウ幅の小さいほう」に収まる(この幅に入る列数を計算しているため)
+  const gridWidth = await js(`document.getElementById('quick-links').getBoundingClientRect().width`);
+  const gridInnerW = await js(`window.innerWidth`);
+  const gridTargetW = Math.min(700, gridInnerW - 48);
+  check('グリッド全体の横幅が目安幅(min(700px, ウィンドウ幅-48))以下', gridWidth <= gridTargetW, true);
+  check('グリッドが目安幅を概ね使い切る(1セル分以上余らせない)', gridWidth > gridTargetW - (96 + 14), true);
 
   // アイコンサイズを最大(160px)に変更 → セルサイズはウィンドウ幅に関係なくそのまま反映され、
   // 同じ横幅に収まる列数はアイコンが大きくなった分だけ減る

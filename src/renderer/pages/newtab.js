@@ -20,7 +20,7 @@ const MAX_ICON_SIZE = 160;
 const MIN_COLS = 2; // 狭いウィンドウでも最低限これだけは表示する
 const MIN_VISIBLE_ROWS = 2;
 const MAX_VISIBLE_ROWS = 6;
-const GRID_WIDTH_RATIO = 0.4; // グリッド全体の目安の横幅=ウィンドウ横幅の40%(この中に入る列数を計算する)
+const GRID_MAX_WIDTH = 700; // グリッド全体の目安の横幅=700pxとウィンドウ幅の小さいほう(この中に入る列数を計算する)
 let iconSize = 96;
 let computedCols = 6;
 let computedRows = 3;
@@ -28,8 +28,8 @@ let computedRows = 3;
 function applyGridMetrics() {
   const cellPx = Math.min(MAX_ICON_SIZE, Math.max(MIN_ICON_SIZE, Math.round(iconSize) || 96));
   // グリッドは#newtabの箱の幅に縛られず独立に伸縮する(centerで見た目上はみ出さず中央寄せされる)。
-  // ウィンドウ横幅の約40%に収まるだけの列数を、アイコンサイズは変えずに計算する
-  const targetW = window.innerWidth * GRID_WIDTH_RATIO;
+  // 700pxとウィンドウ幅(左右の余白48pxを除く)の小さいほうに収まる列数を、アイコンサイズは変えずに計算する
+  const targetW = Math.min(GRID_MAX_WIDTH, window.innerWidth - 48);
   const cols = Math.max(MIN_COLS, Math.floor((targetW + GRID_GAP) / (cellPx + GRID_GAP)));
   computedCols = cols;
 
