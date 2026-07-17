@@ -2,14 +2,19 @@
 // 本物の internal-preload.js の代わりに、newtab が使うAPIをメモリ上のデータで返す。
 const { contextBridge } = require('electron');
 
-const pages = [{ id: 'p1', type: 'folder', title: 'ページ1' }];
-const shortcuts = [
-  { id: 's1', type: 'bookmark', title: 'Example', url: 'https://example.com', favicon: null, icon: null },
+let pages = [
+  { id: 'p1', type: 'folder', title: 'ページ1' },
+  { id: 'p2', type: 'folder', title: 'ページ2' },
 ];
-let layout = [];
+const shortcutsByPage = {
+  p1: [{ id: 's1', type: 'bookmark', title: 'Example', url: 'https://example.com', favicon: null, icon: null }],
+  p2: [{ id: 's2', type: 'bookmark', title: 'Second', url: 'https://example.org', favicon: null, icon: null }],
+};
+const layoutByPage = { p1: [], p2: [] };
+let nextPageNum = 3;
 const configCalls = [];
 const layoutCalls = [];
-let settings = { startGridCols: 6, startGridRows: 4 };
+let settings = { startGridCols: 6, startGridRows: 3 };
 let onSettingsCb = () => {};
 
 const FAKE_RSS = `<?xml version="1.0" encoding="UTF-8"?>
@@ -22,8 +27,15 @@ contextBridge.exposeInMainWorld('roopieInternal', {
   navigate: () => {},
   openTab: () => {},
   listStartPages: async () => pages,
-  addStartPage: async () => null,
-  listShortcuts: async () => shortcuts,
+  addStartPage: async (title) => {
+    const page = { id: `p${nextPageNum}`, type: 'folder', title: title || `ページ${nextPageNum}` };
+    nextPageNum += 1;
+    pages = [...pages, page];
+    shortcutsByPage[page.id] = [];
+    layoutByPage[page.id] = [];
+    return page;
+  },
+  listShortcuts: async (pageId) => shortcutsByPage[pageId] || [],
   addShortcut: async () => null,
   updateShortcut: () => {},
   removeShortcut: () => {},
@@ -44,22 +56,23 @@ contextBridge.exposeInMainWorld('roopieInternal', {
     onSettingsCb = cb;
   },
 
-  getWidgetLayout: async () => layout,
-  setWidgetLayout: (_pageId, items) => {
-    layout = items;
+  getWidgetLayout: async (pageId) => layoutByPage[pageId] || (layoutByPage[pageId] = []),
+  setWidgetLayout: (pageId, items) => {
+    layoutByPage[pageId] = items;
     layoutCalls.push(items);
   },
-  addWidget: async (_pageId, widgetType) => {
-    const item = { type: 'widget', id: `w-${layout.length + 1}-${widgetType}`, widgetType, config: {} };
-    layout = [...layout, item];
+  addWidget: async (pageId, widgetType) => {
+    const list = layoutByPage[pageId] || (layoutByPage[pageId] = []);
+    const item = { type: 'widget', id: `w-${list.length + 1}-${widgetType}`, widgetType, config: {} };
+    layoutByPage[pageId] = [...list, item];
     return item;
   },
-  removeWidget: (_pageId, id) => {
-    layout = layout.filter((i) => !(i.type === 'widget' && i.id === id));
+  removeWidget: (pageId, id) => {
+    layoutByPage[pageId] = (layoutByPage[pageId] || []).filter((i) => !(i.type === 'widget' && i.id === id));
   },
-  setWidgetConfig: (_pageId, id, patch) => {
+  setWidgetConfig: (pageId, id, patch) => {
     configCalls.push({ id, patch });
-    const item = layout.find((i) => i.type === 'widget' && i.id === id);
+    const item = (layoutByPage[pageId] || []).find((i) => i.type === 'widget' && i.id === id);
     if (item) item.config = { ...item.config, ...patch };
   },
   geocodeCity: async () => [{ name: '東京', admin: '東京都', country: '日本', lat: 35.68, lon: 139.76 }],
@@ -74,7 +87,7 @@ contextBridge.exposeInMainWorld('roopieInternal', {
   getRss: async () => FAKE_RSS,
 
   // テストからの状態確認用
-  __stubState: () => ({ layout, configCalls, layoutCalls, settings }),
+  __stubState: () => ({ layout: layoutByPage.p1, configCalls, layoutCalls, settings }),
   __setSettings: (patch) => {
     settings = { ...settings, ...patch };
     onSettingsCb(settings);

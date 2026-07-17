@@ -1591,7 +1591,7 @@ window.roopieInternal.onSettings((settings) => {
   renderDownloadPath(settings.downloadPath);
   renderToolbarItems(settings.toolbarItems);
   startGridColsInput.value = settings.startGridCols || 6;
-  startGridRowsInput.value = settings.startGridRows || 4;
+  startGridRowsInput.value = settings.startGridRows || 3;
 });
 
 // 別タブでログインして戻ってきたときに「ログイン中」表示を更新する
@@ -1623,7 +1623,7 @@ document.addEventListener('visibilitychange', () => {
   renderDownloadPath(settings.downloadPath);
   renderToolbarItems(settings.toolbarItems);
   startGridColsInput.value = settings.startGridCols || 6;
-  startGridRowsInput.value = settings.startGridRows || 4;
+  startGridRowsInput.value = settings.startGridRows || 3;
   if (gestureConfig) gestureState = gestureConfig;
   if (themeConfig) themeState = themeConfig;
   render();

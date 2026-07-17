@@ -1435,6 +1435,7 @@ body {
 
 .icon-picker-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 

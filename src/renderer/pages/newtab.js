@@ -16,11 +16,11 @@ const MIN_MARGIN = 16; // 上下の要素と画面端に最低限残す余白
 const MIN_CELL = 30;
 const MAX_CELL = 116;
 let gridCols = 6;
-let gridRows = 4;
+let gridRows = 3;
 
 function applyGridMetrics() {
   const cols = Math.min(10, Math.max(4, Math.round(gridCols) || 6));
-  const rows = Math.min(8, Math.max(3, Math.round(gridRows) || 4));
+  const rows = Math.min(8, Math.max(3, Math.round(gridRows) || 3));
 
   const availW = Math.min(window.innerWidth, 680) - 48;
   const cellFromWidth = Math.floor((availW - GRID_GAP * (cols - 1)) / cols);
@@ -817,11 +817,7 @@ function renderPageDots() {
       const dot = document.createElement('button');
       dot.className = 'page-dot' + (page.id === currentPageId ? ' active' : '');
       dot.title = page.title;
-      dot.addEventListener('click', () => {
-        currentPageId = page.id;
-        renderPageDots();
-        loadShortcuts();
-      });
+      dot.addEventListener('click', () => switchToPage(page.id));
       pageDotsEl.appendChild(dot);
     }
   }
@@ -862,6 +858,91 @@ async function loadPages() {
   renderPageDots();
   await loadShortcuts();
 }
+
+// ---- ページのスワイプ切り替え(スマホのホーム画面風。トラックパッドの横スワイプ/タッチに対応) ----
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const SWIPE_SLIDE = 28; // 切り替え時にスライドさせる距離(px)
+
+let pageSwitchBusy = false;
+async function switchToPage(pageId, dir = 0) {
+  if (pageSwitchBusy || pageId === currentPageId) return;
+  const fromIdx = pages.findIndex((p) => p.id === currentPageId);
+  const toIdx = pages.findIndex((p) => p.id === pageId);
+  if (toIdx === -1) return;
+  if (!dir) dir = toIdx > fromIdx ? 1 : -1;
+
+  pageSwitchBusy = true;
+  currentPageId = pageId;
+  renderPageDots();
+
+  quickLinksEl.animate(
+    [
+      { transform: 'translateX(0)', opacity: 1 },
+      { transform: `translateX(${-dir * SWIPE_SLIDE}px)`, opacity: 0 },
+    ],
+    { duration: 120, easing: 'ease-in', fill: 'forwards' }
+  );
+  await sleep(120);
+  await loadShortcuts();
+  quickLinksEl.animate(
+    [
+      { transform: `translateX(${dir * SWIPE_SLIDE}px)`, opacity: 0 },
+      { transform: 'translateX(0)', opacity: 1 },
+    ],
+    { duration: 160, easing: 'ease-out' }
+  );
+  pageSwitchBusy = false;
+}
+
+function goToAdjacentPage(dir) {
+  if (pages.length < 2) return;
+  const idx = pages.findIndex((p) => p.id === currentPageId);
+  const next = pages[idx + dir];
+  if (next) switchToPage(next.id, dir);
+}
+
+// トラックパッドの横スワイプ(precisionタッチパッドはwheelイベントのdeltaXとして届く)
+let wheelCooldown = false;
+quickLinksEl.addEventListener(
+  'wheel',
+  (e) => {
+    if (Math.abs(e.deltaX) < 24 || Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+    e.preventDefault();
+    if (wheelCooldown) return;
+    wheelCooldown = true;
+    goToAdjacentPage(e.deltaX > 0 ? 1 : -1);
+    setTimeout(() => {
+      wheelCooldown = false;
+    }, 350);
+  },
+  { passive: false }
+);
+
+// タッチスワイプ
+let touchStartX = null;
+let touchStartY = null;
+quickLinksEl.addEventListener(
+  'touchstart',
+  (e) => {
+    if (e.touches.length !== 1) return;
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+  },
+  { passive: true }
+);
+quickLinksEl.addEventListener(
+  'touchend',
+  (e) => {
+    if (touchStartX === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    const dy = e.changedTouches[0].clientY - touchStartY;
+    touchStartX = null;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      goToAdjacentPage(dx < 0 ? 1 : -1);
+    }
+  },
+  { passive: true }
+);
 
 // ---- 追加/編集モーダル ----
 function radioOption(name, value, label, checked) {
@@ -1162,7 +1243,7 @@ loadLocalServers();
 // ---- 設定(グリッドの列数・行数。設定画面での変更をライブ反映) ----
 function applySettings(settings) {
   gridCols = settings.startGridCols || 6;
-  gridRows = settings.startGridRows || 4;
+  gridRows = settings.startGridRows || 3;
   applyGridMetrics();
 }
 window.roopieInternal.onSettings(applySettings);

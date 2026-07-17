@@ -45,7 +45,7 @@ const DEFAULT_SETTINGS = {
   autofillCards: true,
   // スタート画面のグリッド列数・行数(Androidのホーム画面のように自由に変更可能)
   startGridCols: 6,
-  startGridRows: 4,
+  startGridRows: 3,
 };
 const START_GRID_COLS_RANGE = [4, 10];
 const START_GRID_ROWS_RANGE = [3, 8];

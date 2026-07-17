@@ -137,6 +137,47 @@ app.whenReady().then(async () => {
   await sleep(150);
   check('列数10がライブ反映される', await gridVar('--grid-cols'), '10');
 
+  // ---- ページのスワイプ切り替え(トラックパッド横スワイプ/タッチ。stubは2ページ p1/p2 を用意) ----
+  check('スワイプ前はp1のグリッド(4件)', await js(`document.querySelectorAll('#quick-links .grid-item').length`), 4);
+
+  // トラックパッドの横スワイプ(precisionタッチパッドはwheelイベントのdeltaXとして届く)→ 次ページ(p2)
+  await js(`document.getElementById('quick-links').dispatchEvent(
+    new WheelEvent('wheel', { deltaX: 80, deltaY: 0, bubbles: true, cancelable: true })
+  )`);
+  await sleep(500);
+  check('スワイプでp2に切り替わる(1件)', await js(`document.querySelectorAll('#quick-links .grid-item').length`), 1);
+  check('p2のショートカット名が表示される', await js(`document.querySelector('#quick-links .grid-item .label')?.textContent`), 'Second');
+  check('ページドットのactiveがp2になる', await js(`document.querySelectorAll('.page-dot')[1]?.classList.contains('active')`), true);
+
+  // タッチスワイプ(右方向=前のページ)→ p1に戻る
+  await js(`(() => {
+    const el = document.getElementById('quick-links');
+    const rect = el.getBoundingClientRect();
+    const start = new Touch({ identifier: 1, target: el, clientX: rect.left + 200, clientY: rect.top + 40 });
+    el.dispatchEvent(new TouchEvent('touchstart', { touches: [start], changedTouches: [start], bubbles: true, cancelable: true }));
+    const end = new Touch({ identifier: 1, target: el, clientX: rect.left + 320, clientY: rect.top + 40 });
+    el.dispatchEvent(new TouchEvent('touchend', { touches: [], changedTouches: [end], bubbles: true, cancelable: true }));
+  })()`);
+  await sleep(500);
+  check('タッチスワイプでp1に戻る(4件)', await js(`document.querySelectorAll('#quick-links .grid-item').length`), 4);
+  check('ページドットのactiveがp1になる', await js(`document.querySelectorAll('.page-dot')[0]?.classList.contains('active')`), true);
+
+  // ---- 共通アイコンピッカー(icon-picker.js): ボタンがパネル幅からはみ出さないこと ----
+  await js(`document.querySelector('.quick-link-add').click()`);
+  await sleep(100);
+  await js(`[...document.querySelectorAll('.grid-popup-item')].find((b) => b.textContent.includes('ショートカット')).click()`);
+  await sleep(150);
+  await js(`[...document.querySelectorAll('.btn')].find((b) => b.textContent === 'アイコンを変更').click()`);
+  await sleep(100);
+  const overflowInfo = await js(`(() => {
+    const panel = document.querySelector('.icon-picker');
+    const panelRight = panel.getBoundingClientRect().right;
+    const btns = [...panel.querySelectorAll('.icon-picker-row .btn')];
+    return { count: btns.length, overflow: btns.some((b) => b.getBoundingClientRect().right > panelRight + 0.5) };
+  })()`);
+  check('アイコンピッカーのボタンが3個ある(設定/アップロード/既定に戻す)', overflowInfo.count, 3);
+  check('アイコンピッカーのボタンがパネル幅をはみ出さない', overflowInfo.overflow, false);
+
   server.close();
   console.log(failed ? `\n${failed}件失敗` : '\n全テスト成功');
   app.exit(failed ? 1 : 0);
