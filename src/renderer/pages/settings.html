@@ -220,12 +220,11 @@
     <div class="card">
       <div class="setting-row">
         <div>
-          <div class="setting-name">グリッドの列数・行数</div>
-          <div class="setting-desc">Androidのホーム画面のように、アイコンの大きさが画面に合わせて自動調整されます</div>
+          <div class="setting-name">アイコンの最大サイズ</div>
+          <div class="setting-desc">列数・行数はウィンドウの大きさに合わせて自動調整されます。アイコン自体の大きさはウィンドウをリサイズしても変わりません</div>
         </div>
         <div class="grid-size-inputs">
-          <label>横 <input id="start-grid-cols" type="number" class="search" min="4" max="10" step="1" /></label>
-          <label>縦 <input id="start-grid-rows" type="number" class="search" min="3" max="8" step="1" /></label>
+          <label><input id="start-icon-size" type="number" class="search" min="48" max="160" step="4" /> px</label>
         </div>
       </div>
     </div>

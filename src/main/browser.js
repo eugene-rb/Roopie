@@ -43,12 +43,11 @@ const DEFAULT_SETTINGS = {
   // 自動入力(住所・個人情報/お支払い方法)のON/OFF
   autofillAddresses: true,
   autofillCards: true,
-  // スタート画面のグリッド列数・行数(Androidのホーム画面のように自由に変更可能)
-  startGridCols: 6,
-  startGridRows: 3,
+  // スタート画面のアイコン最大サイズ(px)。列数・行数はこれとウィンドウ幅・高さから自動計算する
+  // (ウィンドウをリサイズしてもアイコン自体の大きさは変わらず、表示できる列数・行数だけが変わる)
+  startIconSize: 96,
 };
-const START_GRID_COLS_RANGE = [4, 10];
-const START_GRID_ROWS_RANGE = [3, 8];
+const START_ICON_SIZE_RANGE = [48, 160];
 const DEFAULT_THEME = { accent: '#6c8cff', background: 'auto', backgroundImage: '', customCss: '' };
 const THEME_BACKGROUNDS = ['auto', 'dawn', 'day', 'dusk', 'night', 'plain', 'image'];
 const MAX_CUSTOM_CSS = 50000;
@@ -67,8 +66,7 @@ const browser = {
   DEFAULT_SETTINGS,
   DEFAULT_THEME,
   THEME_BACKGROUNDS,
-  START_GRID_COLS_RANGE,
-  START_GRID_ROWS_RANGE,
+  START_ICON_SIZE_RANGE,
   MAX_CUSTOM_CSS,
 
   // プロファイル単位のデータ(全ウィンドウで共有)

@@ -114,32 +114,35 @@ app.whenReady().then(async () => {
   // グリッド全体: ショートカット1 + 天気 + ノート + ニュース = 4
   check('最終的なグリッド項目数', await js(`document.querySelectorAll('#quick-links .grid-item').length`), 4);
 
-  // ---- グリッドの列数・行数設定(Android風の自由なグリッドサイズ) ----
+  // ---- グリッドのアイコンサイズ設定(手動設定は最大サイズのみ。列数・行数はウィンドウの
+  // 大きさから自動計算し、アイコン自体の大きさはウィンドウをリサイズしても変わらない) ----
   const gridVar = (name) => js(`getComputedStyle(document.getElementById('quick-links')).getPropertyValue('${name}').trim()`);
 
-  check('既定の列数(6)が反映される', await gridVar('--grid-cols'), '6');
   const defaultCell = parseFloat(await gridVar('--cell'));
-  check('既定のセルサイズが正の数', defaultCell > 0, true);
+  check('既定のアイコンサイズ(96px)がそのままセルサイズになる', defaultCell, 96);
+  const defaultCols = Number(await gridVar('--grid-cols'));
+  check('既定の列数が正の整数', Number.isInteger(defaultCols) && defaultCols > 0, true);
 
-  // グリッド全体(6列分)の横幅がウィンドウ横幅の約40%になる(高さ制約で縮んでいなければ)
+  // グリッド全体の横幅がウィンドウ横幅の約40%になる(この幅に収まる列数を計算しているため)
   const gridWidthRatio = await js(`document.getElementById('quick-links').getBoundingClientRect().width / window.innerWidth`);
   check('グリッド全体の横幅がウィンドウ横幅の30〜45%に収まる', gridWidthRatio >= 0.3 && gridWidthRatio <= 0.45, true);
 
-  // 設定を横4・縦8に変更 → ライブ反映
-  await js(`window.roopieInternal.__setSettings({ startGridCols: 4, startGridRows: 8 })`);
+  // アイコンサイズを最大(160px)に変更 → セルサイズはウィンドウ幅に関係なくそのまま反映され、
+  // 同じ横幅に収まる列数はアイコンが大きくなった分だけ減る
+  await js(`window.roopieInternal.__setSettings({ startIconSize: 160 })`);
   await sleep(150);
-  check('列数4がライブ反映される', await gridVar('--grid-cols'), '4');
-  const tallCell = parseFloat(await gridVar('--cell'));
-  check('縦8行だとセルが既定より縮む', tallCell < defaultCell, true);
+  check('アイコンサイズの変更がそのままセルサイズに反映される', parseFloat(await gridVar('--cell')), 160);
+  const bigCols = Number(await gridVar('--grid-cols'));
+  check('アイコンが大きくなると列数は減る', bigCols < defaultCols, true);
 
-  // 縦8行でも時計が画面外にはみ出ない(セル縮小→--newtab-shift緩和の二段安全弁が効く)
+  // アイコンを大きくした狭い画面でも時計が画面外にはみ出ない(行数縮小→--newtab-shift緩和の安全弁)
   const clockTop = await js(`document.getElementById('clock').getBoundingClientRect().top`);
   check('時計が画面上端で欠けない', clockTop >= 0, true);
 
-  // 設定を横10・縦3に戻す
-  await js(`window.roopieInternal.__setSettings({ startGridCols: 10, startGridRows: 3 })`);
+  // 設定を既定(96px)に戻す
+  await js(`window.roopieInternal.__setSettings({ startIconSize: 96 })`);
   await sleep(150);
-  check('列数10がライブ反映される', await gridVar('--grid-cols'), '10');
+  check('アイコンサイズを戻すとセルサイズも既定に戻る', parseFloat(await gridVar('--cell')), 96);
 
   // ---- ページのスワイプ切り替え(トラックパッド横スワイプ/タッチ。stubは2ページ p1/p2 を用意) ----
   check('スワイプ前はp1のグリッド(4件)', await js(`document.querySelectorAll('#quick-links .grid-item').length`), 4);
@@ -190,6 +193,30 @@ app.whenReady().then(async () => {
       `document.querySelector(${JSON.stringify(selector)}).dispatchEvent(new PointerEvent(${JSON.stringify(type)}, { pointerId: ${pointerId}, clientX: ${x}, clientY: ${y}, bubbles: true, cancelable: true, button: 0 }))`
     );
   }
+  async function allItemRects() {
+    const raw = await js(
+      `[...document.querySelectorAll('#quick-links .grid-item')].map((el) => [el.dataset.gridKey, el.style.gridColumn, el.style.gridRow])`
+    );
+    return raw.map(([key, col, row]) => {
+      const c = parseSpan(col);
+      const r = parseSpan(row);
+      return { key, x: c.start, y: r.start, w: c.span, h: r.span };
+    });
+  }
+  function findFreeCell(items, cols, excludeKey, avoidX, avoidY) {
+    const occupied = new Set();
+    for (const it of items) {
+      if (it.key === excludeKey) continue;
+      for (let dy = 0; dy < it.h; dy++) for (let dx = 0; dx < it.w; dx++) occupied.add(`${it.x + dx},${it.y + dy}`);
+    }
+    for (let y = 0; y < 50; y++) {
+      for (let x = 0; x < cols; x++) {
+        if (x === avoidX && y === avoidY) continue;
+        if (!occupied.has(`${x},${y}`)) return { x, y };
+      }
+    }
+    return null;
+  }
 
   // 1) Example(1x1のショートカット)を空きセルへドラッグ。オーバーレイのグリッド線+プレビューを確認
   const cols = Number(await gridVar('--grid-cols'));
@@ -197,7 +224,7 @@ app.whenReady().then(async () => {
   const step1 = cellPx1 + DRAG_GAP;
   const exampleKey = await js(`document.querySelector('[data-grid-key^="s:"]').dataset.gridKey`);
   const examplePos = await posOf(`[data-grid-key="${exampleKey}"]`);
-  const freeSpot = { x: cols - 1, y: 0 }; // 右上端は10列中まず埋まらない空きセル
+  const freeSpot = findFreeCell(await allItemRects(), cols, exampleKey, examplePos.x, examplePos.y);
   const c1 = await centerOf(`[data-grid-key="${exampleKey}"]`);
   const d1x = (freeSpot.x - examplePos.x) * step1;
   const d1y = (freeSpot.y - examplePos.y) * step1;

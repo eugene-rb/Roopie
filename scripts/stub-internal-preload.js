@@ -14,7 +14,7 @@ const layoutByPage = { p1: [], p2: [] };
 let nextPageNum = 3;
 const configCalls = [];
 const layoutCalls = [];
-let settings = { startGridCols: 6, startGridRows: 3 };
+let settings = { startIconSize: 96 };
 let onSettingsCb = () => {};
 
 const FAKE_RSS = `<?xml version="1.0" encoding="UTF-8"?>

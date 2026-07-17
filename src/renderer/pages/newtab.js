@@ -10,23 +10,28 @@ const quickLinksEl = document.getElementById('quick-links');
 const pageDotsEl = document.getElementById('shortcut-pages');
 const localServersEl = document.getElementById('local-servers');
 
-// ---- グリッドの列数・行数(設定画面から変更。Androidのホーム画面のように画面に合わせてセルが伸縮する) ----
+// ---- グリッドのアイコンサイズ(設定画面で最大サイズだけ手動設定)。列数・行数はウィンドウの
+// 大きさから自動計算する(Androidのホーム画面と違い、ウィンドウをリサイズしてもアイコン自体の
+// 大きさは変わらず、表示できる列数・行数だけが変わる) ----
 const GRID_GAP = 14;
 const MIN_MARGIN = 16; // 上下の要素と画面端に最低限残す余白
-const MIN_CELL = 30;
-const MAX_CELL = 160;
-const GRID_WIDTH_RATIO = 0.4; // グリッド全体(アイコン列)の目安の横幅=ウィンドウ横幅の40%
-let gridCols = 6;
-let gridRows = 3;
+const MIN_ICON_SIZE = 48;
+const MAX_ICON_SIZE = 160;
+const MIN_COLS = 2; // 狭いウィンドウでも最低限これだけは表示する
+const MIN_VISIBLE_ROWS = 2;
+const MAX_VISIBLE_ROWS = 6;
+const GRID_WIDTH_RATIO = 0.4; // グリッド全体の目安の横幅=ウィンドウ横幅の40%(この中に入る列数を計算する)
+let iconSize = 96;
+let computedCols = 6;
+let computedRows = 3;
 
 function applyGridMetrics() {
-  const cols = effectiveCols();
-  const rows = effectiveRows();
-
-  // グリッドは#newtabの箱の幅に縛られず独立に伸縮する(centerで見た目上はみ出さず中央寄せされる)
+  const cellPx = Math.min(MAX_ICON_SIZE, Math.max(MIN_ICON_SIZE, Math.round(iconSize) || 96));
+  // グリッドは#newtabの箱の幅に縛られず独立に伸縮する(centerで見た目上はみ出さず中央寄せされる)。
+  // ウィンドウ横幅の約40%に収まるだけの列数を、アイコンサイズは変えずに計算する
   const targetW = window.innerWidth * GRID_WIDTH_RATIO;
-  const cellFromWidth = Math.floor((targetW - GRID_GAP * (cols - 1)) / cols);
-  const upperBound = Math.max(MIN_CELL, Math.min(MAX_CELL, cellFromWidth));
+  const cols = Math.max(MIN_COLS, Math.floor((targetW + GRID_GAP) / (cellPx + GRID_GAP)));
+  computedCols = cols;
 
   function fits() {
     const clockTop = clockEl.getBoundingClientRect().top;
@@ -35,20 +40,21 @@ function applyGridMetrics() {
     return clockTop >= MIN_MARGIN && tailBottom <= window.innerHeight - MIN_MARGIN;
   }
 
-  function apply(cell) {
+  function apply(rows) {
     quickLinksEl.style.setProperty('--grid-cols', cols);
-    quickLinksEl.style.setProperty('--cell', `${cell}px`);
-    quickLinksEl.style.setProperty('--grid-height', `${rows * cell + GRID_GAP * (rows - 1)}px`);
+    quickLinksEl.style.setProperty('--cell', `${cellPx}px`);
+    quickLinksEl.style.setProperty('--grid-height', `${rows * cellPx + GRID_GAP * (rows - 1)}px`);
   }
 
   newtabEl.style.removeProperty('--newtab-shift');
-  for (let cell = upperBound; cell >= MIN_CELL; cell -= 2) {
-    apply(cell);
+  for (let rows = MAX_VISIBLE_ROWS; rows >= MIN_VISIBLE_ROWS; rows--) {
+    apply(rows);
+    computedRows = rows;
     if (fits()) return;
-    if (cell === MIN_CELL) break;
+    if (rows === MIN_VISIBLE_ROWS) break;
   }
 
-  // 最小セルでも収まらない場合(縦の行数を多くした狭い画面): 上にずらす分(既定-6vh)を
+  // 最小行数でも収まらない場合(アイコンサイズを大きくした狭い画面): 上にずらす分(既定-6vh)を
   // 段階的に緩めて時計を画面内に収める
   for (let vh = -6; vh <= 0; vh += 1) {
     newtabEl.style.setProperty('--newtab-shift', `${vh}vh`);
@@ -215,11 +221,12 @@ const WIDGET_META = {
 const MIN_WIDGET_SPAN = 2;
 const MAX_WIDGET_SPAN = 4;
 
+// 列数・行数はapplyGridMetrics()がウィンドウサイズから計算する(手動設定はアイコンサイズのみ)
 function effectiveCols() {
-  return Math.min(10, Math.max(4, Math.round(gridCols) || 6));
+  return computedCols;
 }
 function effectiveRows() {
-  return Math.min(8, Math.max(3, Math.round(gridRows) || 3));
+  return computedRows;
 }
 
 // ---- グリッドの座標(x,y)まわりの純粋関数(スマホのホーム画面風。空きセルを自前で探すだけで、
@@ -1550,10 +1557,9 @@ window.roopieInternal.onBookmarksState(() => loadPages());
 loadPages();
 loadLocalServers();
 
-// ---- 設定(グリッドの列数・行数。設定画面での変更をライブ反映) ----
+// ---- 設定(アイコンの最大サイズ。設定画面での変更をライブ反映) ----
 function applySettings(settings) {
-  gridCols = settings.startGridCols || 6;
-  gridRows = settings.startGridRows || 3;
+  iconSize = settings.startIconSize || 96;
   applyGridMetrics();
 }
 window.roopieInternal.onSettings(applySettings);

@@ -523,14 +523,10 @@ adblockToggle.addEventListener('change', () =>
   window.roopieInternal.setSetting('adblock', adblockToggle.checked)
 );
 
-// ---- スタート画面のグリッド列数・行数 ----
-const startGridColsInput = document.getElementById('start-grid-cols');
-const startGridRowsInput = document.getElementById('start-grid-rows');
-startGridColsInput.addEventListener('change', () =>
-  window.roopieInternal.setSetting('startGridCols', Number(startGridColsInput.value))
-);
-startGridRowsInput.addEventListener('change', () =>
-  window.roopieInternal.setSetting('startGridRows', Number(startGridRowsInput.value))
+// ---- スタート画面のアイコン最大サイズ ----
+const startIconSizeInput = document.getElementById('start-icon-size');
+startIconSizeInput.addEventListener('change', () =>
+  window.roopieInternal.setSetting('startIconSize', Number(startIconSizeInput.value))
 );
 
 // ---- ダウンロード先 ----
@@ -1590,8 +1586,7 @@ window.roopieInternal.onSettings((settings) => {
   autofillCardsToggle.checked = settings.autofillCards !== false;
   renderDownloadPath(settings.downloadPath);
   renderToolbarItems(settings.toolbarItems);
-  startGridColsInput.value = settings.startGridCols || 6;
-  startGridRowsInput.value = settings.startGridRows || 3;
+  startIconSizeInput.value = settings.startIconSize || 96;
 });
 
 // 別タブでログインして戻ってきたときに「ログイン中」表示を更新する
@@ -1622,8 +1617,7 @@ document.addEventListener('visibilitychange', () => {
   autofillCardsToggle.checked = settings.autofillCards !== false;
   renderDownloadPath(settings.downloadPath);
   renderToolbarItems(settings.toolbarItems);
-  startGridColsInput.value = settings.startGridCols || 6;
-  startGridRowsInput.value = settings.startGridRows || 3;
+  startIconSizeInput.value = settings.startIconSize || 96;
   if (gestureConfig) gestureState = gestureConfig;
   if (themeConfig) themeState = themeConfig;
   render();
