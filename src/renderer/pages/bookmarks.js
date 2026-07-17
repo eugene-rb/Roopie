@@ -204,6 +204,9 @@ function startMove(bookmark, btn) {
   select.className = 'row-btn';
 
   const options = [{ id: '', label: 'ブックマーク' }];
+  for (const folder of childrenOf(null).filter((b) => b.type === 'folder' && !b.startRoot)) {
+    options.push({ id: folder.id, label: folder.title });
+  }
   const start = startRootItem();
   if (start) {
     for (const page of childrenOf(start.id).filter((b) => b.type === 'folder')) {

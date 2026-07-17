@@ -265,11 +265,19 @@ function registerIpc() {
 
   // ---- ブックマーク ----
   ipcMain.on('bookmarks:toggle-current', (e) => tabsOf(e)?.toggleBookmarkForActiveTab());
-  ipcMain.on('bookmarks:add', (e, url, title) => {
-    if (typeof url === 'string' && url.trim()) {
-      bundleOf(e)?.bookmarks.add(url.trim(), typeof title === 'string' ? title.trim() : '', null);
+  ipcMain.on('bookmarks:add', (e, url, title, parentId) => {
+    if (typeof url !== 'string' || !url.trim()) return;
+    const bookmarks = bundleOf(e)?.bookmarks;
+    const name = typeof title === 'string' && title.trim() ? title.trim() : url.trim();
+    if (typeof parentId === 'string' && parentId) {
+      bookmarks?.addShortcut(parentId, { kind: 'url', name, target: url.trim() });
+    } else {
+      bookmarks?.add(url.trim(), name, null);
     }
   });
+  ipcMain.on('bookmarks:add-folder', (e, parentId, title) =>
+    bundleOf(e)?.bookmarks.addFolder(typeof parentId === 'string' && parentId ? parentId : null, title)
+  );
   ipcMain.on('bookmarks:remove', (e, id) => bundleOf(e)?.bookmarks.remove(id));
   ipcMain.on('bookmarks:rename', (e, id, title) => bundleOf(e)?.bookmarks.rename(id, title));
   ipcMain.handle('bookmarks:list', (e) => bundleOf(e)?.bookmarks.list() ?? []);

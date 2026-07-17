@@ -115,32 +115,324 @@ resizeHandle.addEventListener('pointercancel', () => {
   resizeHandle.classList.remove('dragging');
 });
 
-// ---- ブックマーク ----
+// ---- ブックマーク(VSCodeのエクスプローラー風ツリー) ----
+// 通常のブックマークとスタート画面のショートカット(startフォルダ→ページ→項目)を
+// 1つのツリーで表示・管理する。フォルダ折りたたみ/右クリックメニュー/インライン改名/
+// ドラッグ&ドロップでの移動/インラインでのフォルダ新規作成に対応
+let bmItems = [];
+const bmCollapsed = new Set();
+let bmSelectedId = null;
+let bmInlineNewFolder = null; // 新しいフォルダのインライン入力を出す先のparentId('' = ルート)
+
 async function refreshBookmarks() {
-  const items = await window.roopieInternal.listBookmarks();
-  renderBookmarks(items);
+  bmItems = await window.roopieInternal.listAllBookmarks();
+  renderBookmarkTree();
 }
 
-function renderBookmarks(items) {
+function bmChildren(parentId) {
+  return bmItems.filter((b) => b.parentId === parentId);
+}
+
+function closeBmMenu() {
+  document.querySelector('.panel-menu')?.remove();
+}
+
+function openBmMenu(x, y, entries) {
+  closeBmMenu();
+  const menu = document.createElement('div');
+  menu.className = 'panel-menu';
+  for (const entry of entries) {
+    const btn = document.createElement('button');
+    btn.textContent = entry.label;
+    btn.addEventListener('click', () => {
+      closeBmMenu();
+      entry.action();
+    });
+    menu.appendChild(btn);
+  }
+  document.body.appendChild(menu);
+  const rect = menu.getBoundingClientRect();
+  menu.style.left = `${Math.min(x, innerWidth - rect.width - 8)}px`;
+  menu.style.top = `${Math.min(y, innerHeight - rect.height - 8)}px`;
+  const onOutside = (e) => {
+    if (!menu.contains(e.target)) {
+      closeBmMenu();
+      document.removeEventListener('mousedown', onOutside, true);
+    }
+  };
+  document.addEventListener('mousedown', onOutside, true);
+}
+
+// ラベルをインライン入力欄に差し替えて改名(VSCodeのF2相当)
+function bmStartRename(item, labelEl) {
+  const input = document.createElement('input');
+  input.className = 'panel-input bm-inline-input';
+  input.value = item.title;
+  labelEl.replaceWith(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const commit = () => {
+    if (done) return;
+    done = true;
+    const title = input.value.trim();
+    if (title && title !== item.title) window.roopieInternal.renameBookmark(item.id, title);
+    else renderBookmarkTree();
+  };
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') commit();
+    else if (e.key === 'Escape') {
+      done = true;
+      renderBookmarkTree();
+    }
+  });
+  input.addEventListener('blur', commit);
+  input.addEventListener('click', (e) => e.stopPropagation());
+}
+
+// 「新しいフォルダ」のインライン入力行(VSCodeの新規フォルダと同じ操作感)
+function bmInlineFolderRow(parentId) {
+  const row = document.createElement('div');
+  row.className = 'panel-item bm-row';
+  const icon = document.createElement('span');
+  icon.className = 'letter';
+  icon.textContent = '📁';
+  row.appendChild(icon);
+  const input = document.createElement('input');
+  input.className = 'panel-input bm-inline-input';
+  input.placeholder = 'フォルダ名';
+  row.appendChild(input);
+  let done = false;
+  const commit = () => {
+    if (done) return;
+    done = true;
+    bmInlineNewFolder = null;
+    const title = input.value.trim();
+    if (title) window.roopieInternal.addBookmarkFolder(parentId || null, title);
+    else renderBookmarkTree();
+  };
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') commit();
+    else if (e.key === 'Escape') {
+      done = true;
+      bmInlineNewFolder = null;
+      renderBookmarkTree();
+    }
+  });
+  input.addEventListener('blur', commit);
+  setTimeout(() => input.focus(), 0);
+  return row;
+}
+
+// ドロップ先(フォルダ or ルート)としての受け入れ。startルート直下は不可(ページ専用のため)
+function bmAcceptDrop(el, targetFolderId) {
+  el.addEventListener('dragover', (e) => {
+    if (!e.dataTransfer.types.includes('roopie/bookmark-id')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    el.classList.add('drop-target');
+  });
+  el.addEventListener('dragleave', () => el.classList.remove('drop-target'));
+  el.addEventListener('drop', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    el.classList.remove('drop-target');
+    const id = e.dataTransfer.getData('roopie/bookmark-id');
+    if (id) window.roopieInternal.moveBookmark(id, targetFolderId);
+  });
+}
+
+function bmFolderRow(folder) {
+  const row = document.createElement('div');
+  row.className = 'panel-item bm-row bm-folder-row';
+  if (folder.id === bmSelectedId) row.classList.add('selected');
+
+  const chevron = document.createElement('span');
+  chevron.className = 'bm-chevron';
+  chevron.textContent = bmCollapsed.has(folder.id) ? '▸' : '▾';
+  row.appendChild(chevron);
+
+  const icon = document.createElement('span');
+  icon.className = 'letter';
+  icon.textContent = folder.startRoot ? '🏠' : '📁';
+  row.appendChild(icon);
+
+  const label = document.createElement('span');
+  label.className = 'label';
+  label.textContent = folder.startRoot ? 'スタート画面' : folder.title;
+  row.appendChild(label);
+
+  row.title = folder.startRoot ? 'スタート画面のショートカット' : folder.title;
+  row.addEventListener('click', () => {
+    bmSelectedId = folder.id;
+    if (bmCollapsed.has(folder.id)) bmCollapsed.delete(folder.id);
+    else bmCollapsed.add(folder.id);
+    renderBookmarkTree();
+  });
+  row.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    bmSelectedId = folder.id;
+    const entries = [];
+    if (!folder.startRoot) {
+      entries.push({ label: '新しいブックマーク', action: () => openBookmarkAddModal(folder.id) });
+    }
+    entries.push({
+      label: folder.startRoot ? '新しいページ' : '新しいフォルダ',
+      action: () => {
+        bmCollapsed.delete(folder.id);
+        bmInlineNewFolder = folder.id;
+        renderBookmarkTree();
+      },
+    });
+    if (!folder.startRoot) {
+      entries.push({ label: '名前を変更', action: () => bmStartRename(folder, label) });
+      entries.push({ label: '削除', action: () => window.roopieInternal.removeBookmark(folder.id) });
+    }
+    openBmMenu(e.clientX, e.clientY, entries);
+  });
+
+  // startルート直下へのドロップは不可(ページ構造保護)。それ以外のフォルダは受け入れる
+  if (!folder.startRoot) bmAcceptDrop(row, folder.id);
+  return row;
+}
+
+function bmBookmarkRow(bookmark) {
+  const row = document.createElement('div');
+  row.className = 'panel-item bm-row';
+  if (bookmark.id === bmSelectedId) row.classList.add('selected');
+  row.title = `${bookmark.title}\n${bookmark.url}`;
+
+  const pad = document.createElement('span');
+  pad.className = 'bm-chevron';
+  row.appendChild(pad);
+
+  if (bookmark.icon?.type === 'emoji' && bookmark.icon.value) {
+    const span = document.createElement('span');
+    span.className = 'letter emoji';
+    span.textContent = bookmark.icon.value;
+    row.appendChild(span);
+  } else if (bookmark.icon?.type === 'image' && bookmark.icon.value) {
+    const img = document.createElement('img');
+    img.src = bookmark.icon.value;
+    row.appendChild(img);
+  } else {
+    row.appendChild(faviconEl(bookmark.favicon, bookmark.title));
+  }
+
+  const label = document.createElement('span');
+  label.className = 'label';
+  label.textContent = bookmark.title || bookmark.url;
+  row.appendChild(label);
+
+  row.addEventListener('click', () => {
+    bmSelectedId = bookmark.id;
+    window.roopieInternal.navigate(bookmark.url);
+  });
+  row.addEventListener('auxclick', (e) => {
+    if (e.button === 1) window.roopieInternal.openTab(bookmark.url);
+  });
+  row.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    bmSelectedId = bookmark.id;
+    renderBookmarkTree();
+    openBmMenu(e.clientX, e.clientY, [
+      { label: '開く', action: () => window.roopieInternal.navigate(bookmark.url) },
+      { label: '新しいタブで開く', action: () => window.roopieInternal.openTab(bookmark.url) },
+      { label: '名前を変更', action: () => bmStartRename(bookmark, document.querySelector(`[data-bm-id="${bookmark.id}"] .label`)) },
+      { label: '削除', action: () => window.roopieInternal.removeBookmark(bookmark.id) },
+    ]);
+  });
+
+  row.dataset.bmId = bookmark.id;
+  row.draggable = true;
+  row.addEventListener('dragstart', (e) => {
+    e.dataTransfer.setData('roopie/bookmark-id', bookmark.id);
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  // ブックマーク行へのドロップは「同じフォルダへ入れる」として受ける
+  // (ルート直下の行なら親=null。startルート直下にブックマーク行は無いので不正な移動先にはならない)
+  bmAcceptDrop(row, bookmark.parentId ?? null);
+  return row;
+}
+
+// VSCodeのエクスプローラーと同じ並び: フォルダが先、その後にブックマーク
+function renderBookmarkSubtree(parentId, container) {
+  const children = bmChildren(parentId);
+  for (const folder of children.filter((b) => b.type === 'folder')) {
+    container.appendChild(bmFolderRow(folder));
+    if (bmCollapsed.has(folder.id)) continue;
+    const box = document.createElement('div');
+    box.className = 'bm-tree-children';
+    renderBookmarkSubtree(folder.id, box);
+    if (bmInlineNewFolder === folder.id) box.appendChild(bmInlineFolderRow(folder.id));
+    container.appendChild(box);
+  }
+  for (const bookmark of children.filter((b) => b.type === 'bookmark')) container.appendChild(bmBookmarkRow(bookmark));
+}
+
+function renderBookmarkTree() {
   bookmarkListEl.textContent = '';
-  if (!items.length) {
+  renderBookmarkSubtree(null, bookmarkListEl);
+  if (bmInlineNewFolder === '') bookmarkListEl.appendChild(bmInlineFolderRow(''));
+  if (!bookmarkListEl.childElementCount) {
     bookmarkListEl.appendChild(emptyNote('ブックマークはまだありません(Ctrl+D で追加)', 'bookmark'));
-    return;
-  }
-  for (const bookmark of items) {
-    bookmarkListEl.appendChild(linkItem(bookmark));
   }
 }
 
-window.roopieInternal.onBookmarksState((items) => renderBookmarks(items));
+// ツリーの余白: ドロップでルートへ移動、右クリックでルートのメニュー
+bmAcceptDrop(bookmarkListEl, null);
+bookmarkListEl.addEventListener('contextmenu', (e) => {
+  if (e.defaultPrevented) return;
+  e.preventDefault();
+  openBmMenu(e.clientX, e.clientY, [
+    { label: '新しいブックマーク', action: () => openBookmarkAddModal(null) },
+    {
+      label: '新しいフォルダ',
+      action: () => {
+        bmInlineNewFolder = '';
+        renderBookmarkTree();
+      },
+    },
+  ]);
+});
+
+// ツールバー(新しいブックマーク/新しいフォルダ/すべて折りたたむ)。
+// 追加先はVSCode同様「選択中のフォルダ(またはその親)」、無ければルート
+function bmTargetFolderId() {
+  const selected = bmItems.find((b) => b.id === bmSelectedId);
+  if (!selected) return null;
+  const folder = selected.type === 'folder' ? selected : bmItems.find((b) => b.id === selected.parentId);
+  return folder && !folder.startRoot ? folder.id : null;
+}
+
+$('bookmark-new-btn').addEventListener('click', () => openBookmarkAddModal(bmTargetFolderId()));
+$('bookmark-new-folder-btn').addEventListener('click', () => {
+  const target = bmTargetFolderId();
+  bmInlineNewFolder = target ?? '';
+  if (target) bmCollapsed.delete(target);
+  renderBookmarkTree();
+});
+$('bookmark-collapse-btn').addEventListener('click', () => {
+  for (const folder of bmItems.filter((b) => b.type === 'folder')) bmCollapsed.add(folder.id);
+  renderBookmarkTree();
+});
+
+window.roopieInternal.onBookmarksState(() => refreshBookmarks());
 
 // ---- ブックマークの追加モーダル ----
 const bookmarkAddModal = $('bookmark-add');
 const bookmarkAddUrl = $('bookmark-add-url');
 const bookmarkAddName = $('bookmark-add-name');
 const bookmarkAddError = $('bookmark-add-error');
+let bookmarkAddParentId = null;
 
-function openBookmarkAddModal() {
+function openBookmarkAddModal(parentId = null) {
+  bookmarkAddParentId = parentId;
   bookmarkAddUrl.value = '';
   bookmarkAddName.value = '';
   bookmarkAddError.classList.add('hidden');
@@ -160,11 +452,10 @@ function applyBookmarkAdd() {
     return;
   }
   const url = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`;
-  window.roopieInternal.addBookmark(url, bookmarkAddName.value.trim() || url);
+  window.roopieInternal.addBookmark(url, bookmarkAddName.value.trim() || url, bookmarkAddParentId);
   closeBookmarkAddModal();
 }
 
-$('bookmark-add-btn').addEventListener('click', openBookmarkAddModal);
 $('bookmark-add-apply').addEventListener('click', applyBookmarkAdd);
 $('bookmark-add-cancel').addEventListener('click', closeBookmarkAddModal);
 bookmarkAddModal.addEventListener('click', (e) => {

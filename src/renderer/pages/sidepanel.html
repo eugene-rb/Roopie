@@ -25,8 +25,19 @@
       </div>
 
       <div id="section-bookmarks" class="section">
-        <button id="bookmark-add-btn" class="btn readlist-add">ブックマークを追加</button>
-        <div id="bookmark-list" class="panel-list"></div>
+        <!-- VSCodeのエクスプローラー風ツールバー: 新しいブックマーク/新しいフォルダ/すべて折りたたむ -->
+        <div class="bm-toolbar">
+          <button id="bookmark-new-btn" class="hbtn" title="新しいブックマーク">
+            <svg viewBox="0 0 24 24"><path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/><path d="M12 7v6"/><path d="M9 10h6"/></svg>
+          </button>
+          <button id="bookmark-new-folder-btn" class="hbtn" title="新しいフォルダ">
+            <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 11v6"/><path d="M9 14h6"/></svg>
+          </button>
+          <button id="bookmark-collapse-btn" class="hbtn" title="すべて折りたたむ">
+            <svg viewBox="0 0 24 24"><path d="M7 14l5-5 5 5"/><path d="M7 20l5-5 5 5"/></svg>
+          </button>
+        </div>
+        <div id="bookmark-list" class="panel-list bm-tree"></div>
       </div>
 
       <div id="section-downloads" class="section">

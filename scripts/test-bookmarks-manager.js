@@ -54,6 +54,16 @@ function testMainLogic() {
   const dup = bm.addShortcut(page1.id, { kind: 'url', name: 'A2', target: 'https://a.example/' });
   bm.move(dup.id, null);
   check('同一URLがルートに既にあるときの移動は拒否される', bm.children(page1.id).some((b) => b.id === dup.id), true);
+
+  // フォルダの新規作成(パネルのエクスプローラー用)
+  const rootFolder = bm.addFolder(null, '仕事');
+  check('ルートにフォルダを作れる', !!rootFolder && rootFolder.parentId === null, true);
+  const pageFolder = bm.addFolder(root.id, '');
+  check('startルート直下のフォルダは新しいページになる', bm.startPages().some((p) => p.id === pageFolder.id), true);
+  check('フォルダ名省略時は既定名になる', pageFolder.title, '新しいフォルダ');
+  check('存在しない親へのフォルダ作成は失敗する', bm.addFolder('no-such-id', 'X'), null);
+  bm.move(a.id, rootFolder.id);
+  check('ルートのフォルダへブックマークを移動できる', bm.children(rootFolder.id).some((b) => b.id === a.id), true);
 }
 
 app.whenReady().then(async () => {

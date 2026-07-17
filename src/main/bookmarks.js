@@ -138,6 +138,22 @@ class Bookmarks {
     return this.children(root.id).filter((b) => b.type === 'folder');
   }
 
+  // 任意の場所にフォルダを作る(parentId=null はルート直下、startルート直下なら「ページ」になる)
+  addFolder(parentId, title) {
+    const dest = parentId ?? null;
+    if (dest !== null && !this.items.find((b) => b.id === dest && b.type === 'folder')) return null;
+    const folder = {
+      id: crypto.randomUUID(),
+      type: 'folder',
+      parentId: dest,
+      title: (title ?? '').trim().slice(0, MAX_TITLE) || '新しいフォルダ',
+      createdAt: Date.now(),
+    };
+    this.items.push(folder);
+    this.changed();
+    return folder;
+  }
+
   addStartPage(title) {
     const root = this.ensureStartFolder();
     const page = {
