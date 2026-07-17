@@ -367,22 +367,6 @@ body[data-bg="plain"] #vignette {
   opacity: 1;
 }
 
-/* 追加タイル */
-.quick-link-add .tile {
-  background: rgba(255, 255, 255, 0.06);
-  border-style: dashed;
-}
-
-.quick-link-add .plus {
-  font-size: 22px;
-  font-weight: 300;
-  color: rgba(255, 255, 255, 0.7);
-}
-
-body[data-bg="plain"] .quick-link-add .tile {
-  background: var(--card);
-}
-
 /* ---- ページ切り替え(ショートカットの複数ページ) ---- */
 #shortcut-pages {
   display: flex;

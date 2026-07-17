@@ -410,19 +410,11 @@ function renderGrid() {
     attachGridDrag(el, item);
     quickLinksEl.appendChild(el);
   }
-
-  const addTile = document.createElement('button');
-  addTile.className = 'quick-link quick-link-add';
-  addTile.title = 'ショートカットやウィジェットを追加';
-  addTile.innerHTML = '<div class="tile"><span class="plus">+</span></div><span class="label">追加</span>';
-  addTile.addEventListener('click', () => openAddMenu(addTile));
-  const addSpot = findFreeSpot(1, 1, effectiveCols(), occupiedCells(gridItems));
-  applyItemPosition(addTile, addSpot.x, addSpot.y, 1, 1);
-  quickLinksEl.appendChild(addTile);
 }
 
 // ---- 追加メニュー / ウィジェットメニュー(小さなポップアップ) ----
-function popupMenu(anchorEl, entries) {
+// anchorは要素(その下に開く)か、{x,y}(右クリック位置。その場に開く)のどちらか
+function popupMenu(anchor, entries) {
   document.querySelector('.grid-popup')?.remove();
   const menu = document.createElement('div');
   menu.className = 'grid-popup';
@@ -438,11 +430,16 @@ function popupMenu(anchorEl, entries) {
     menu.appendChild(btn);
   }
   document.body.appendChild(menu);
-  const rect = anchorEl.getBoundingClientRect();
   const menuRect = menu.getBoundingClientRect();
-  menu.style.left = `${Math.min(rect.left, innerWidth - menuRect.width - 8)}px`;
-  menu.style.top =
-    rect.bottom + menuRect.height + 8 < innerHeight ? `${rect.bottom + 6}px` : `${rect.top - menuRect.height - 6}px`;
+  if (anchor instanceof Element) {
+    const rect = anchor.getBoundingClientRect();
+    menu.style.left = `${Math.min(rect.left, innerWidth - menuRect.width - 8)}px`;
+    menu.style.top =
+      rect.bottom + menuRect.height + 8 < innerHeight ? `${rect.bottom + 6}px` : `${rect.top - menuRect.height - 6}px`;
+  } else {
+    menu.style.left = `${Math.min(anchor.x, innerWidth - menuRect.width - 8)}px`;
+    menu.style.top = `${Math.min(anchor.y, innerHeight - menuRect.height - 8)}px`;
+  }
 
   function close() {
     menu.remove();
@@ -459,9 +456,9 @@ function popupMenu(anchorEl, entries) {
   document.addEventListener('keydown', onKey);
 }
 
-function openAddMenu(anchorEl) {
+function openAddMenu(anchor) {
   const shortcutCount = gridItems.filter((i) => i.type === 'shortcut').length;
-  popupMenu(anchorEl, [
+  popupMenu(anchor, [
     {
       label: '🔗 ショートカット',
       disabled: shortcutCount >= MAX_QUICK_LINKS,
@@ -476,6 +473,16 @@ function openAddMenu(anchorEl) {
     })),
   ]);
 }
+
+// 右クリック(スタート画面の空いている場所)からショートカット・ウィジェットを追加。
+// 検索欄・既存のショートカット/ウィジェット・他のポップアップの上では出さない
+// (ローカルサーバー候補は自前でpreventDefault済みなのでdefaultPreventedのチェックだけで弾ける)
+document.addEventListener('contextmenu', (e) => {
+  if (e.defaultPrevented) return;
+  if (e.target.closest('#search, .grid-item, .grid-popup, .icon-picker, .icon-picker-backdrop')) return;
+  e.preventDefault();
+  openAddMenu({ x: e.clientX, y: e.clientY });
+});
 
 function openWidgetMenu(anchorEl, widgetEl, item) {
   const entries = [];

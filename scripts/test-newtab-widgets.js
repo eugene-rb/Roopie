@@ -42,15 +42,20 @@ app.whenReady().then(async () => {
     webPreferences: { preload: path.join(__dirname, 'stub-internal-preload.js') },
   });
   const js = (code) => win.webContents.executeJavaScript(code, true);
+  // ショートカット/ウィジェットの追加は右クリックメニューから(アイコンは無い)。
+  // #clockは常に存在し、既存アイテム/検索欄/他のポップアップのどれにも該当しない安全な右クリック先
+  const rightClickToAdd = () =>
+    js(
+      `document.getElementById('clock').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 50, clientY: 50 }))`
+    );
   await win.loadURL(`http://localhost:${PORT}/newtab.html`);
   await sleep(400);
 
-  // 初期状態: ショートカット1件+追加タイル
+  // 初期状態: ショートカット1件
   check('グリッドにショートカット', await js(`document.querySelectorAll('#quick-links .grid-item').length`), 1);
-  check('追加タイルがある', await js(`!!document.querySelector('.quick-link-add')`), true);
 
-  // 追加メニュー: ショートカット+4ウィジェット
-  await js(`document.querySelector('.quick-link-add').click()`);
+  // 追加メニュー(右クリック): ショートカット+4ウィジェット
+  await rightClickToAdd();
   await sleep(100);
   check('追加メニューの項目数', await js(`document.querySelectorAll('.grid-popup-item').length`), 5);
 
@@ -68,7 +73,7 @@ app.whenReady().then(async () => {
   check('タイトルが地名になる', await js(`document.querySelector('.widget-weather .widget-title')?.textContent`), '東京');
 
   // ノートパッド: 入力→自動保存(デバウンス500ms)
-  await js(`document.querySelector('.quick-link-add').click()`);
+  await rightClickToAdd();
   await sleep(100);
   await js(`[...document.querySelectorAll('.grid-popup-item')].find((b) => b.textContent.includes('ノート')).click()`);
   await sleep(300);
@@ -79,7 +84,7 @@ app.whenReady().then(async () => {
   check('ノートの自動保存', noteSaved, true);
 
   // カレンダー: 今日の強調と月送り
-  await js(`document.querySelector('.quick-link-add').click()`);
+  await rightClickToAdd();
   await sleep(100);
   await js(`[...document.querySelectorAll('.grid-popup-item')].find((b) => b.textContent.includes('カレンダー')).click()`);
   await sleep(300);
@@ -92,7 +97,7 @@ app.whenReady().then(async () => {
   check('月送りで表示が変わる', monthLabel !== nextLabel, true);
 
   // ニュース: プリセット追加→表示→フェイクRSSの記事(新しい順)
-  await js(`document.querySelector('.quick-link-add').click()`);
+  await rightClickToAdd();
   await sleep(100);
   await js(`[...document.querySelectorAll('.grid-popup-item')].find((b) => b.textContent.includes('ニュース')).click()`);
   await sleep(300);
@@ -168,6 +173,19 @@ app.whenReady().then(async () => {
   await sleep(500);
   check('タッチスワイプでp1に戻る(4件)', await js(`document.querySelectorAll('#quick-links .grid-item').length`), 4);
   check('ページドットのactiveがp1になる', await js(`document.querySelectorAll('.page-dot')[0]?.classList.contains('active')`), true);
+
+  // ---- 右クリックの除外(既存アイテム/検索欄の上では追加メニューを出さない) ----
+  await js(
+    `document.querySelector('[data-grid-key^="s:"]').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }))`
+  );
+  await sleep(100);
+  check('既存アイテムの上での右クリックでは追加メニューが出ない', await js(`!!document.querySelector('.grid-popup')`), false);
+
+  await js(
+    `document.getElementById('search').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }))`
+  );
+  await sleep(100);
+  check('検索欄の上での右クリックでは追加メニューが出ない', await js(`!!document.querySelector('.grid-popup')`), false);
 
   // ---- ドラッグでの並べ替え(座標モデル。グリッド線プレビュー・入れ替え・自動上詰めなしを検証) ----
   const DRAG_GAP = 14; // newtab.js の GRID_GAP と同じ値
@@ -313,7 +331,7 @@ app.whenReady().then(async () => {
   check('直前に縮小した分は再び拡大できる', newsAfterGrow.w === newsBefore.w && newsAfterGrow.h === newsBefore.h, true);
 
   // ---- 共通アイコンピッカー(icon-picker.js): ボタンがパネル幅からはみ出さないこと ----
-  await js(`document.querySelector('.quick-link-add').click()`);
+  await rightClickToAdd();
   await sleep(100);
   await js(`[...document.querySelectorAll('.grid-popup-item')].find((b) => b.textContent.includes('ショートカット')).click()`);
   await sleep(150);
