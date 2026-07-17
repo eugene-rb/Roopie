@@ -967,6 +967,45 @@ body {
   color: #ff7b7f;
 }
 
+/* ブックマーク管理のフォルダツリー(通常ブックマーク+スタート画面のショートカットを一本化) */
+.bm-children {
+  margin-left: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.row.bm-folder .title {
+  cursor: pointer;
+}
+
+.bm-twisty {
+  flex-shrink: 0;
+  width: 14px;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+}
+
+.bm-emoji {
+  flex-shrink: 0;
+  width: 16px;
+  font-size: 14px;
+  text-align: center;
+}
+
+.bm-empty {
+  padding: 4px 14px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+select.row-btn {
+  appearance: auto;
+  background: var(--card);
+  border: 1px solid var(--border);
+}
+
 /* 拡張機能カード(Edgeの拡張機能ページ風) */
 .ext-list {
   display: flex;

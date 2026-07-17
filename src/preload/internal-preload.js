@@ -7,8 +7,10 @@ if (location.protocol === 'roopie:') {
     navigate: (input) => ipcRenderer.send('tabs:navigate', input),
 
     listBookmarks: () => ipcRenderer.invoke('bookmarks:list'),
+    listAllBookmarks: () => ipcRenderer.invoke('bookmarks:all'),
     removeBookmark: (id) => ipcRenderer.send('bookmarks:remove', id),
     renameBookmark: (id, title) => ipcRenderer.send('bookmarks:rename', id, title),
+    moveBookmark: (id, parentId) => ipcRenderer.send('bookmarks:move', id, parentId),
 
     // スタート画面のショートカット(bookmarksの中の "start" フォルダ以下。ページ=サブフォルダ)
     listStartPages: () => ipcRenderer.invoke('bookmarks:start-pages'),

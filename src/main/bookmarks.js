@@ -27,6 +27,30 @@ class Bookmarks {
     return this.items.filter((b) => b.type !== 'folder' && !b.parentId);
   }
 
+  // 全アイテム(通常のブックマーク+startフォルダ/ページ/ショートカット)。
+  // 管理画面が1つのフォルダツリーとして表示するために使う
+  all() {
+    this.ensureStartFolder();
+    return this.items;
+  }
+
+  // アイテムを別フォルダへ移動する(ルート=null / startのページフォルダなど)。
+  // ブックマーク項目のみ対象(フォルダの入れ子替えはスタート画面のページ構造を壊すため不可)
+  move(id, parentId) {
+    const item = this.items.find((b) => b.id === id);
+    if (!item || item.type !== 'bookmark') return;
+    const dest = parentId ?? null;
+    if (dest !== null) {
+      const folder = this.items.find((b) => b.id === dest && b.type === 'folder');
+      if (!folder || folder.startRoot) return; // startルート直下はページ(フォルダ)専用
+    }
+    if (item.parentId === dest) return;
+    // ルートへ移動する場合は同一URLの重複を作らない(星ボタンのトグルが誤動作するため)
+    if (dest === null && this.find(item.url)) return;
+    item.parentId = dest;
+    this.changed();
+  }
+
   find(url) {
     return this.list().find((b) => b.url === url) || null;
   }
@@ -55,7 +79,7 @@ class Bookmarks {
 
   remove(id) {
     const index = this.items.findIndex((b) => b.id === id);
-    if (index === -1) return;
+    if (index === -1 || this.items[index].startRoot) return; // startルートは削除不可(中身ごと消えるため)
     const [removed] = this.items.splice(index, 1);
     // フォルダを削除したら中身も一緒に削除する(カスケード)
     if (removed.type === 'folder') {

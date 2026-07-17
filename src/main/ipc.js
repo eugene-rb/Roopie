@@ -268,6 +268,9 @@ function registerIpc() {
   ipcMain.on('bookmarks:remove', (e, id) => bundleOf(e)?.bookmarks.remove(id));
   ipcMain.on('bookmarks:rename', (e, id, title) => bundleOf(e)?.bookmarks.rename(id, title));
   ipcMain.handle('bookmarks:list', (e) => bundleOf(e)?.bookmarks.list() ?? []);
+  // 管理画面用: 全アイテム(通常ブックマーク+startフォルダ/ページ/ショートカットの1ツリー)
+  ipcMain.handle('bookmarks:all', (e) => bundleOf(e)?.bookmarks.all() ?? []);
+  ipcMain.on('bookmarks:move', (e, id, parentId) => bundleOf(e)?.bookmarks.move(id, parentId));
 
   // ---- スタート画面のショートカット(bookmarksの中の "start" フォルダ以下) ----
   ipcMain.handle('bookmarks:start-pages', (e) => bundleOf(e)?.bookmarks.startPages() ?? []);
