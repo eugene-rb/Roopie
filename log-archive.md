@@ -638,3 +638,12 @@
 - **ipc.js**: オリジンをページの申告でなく `e.senderFrame.url` から導出(`frameOrigin`)。`autofill:page-data`/`passwords:credential`/`passwords:update`/`passwords:never-save`/`passwords:excluded*`/`passwords:export`/`passwords:import`(RFC4180ミニパーサー`parseCsv`、Chrome/Edge/Firefox形式対応)/`autofill:*` CRUD追加
 - **UI**: 確認バーに「このサイトでは保存しない」。設定画面: パスワード検索・編集・エクスポート/インポート・除外リスト解除、「自動入力」セクション(住所・カードのCRUDモーダル`.af-modal-*`、ON/OFFトグル=`autofillAddresses`/`autofillCards`設定)
 - **検証スクリプト(再利用可)**: `scripts/test-autofill-main.js`(ロジック27件)、`scripts/test-autofill-preload.js`(sendInputEventの信頼済みイベントでクリック→ドロップダウン選択→入力まで27件)、`scripts/test-autofill-page.html`+`serve-test-page.js`(手動確認用: node scripts/serve-test-page.js → localhost:8931)。全件成功
+
+## 2026-07-17(7): スタート画面ウィジェット+グリッド並べ替え(ユーザー指示) → 287af57
+
+- **新規 `src/main/widgets.js`**: ページID→アイテム配列のlayouts(`{type:'shortcut', refId}` | `{type:'widget', id, widgetType, config}`)。ショートカットの実体はbookmarksのまま、並び順だけ持つ。プロファイル単位(`start-widgets.json`)。天気(Open-Meteo geocoding+forecast、15分キャッシュ)・RSS(生XML、10分キャッシュ、512KB上限)のメイン代理取得も担当(newtab.htmlのCSPがconnect-src 'self'のため)
+- **newtab.js**: `renderShortcuts`→`renderGrid`に全面改修。reconcileLayout(消えたブックマーク参照は落とし、新規は末尾へ)。「+」は追加メニュー(ショートカット/天気/ノート/カレンダー/ニュース)に変更。DnDはウィジェット=ヘッダー、ショートカット=タイル全体をつまみ、insertBefore+FLIPでライブに詰め直し→dragendで`widgets:set-layout`保存
+- **各ウィジェット**: 天気=都市名検索(geocode)→現在+3日予報(絵文字アイコン、weather_code対応表)/ノート=textarea自動保存(500msデバウンス)/カレンダー=月表示・今日強調・月送り/ニュース=RSS/Atomパース(DOMParser)、NHK・Yahoo!プリセット、新しい順8件。⋮メニューで場所変更/フィード編集/更新/削除
+- **CSS(newtab.css)**: #quick-linksをCSS Grid化(84pxセル、auto-fill、dense)。ウィジェットはspan 2x2(ニュースは3x2)のすりガラスカード。`.grid-popup`(追加/ウィジェットメニュー)
+- **バグ修正**: コンテナに付く`widget-notepad`(widget-<type>)クラスがテキストエリアのクラスと衝突→`.notepad-textarea`に改名(E2Eの自動保存テスト失敗で検出。querySelectorがコンテナを拾い、textarea用CSSがコンテナにも当たっていた)
+- **検証**: `scripts/test-newtab-widgets.js` + `stub-internal-preload.js`(roopieInternalをスタブして実DOM描画、追加メニュー→天気設定→ノート保存→カレンダー→ニュース→削除まで18件)。全件成功
