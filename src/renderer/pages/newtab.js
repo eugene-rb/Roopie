@@ -14,7 +14,8 @@ const localServersEl = document.getElementById('local-servers');
 const GRID_GAP = 14;
 const MIN_MARGIN = 16; // 上下の要素と画面端に最低限残す余白
 const MIN_CELL = 30;
-const MAX_CELL = 116;
+const MAX_CELL = 160;
+const GRID_WIDTH_RATIO = 0.4; // グリッド全体(アイコン列)の目安の横幅=ウィンドウ横幅の40%
 let gridCols = 6;
 let gridRows = 3;
 
@@ -22,8 +23,9 @@ function applyGridMetrics() {
   const cols = Math.min(10, Math.max(4, Math.round(gridCols) || 6));
   const rows = Math.min(8, Math.max(3, Math.round(gridRows) || 3));
 
-  const availW = Math.min(window.innerWidth, 680) - 48;
-  const cellFromWidth = Math.floor((availW - GRID_GAP * (cols - 1)) / cols);
+  // グリッドは#newtabの箱の幅に縛られず独立に伸縮する(centerで見た目上はみ出さず中央寄せされる)
+  const targetW = window.innerWidth * GRID_WIDTH_RATIO;
+  const cellFromWidth = Math.floor((targetW - GRID_GAP * (cols - 1)) / cols);
   const upperBound = Math.max(MIN_CELL, Math.min(MAX_CELL, cellFromWidth));
 
   function fits() {

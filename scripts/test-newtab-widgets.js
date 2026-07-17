@@ -121,6 +121,10 @@ app.whenReady().then(async () => {
   const defaultCell = parseFloat(await gridVar('--cell'));
   check('既定のセルサイズが正の数', defaultCell > 0, true);
 
+  // グリッド全体(6列分)の横幅がウィンドウ横幅の約40%になる(高さ制約で縮んでいなければ)
+  const gridWidthRatio = await js(`document.getElementById('quick-links').getBoundingClientRect().width / window.innerWidth`);
+  check('グリッド全体の横幅がウィンドウ横幅の30〜45%に収まる', gridWidthRatio >= 0.3 && gridWidthRatio <= 0.45, true);
+
   // 設定を横4・縦8に変更 → ライブ反映
   await js(`window.roopieInternal.__setSettings({ startGridCols: 4, startGridRows: 8 })`);
   await sleep(150);
