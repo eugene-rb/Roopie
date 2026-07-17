@@ -15,8 +15,8 @@ const MAX_ITEMS = 300;
 const MAX_NOTE_LENGTH = 50_000;
 const MAX_FEEDS = 10;
 const MAX_COORD = 500; // グリッド座標(x,y)の上限(暴走防止。実際のグリッドはずっと小さい)
-const MIN_WIDGET_SPAN = 1;
-const MAX_WIDGET_SPAN = 6;
+const MIN_WIDGET_SPAN = 2;
+const MAX_WIDGET_SPAN = 4;
 
 // 整数として妥当ならクランプして返す。無効/未指定ならundefined(=座標なし。レンダラー側で自動配置)
 function clampCoord(v, min, max) {

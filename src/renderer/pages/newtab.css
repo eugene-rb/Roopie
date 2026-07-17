@@ -604,6 +604,7 @@ body[data-bg="plain"] .quick-link:hover .tile {
    ウィジェット(天気/ノートパッド/カレンダー/ニュース)
    ========================================================= */
 .widget {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -613,6 +614,40 @@ body[data-bg="plain"] .quick-link:hover .tile {
   backdrop-filter: blur(14px);
   color: rgba(255, 255, 255, 0.92);
   overflow: hidden;
+}
+
+.widget.resizing {
+  z-index: 80;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.4);
+}
+
+.widget-resize-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 20px;
+  height: 20px;
+  cursor: nwse-resize;
+  touch-action: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.widget-resize-handle::after {
+  content: '';
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid rgba(255, 255, 255, 0.65);
+  border-bottom: 2px solid rgba(255, 255, 255, 0.65);
+  border-radius: 0 0 3px 0;
+}
+
+.widget:hover .widget-resize-handle,
+.widget.resizing .widget-resize-handle {
+  opacity: 1;
 }
 
 body[data-bg="plain"] .widget {
@@ -629,6 +664,7 @@ body[data-bg="plain"] .widget {
   font-weight: 600;
   cursor: grab;
   user-select: none;
+  touch-action: none;
   flex-shrink: 0;
 }
 

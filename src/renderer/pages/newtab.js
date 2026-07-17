@@ -212,6 +212,8 @@ const WIDGET_META = {
   calendar: { name: 'カレンダー', icon: '📅', w: 2, h: 2 },
   news: { name: 'ニュース', icon: '📰', w: 3, h: 2 },
 };
+const MIN_WIDGET_SPAN = 2;
+const MAX_WIDGET_SPAN = 4;
 
 function effectiveCols() {
   return Math.min(10, Math.max(4, Math.round(gridCols) || 6));
@@ -371,6 +373,13 @@ function widgetItemEl(item) {
   body.className = 'widget-body';
   el.append(head, body);
   WIDGET_RENDERERS[item.widgetType](body, item);
+
+  const resizeHandle = document.createElement('div');
+  resizeHandle.className = 'widget-resize-handle';
+  resizeHandle.title = 'ドラッグしてサイズ変更';
+  el.appendChild(resizeHandle);
+  attachWidgetResize(resizeHandle, el, item);
+
   return el;
 }
 
@@ -551,9 +560,11 @@ function showGridOverlay(item) {
   updateGridOverlayPreview(item, item.x, item.y);
 }
 
-function updateGridOverlayPreview(item, x, y) {
+function updateGridOverlayPreview(item, x, y, wOverride, hOverride) {
   if (!dragOverlay) return;
-  const [w, h] = itemSpan(item);
+  const [iw, ih] = itemSpan(item);
+  const w = wOverride ?? iw;
+  const h = hOverride ?? ih;
   const cols = effectiveCols();
   const inBounds = x >= 0 && y >= 0 && x + w <= cols;
   if (!inBounds) {
@@ -695,6 +706,79 @@ function tryMoveItem(item, x, y) {
 
 function persistGridOrder() {
   if (currentPageId) window.roopieInternal.setWidgetLayout(currentPageId, layoutForSave());
+}
+
+// ---- ウィジェットのサイズ変更(右下のハンドルをドラッグ。他のアイテムと重ならない範囲で
+// セル単位に伸縮。グリッド線+プレビューは移動ドラッグと同じオーバーレイを流用) ----
+let resizeState = null;
+
+function attachWidgetResize(handle, el, item) {
+  handle.addEventListener('pointerdown', (e) => {
+    if (resizeState || dragState || e.button !== 0) return;
+    resizeState = {
+      item,
+      el,
+      handle,
+      pointerId: e.pointerId,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startW: item.w,
+      startH: item.h,
+      w: item.w,
+      h: item.h,
+    };
+    el.classList.add('resizing');
+    try {
+      handle.setPointerCapture?.(e.pointerId);
+    } catch {
+      // 合成イベント等でキャプチャできない場合は無視
+    }
+    showGridOverlay(item);
+  });
+  handle.addEventListener('pointermove', onWidgetResizeMove);
+  handle.addEventListener('pointerup', onWidgetResizeUp);
+  handle.addEventListener('pointercancel', onWidgetResizeUp);
+}
+
+function onWidgetResizeMove(e) {
+  if (!resizeState || e.pointerId !== resizeState.pointerId) return;
+  const dx = e.clientX - resizeState.startClientX;
+  const dy = e.clientY - resizeState.startClientY;
+  const step = currentCellPx() + GRID_GAP;
+  const cols = effectiveCols();
+  const item = resizeState.item;
+  const maxW = Math.min(MAX_WIDGET_SPAN, cols - item.x);
+  const candW = Math.min(maxW, Math.max(MIN_WIDGET_SPAN, resizeState.startW + Math.round(dx / step)));
+  const candH = Math.min(MAX_WIDGET_SPAN, Math.max(MIN_WIDGET_SPAN, resizeState.startH + Math.round(dy / step)));
+
+  // 他のアイテムと重ならない範囲でのみサイズを更新する(重なる場合は直前の有効なサイズを維持)
+  const occupied = occupiedCells(gridItems, item);
+  if (spotFits(item.x, item.y, candW, candH, cols, occupied)) {
+    resizeState.w = candW;
+    resizeState.h = candH;
+  }
+
+  applyItemPosition(resizeState.el, item.x, item.y, resizeState.w, resizeState.h);
+  updateGridOverlayPreview(item, item.x, item.y, resizeState.w, resizeState.h);
+}
+
+function onWidgetResizeUp(e) {
+  if (!resizeState || e.pointerId !== resizeState.pointerId) return;
+  const state = resizeState;
+  resizeState = null;
+  state.el.classList.remove('resizing');
+  try {
+    state.handle.releasePointerCapture?.(e.pointerId);
+  } catch {
+    // 未キャプチャなら何もしない
+  }
+  hideGridOverlay();
+  if (state.w !== state.item.w || state.h !== state.item.h) {
+    state.item.w = state.w;
+    state.item.h = state.h;
+    persistGridOrder();
+  }
+  renderGrid();
 }
 
 // =========================================================

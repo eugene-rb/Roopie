@@ -169,8 +169,8 @@ app.whenReady().then(async () => {
   // ---- ドラッグでの並べ替え(座標モデル。グリッド線プレビュー・入れ替え・自動上詰めなしを検証) ----
   const DRAG_GAP = 14; // newtab.js の GRID_GAP と同じ値
   function parseSpan(str) {
-    const [start, , span] = str.split(' ');
-    return { start: Number(start) - 1, span: Number(span) };
+    const parts = str.split(' '); // "X / span W"
+    return { start: Number(parts[0]) - 1, span: Number(parts[3]) };
   }
   async function posOf(selector) {
     const [col, row] = await js(
@@ -253,6 +253,37 @@ app.whenReady().then(async () => {
   const notepadGone = !Object.keys(posAfterDelete).some((k) => k.includes('notepad'));
   const othersUnchanged = Object.keys(posAfterDelete).every((k) => posAfterDelete[k] === posBeforeDelete[k]);
   check('ウィジェット削除後も残りのアイテムは動かない(自動上詰めなし)', notepadGone && othersUnchanged, true);
+
+  // 4) ウィジェットは右下のハンドルをドラッグしてサイズ変更できる(ニュースを幅3→2に縮小)
+  check('ニュースの初期サイズは幅3', (await posOf('.widget-news')).w, 3);
+  const newsBefore = await posOf('.widget-news');
+  const cellPx3 = parseFloat(await gridVar('--cell'));
+  const step3 = cellPx3 + DRAG_GAP;
+  const h1 = await centerOf('.widget-news .widget-resize-handle');
+
+  await firePointer('.widget-news .widget-resize-handle', 'pointerdown', 3, h1.x, h1.y);
+  await firePointer('.widget-news .widget-resize-handle', 'pointermove', 3, h1.x - step3, h1.y);
+  await sleep(50);
+  check('リサイズ中もグリッド線オーバーレイが表示される', await js(`document.querySelectorAll('.grid-overlay-cell').length > 0`), true);
+  check('リサイズ中のプレビューが有効(緑)表示になる', await js(`document.querySelector('.grid-overlay-preview')?.classList.contains('valid')`), true);
+  await firePointer('.widget-news .widget-resize-handle', 'pointerup', 3, h1.x - step3, h1.y);
+  await sleep(200);
+  const newsAfterShrink = await posOf('.widget-news');
+  check(
+    'ドラッグでウィジェットの幅を1セル縮小できる(位置は変わらない)',
+    newsAfterShrink.w === newsBefore.w - 1 && newsAfterShrink.h === newsBefore.h && newsAfterShrink.x === newsBefore.x && newsAfterShrink.y === newsBefore.y,
+    true
+  );
+
+  // 縮小で空いたスペースへ再び幅を1セル拡大(必ず空いているはずの場所への拡大)
+  const h2 = await centerOf('.widget-news .widget-resize-handle');
+  await firePointer('.widget-news .widget-resize-handle', 'pointerdown', 4, h2.x, h2.y);
+  await firePointer('.widget-news .widget-resize-handle', 'pointermove', 4, h2.x + step3, h2.y);
+  await sleep(50);
+  await firePointer('.widget-news .widget-resize-handle', 'pointerup', 4, h2.x + step3, h2.y);
+  await sleep(200);
+  const newsAfterGrow = await posOf('.widget-news');
+  check('直前に縮小した分は再び拡大できる', newsAfterGrow.w === newsBefore.w && newsAfterGrow.h === newsBefore.h, true);
 
   // ---- 共通アイコンピッカー(icon-picker.js): ボタンがパネル幅からはみ出さないこと ----
   await js(`document.querySelector('.quick-link-add').click()`);
