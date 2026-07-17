@@ -487,6 +487,7 @@ contextBridge.exposeInMainWorld('roopie', {
   onPasswordPrompt: (cb) => ipcRenderer.on('passwords:prompt', (_e, p) => cb(p)),
   savePassword: () => ipcRenderer.send('passwords:confirm-save'),
   dismissPassword: () => ipcRenderer.send('passwords:dismiss'),
+  neverSavePassword: () => ipcRenderer.send('passwords:never-save'),
   onFocusAddressBar: (cb) => ipcRenderer.on('ui:focus-address-bar', () => cb()),
   onOpenFind: (cb) => ipcRenderer.on('ui:open-find', () => cb()),
   onToggleCompact: (cb) => ipcRenderer.on('ui:toggle-compact', () => cb()),

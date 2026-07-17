@@ -132,6 +132,21 @@ if (location.protocol === 'roopie:') {
     removePassword: (id) => ipcRenderer.send('passwords:remove', id),
     clearPasswords: () => ipcRenderer.send('passwords:clear'),
     onPasswordsState: (cb) => ipcRenderer.on('passwords:state', (_e, items) => cb(items)),
+    updatePassword: (id, patch) => ipcRenderer.invoke('passwords:update', id, patch),
+    exportPasswords: () => ipcRenderer.invoke('passwords:export'),
+    importPasswords: () => ipcRenderer.invoke('passwords:import'),
+    listExcludedPasswordSites: () => ipcRenderer.invoke('passwords:excluded'),
+    removeExcludedPasswordSite: (origin) => ipcRenderer.send('passwords:excluded-remove', origin),
+
+    // 自動入力(住所・個人情報/お支払い方法)
+    listAddresses: () => ipcRenderer.invoke('autofill:addresses'),
+    saveAddress: (patch) => ipcRenderer.invoke('autofill:address-save', patch),
+    removeAddress: (id) => ipcRenderer.send('autofill:address-remove', id),
+    listCards: () => ipcRenderer.invoke('autofill:cards'),
+    saveCard: (payload) => ipcRenderer.invoke('autofill:card-save', payload),
+    removeCard: (id) => ipcRenderer.send('autofill:card-remove', id),
+    autofillAvailable: () => ipcRenderer.invoke('autofill:available'),
+    onAutofillState: (cb) => ipcRenderer.on('autofill:state', (_e, state) => cb(state)),
 
     // 拡張機能
     installExtension: (extensionId) => ipcRenderer.invoke('extensions:install', extensionId),

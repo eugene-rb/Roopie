@@ -559,6 +559,10 @@ $('password-dismiss').addEventListener('click', () => {
   window.roopie.dismissPassword();
   closePasswordBar();
 });
+$('password-never').addEventListener('click', () => {
+  window.roopie.neverSavePassword();
+  closePasswordBar();
+});
 
 // ---- ページ内検索 ----
 window.roopie.onOpenFind(() => {

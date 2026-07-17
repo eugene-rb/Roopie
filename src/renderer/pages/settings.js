@@ -39,6 +39,7 @@ const SHARABLE = [
   { key: 'gestures', name: 'マウスジェスチャー', desc: 'ジェスチャーの割り当てを全プロファイルで共通にする' },
   { key: 'theme', name: 'テーマ', desc: 'アクセントカラーやカスタムCSSを全プロファイルで共通にする' },
   { key: 'passwords', name: '保存パスワード', desc: '保存したパスワードを全プロファイルで共通にする' },
+  { key: 'autofill', name: '自動入力(住所・カード)', desc: '住所・お支払い方法を全プロファイルで共通にする' },
 ];
 
 // 今後のフェーズで対応する項目(UIだけ先に用意)
@@ -902,13 +903,22 @@ const passwordsDescEl = document.getElementById('passwords-desc');
 
 // パスワードは既定で伏せ字。「表示」を押したものだけ復号して見せる
 const revealed = new Map();
+const passwordsSearchEl = document.getElementById('passwords-search');
+let allPasswords = [];
 
-function renderPasswords(items) {
+function renderPasswords() {
+  const query = passwordsSearchEl.value.trim().toLowerCase();
+  const items = query
+    ? allPasswords.filter(
+        (p) => p.origin.toLowerCase().includes(query) || p.username.toLowerCase().includes(query)
+      )
+    : allPasswords;
+
   passwordsListEl.textContent = '';
   if (!items.length) {
     const empty = document.createElement('div');
     empty.className = 'empty-inline';
-    empty.textContent = '保存されたパスワードはありません';
+    empty.textContent = query ? '一致するパスワードはありません' : '保存されたパスワードはありません';
     passwordsListEl.appendChild(empty);
     return;
   }
@@ -947,9 +957,15 @@ function renderPasswords(items) {
         const value = await window.roopieInternal.revealPassword(item.id);
         revealed.set(item.id, value ?? '(復号できません)');
       }
-      refreshPasswords();
+      renderPasswords();
     });
     actions.appendChild(revealBtn);
+
+    const editBtn = document.createElement('button');
+    editBtn.className = 'row-btn';
+    editBtn.textContent = '編集';
+    editBtn.addEventListener('click', () => openPasswordEditModal(item));
+    actions.appendChild(editBtn);
 
     const removeBtn = document.createElement('button');
     removeBtn.className = 'row-btn';
@@ -963,8 +979,12 @@ function renderPasswords(items) {
 }
 
 async function refreshPasswords() {
-  renderPasswords(await window.roopieInternal.listPasswords());
+  allPasswords = await window.roopieInternal.listPasswords();
+  renderPasswords();
+  refreshExcluded();
 }
+
+passwordsSearchEl.addEventListener('input', renderPasswords);
 
 savePasswordsToggle.addEventListener('change', () =>
   window.roopieInternal.setSetting('savePasswords', savePasswordsToggle.checked)
@@ -977,7 +997,324 @@ document.getElementById('passwords-clear').addEventListener('click', () => {
   }
 });
 
-window.roopieInternal.onPasswordsState((items) => renderPasswords(items));
+window.roopieInternal.onPasswordsState((items) => {
+  allPasswords = items;
+  renderPasswords();
+  refreshExcluded();
+});
+
+// ---- パスワードの編集モーダル ----
+function openPasswordEditModal(item) {
+  openFormModal({
+    title: 'パスワードを編集',
+    note: item.origin.replace(/^https?:\/\//, ''),
+    fields: [
+      { key: 'username', label: 'ユーザー名', value: item.username },
+      { key: 'password', label: 'パスワード(空欄なら変更しない)', value: '', type: 'password' },
+    ],
+    onSave: async (values) => {
+      const ok = await window.roopieInternal.updatePassword(item.id, {
+        username: values.username,
+        password: values.password,
+      });
+      if (!ok) alert('更新できませんでした(同じサイトに同名のユーザー名が既にあります)');
+      revealed.delete(item.id);
+      return ok;
+    },
+  });
+}
+
+// ---- エクスポート / インポート ----
+document.getElementById('passwords-export').addEventListener('click', async () => {
+  const result = await window.roopieInternal.exportPasswords();
+  if (result === null) return; // キャンセル
+  alert(result.count ? `${result.count}件をエクスポートしました` : 'エクスポートできるパスワードがありません');
+});
+
+document.getElementById('passwords-import').addEventListener('click', async () => {
+  const result = await window.roopieInternal.importPasswords();
+  if (result === null) return; // キャンセル
+  alert(`${result.imported}件をインポートしました${result.skipped ? `(${result.skipped}件はスキップ)` : ''}`);
+});
+
+// ---- 保存しないサイト(除外リスト) ----
+const excludedWrapEl = document.getElementById('passwords-excluded-wrap');
+const excludedListEl = document.getElementById('passwords-excluded');
+
+async function refreshExcluded() {
+  const origins = await window.roopieInternal.listExcludedPasswordSites();
+  excludedWrapEl.classList.toggle('hidden', !origins.length);
+  excludedListEl.textContent = '';
+  for (const origin of origins) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    const main = document.createElement('div');
+    main.className = 'main';
+    const title = document.createElement('span');
+    title.className = 'title';
+    title.textContent = origin.replace(/^https?:\/\//, '');
+    main.appendChild(title);
+    row.appendChild(main);
+    const actions = document.createElement('div');
+    actions.className = 'row-actions';
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'row-btn';
+    removeBtn.textContent = '解除';
+    removeBtn.addEventListener('click', () => window.roopieInternal.removeExcludedPasswordSite(origin));
+    actions.appendChild(removeBtn);
+    row.appendChild(actions);
+    excludedListEl.appendChild(row);
+  }
+}
+
+// =========================================================
+// 自動入力(住所・個人情報 / お支払い方法)
+// =========================================================
+const addressesListEl = document.getElementById('addresses-list');
+const cardsListEl = document.getElementById('cards-list');
+const autofillAddressesToggle = document.getElementById('autofill-addresses');
+const autofillCardsToggle = document.getElementById('autofill-cards');
+
+autofillAddressesToggle.addEventListener('change', () =>
+  window.roopieInternal.setSetting('autofillAddresses', autofillAddressesToggle.checked)
+);
+autofillCardsToggle.addEventListener('change', () =>
+  window.roopieInternal.setSetting('autofillCards', autofillCardsToggle.checked)
+);
+
+// 共通のフォームモーダル。fields: [{key, label, value, type?, placeholder?, half?}]
+function openFormModal({ title, note, fields, onSave }) {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'af-modal-backdrop';
+  const modal = document.createElement('div');
+  modal.className = 'af-modal';
+
+  const heading = document.createElement('h3');
+  heading.textContent = title;
+  modal.appendChild(heading);
+  if (note) {
+    const noteEl = document.createElement('p');
+    noteEl.className = 'note af-modal-note';
+    noteEl.textContent = note;
+    modal.appendChild(noteEl);
+  }
+
+  const grid = document.createElement('div');
+  grid.className = 'af-modal-grid';
+  const inputs = {};
+  for (const field of fields) {
+    const wrap = document.createElement('label');
+    wrap.className = 'af-field' + (field.half ? ' half' : '');
+    const label = document.createElement('span');
+    label.className = 'af-field-label';
+    label.textContent = field.label;
+    const input = document.createElement('input');
+    input.className = 'search af-field-input';
+    input.type = field.type ?? 'text';
+    input.value = field.value ?? '';
+    input.placeholder = field.placeholder ?? '';
+    input.autocomplete = 'off';
+    wrap.append(label, input);
+    grid.appendChild(wrap);
+    inputs[field.key] = input;
+  }
+  modal.appendChild(grid);
+
+  const actions = document.createElement('div');
+  actions.className = 'af-modal-actions';
+  const spacer = document.createElement('div');
+  spacer.className = 'spacer';
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'btn';
+  cancelBtn.textContent = 'キャンセル';
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'btn primary';
+  saveBtn.textContent = '保存';
+  actions.append(spacer, cancelBtn, saveBtn);
+  modal.appendChild(actions);
+
+  function close() {
+    backdrop.remove();
+    document.removeEventListener('keydown', onKeydown);
+  }
+  function onKeydown(e) {
+    if (e.key === 'Escape') close();
+  }
+  cancelBtn.addEventListener('click', close);
+  saveBtn.addEventListener('click', async () => {
+    const values = Object.fromEntries(Object.entries(inputs).map(([k, el]) => [k, el.value.trim()]));
+    saveBtn.disabled = true;
+    const ok = await onSave(values);
+    saveBtn.disabled = false;
+    if (ok !== false) close();
+  });
+  backdrop.addEventListener('mousedown', (e) => {
+    if (e.target === backdrop) close();
+  });
+  document.addEventListener('keydown', onKeydown);
+
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
+  Object.values(inputs)[0]?.focus();
+}
+
+// ---- 住所・個人情報 ----
+function addressLabel(a) {
+  const name = [a.familyName, a.givenName].filter(Boolean).join(' ');
+  const addr = [a.region, a.city, a.street, a.building].filter(Boolean).join('');
+  return { title: name || a.org || a.email || '(名称なし)', sub: [addr, a.tel].filter(Boolean).join('  ') };
+}
+
+function renderAddresses(items) {
+  addressesListEl.textContent = '';
+  if (!items.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-inline';
+    empty.textContent = '保存された住所はありません';
+    addressesListEl.appendChild(empty);
+    return;
+  }
+  for (const item of items) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    const main = document.createElement('div');
+    main.className = 'main';
+    const { title, sub } = addressLabel(item);
+    const titleEl = document.createElement('span');
+    titleEl.className = 'title';
+    titleEl.textContent = title;
+    main.appendChild(titleEl);
+    if (sub) {
+      const subEl = document.createElement('span');
+      subEl.className = 'sub';
+      subEl.textContent = sub;
+      main.appendChild(subEl);
+    }
+    row.appendChild(main);
+
+    const actions = document.createElement('div');
+    actions.className = 'row-actions';
+    const editBtn = document.createElement('button');
+    editBtn.className = 'row-btn';
+    editBtn.textContent = '編集';
+    editBtn.addEventListener('click', () => openAddressModal(item));
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'row-btn';
+    removeBtn.textContent = '削除';
+    removeBtn.addEventListener('click', () => window.roopieInternal.removeAddress(item.id));
+    actions.append(editBtn, removeBtn);
+    row.appendChild(actions);
+    addressesListEl.appendChild(row);
+  }
+}
+
+function openAddressModal(existing) {
+  openFormModal({
+    title: existing ? '住所を編集' : '住所を追加',
+    fields: [
+      { key: 'familyName', label: '姓', value: existing?.familyName, half: true },
+      { key: 'givenName', label: '名', value: existing?.givenName, half: true },
+      { key: 'familyKana', label: 'セイ(フリガナ)', value: existing?.familyKana, half: true },
+      { key: 'givenKana', label: 'メイ(フリガナ)', value: existing?.givenKana, half: true },
+      { key: 'org', label: '組織・会社(任意)', value: existing?.org },
+      { key: 'postal', label: '郵便番号', value: existing?.postal, half: true, placeholder: '100-0001' },
+      { key: 'region', label: '都道府県', value: existing?.region, half: true },
+      { key: 'city', label: '市区町村', value: existing?.city },
+      { key: 'street', label: '番地など', value: existing?.street },
+      { key: 'building', label: '建物名・部屋番号(任意)', value: existing?.building },
+      { key: 'tel', label: '電話番号', value: existing?.tel, half: true },
+      { key: 'email', label: 'メールアドレス', value: existing?.email, half: true },
+    ],
+    onSave: async (values) => {
+      await window.roopieInternal.saveAddress({ ...values, id: existing?.id });
+    },
+  });
+}
+
+document.getElementById('address-add').addEventListener('click', () => openAddressModal(null));
+
+// ---- お支払い方法(カード) ----
+function renderCards(items) {
+  cardsListEl.textContent = '';
+  if (!items.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-inline';
+    empty.textContent = '保存されたお支払い方法はありません';
+    cardsListEl.appendChild(empty);
+    return;
+  }
+  for (const item of items) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    const main = document.createElement('div');
+    main.className = 'main';
+    const titleEl = document.createElement('span');
+    titleEl.className = 'title';
+    titleEl.textContent = `${item.brand} •••• ${item.last4}`;
+    main.appendChild(titleEl);
+    const subEl = document.createElement('span');
+    subEl.className = 'sub';
+    subEl.textContent = [
+      item.holder,
+      item.expMonth && item.expYear ? `有効期限 ${item.expMonth}/${item.expYear}` : '',
+    ]
+      .filter(Boolean)
+      .join('  ');
+    main.appendChild(subEl);
+    row.appendChild(main);
+
+    const actions = document.createElement('div');
+    actions.className = 'row-actions';
+    const editBtn = document.createElement('button');
+    editBtn.className = 'row-btn';
+    editBtn.textContent = '編集';
+    editBtn.addEventListener('click', () => openCardModal(item));
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'row-btn';
+    removeBtn.textContent = '削除';
+    removeBtn.addEventListener('click', () => window.roopieInternal.removeCard(item.id));
+    actions.append(editBtn, removeBtn);
+    row.appendChild(actions);
+    cardsListEl.appendChild(row);
+  }
+}
+
+function openCardModal(existing) {
+  openFormModal({
+    title: existing ? 'カードを編集' : 'カードを追加',
+    note: existing ? `${existing.brand} •••• ${existing.last4}(番号を変える場合のみ再入力)` : undefined,
+    fields: [
+      {
+        key: 'number',
+        label: existing ? 'カード番号(空欄なら変更しない)' : 'カード番号',
+        value: '',
+        placeholder: '4111 1111 1111 1111',
+      },
+      { key: 'holder', label: 'カード名義', value: existing?.holder, placeholder: 'TARO YAMADA' },
+      { key: 'expMonth', label: '有効期限(月)', value: existing?.expMonth || '', half: true, placeholder: 'MM' },
+      { key: 'expYear', label: '有効期限(年)', value: existing?.expYear || '', half: true, placeholder: 'YYYY' },
+    ],
+    onSave: async (values) => {
+      const id = await window.roopieInternal.saveCard({ ...values, id: existing?.id });
+      if (!id) {
+        alert('カード番号を確認してください(12〜19桁の数字)');
+        return false;
+      }
+    },
+  });
+}
+
+document.getElementById('card-add').addEventListener('click', () => openCardModal(null));
+
+async function refreshAutofill() {
+  renderAddresses(await window.roopieInternal.listAddresses());
+  renderCards(await window.roopieInternal.listCards());
+}
+
+window.roopieInternal.onAutofillState(({ addresses, cards }) => {
+  renderAddresses(addresses);
+  renderCards(cards);
+});
 
 // ---- テーマ ----
 const ACCENT_PRESETS = ['#6c8cff', '#4bbf8a', '#ffb454', '#e5709b', '#a78bfa', '#4dc4d9', '#ff6b6b'];
@@ -1239,6 +1576,8 @@ window.roopieInternal.onSettings((settings) => {
   bookmarkBarToggle.checked = !!settings.showBookmarkBar;
   adblockToggle.checked = settings.adblock !== false;
   savePasswordsToggle.checked = settings.savePasswords !== false;
+  autofillAddressesToggle.checked = settings.autofillAddresses !== false;
+  autofillCardsToggle.checked = settings.autofillCards !== false;
   renderDownloadPath(settings.downloadPath);
   renderToolbarItems(settings.toolbarItems);
 });
@@ -1267,6 +1606,8 @@ document.addEventListener('visibilitychange', () => {
   bookmarkBarToggle.checked = !!settings.showBookmarkBar;
   adblockToggle.checked = settings.adblock !== false;
   savePasswordsToggle.checked = settings.savePasswords !== false;
+  autofillAddressesToggle.checked = settings.autofillAddresses !== false;
+  autofillCardsToggle.checked = settings.autofillCards !== false;
   renderDownloadPath(settings.downloadPath);
   renderToolbarItems(settings.toolbarItems);
   if (gestureConfig) gestureState = gestureConfig;
@@ -1284,5 +1625,12 @@ document.addEventListener('visibilitychange', () => {
     passwordsDescEl.textContent =
       'この環境ではOSの暗号化が利用できないため、パスワードを保存できません';
   }
+  if (!(await window.roopieInternal.autofillAvailable())) {
+    autofillCardsToggle.disabled = true;
+    document.getElementById('card-add').disabled = true;
+    document.getElementById('cards-desc').textContent =
+      'この環境ではOSの暗号化が利用できないため、カードを保存できません';
+  }
   refreshPasswords();
+  refreshAutofill();
 })();

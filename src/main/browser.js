@@ -16,6 +16,7 @@ const ExtensionSupport = require('./extension-support');
 const AdBlock = require('./adblock');
 const Tor = require('./tor');
 const Passwords = require('./passwords');
+const Autofill = require('./autofill');
 const Store = require('./store');
 const windows = require('./windows');
 const { defaultToolbarItems, normalizeToolbarItems } = require('./toolbar-items');
@@ -38,6 +39,9 @@ const DEFAULT_SETTINGS = {
   toolbarItems: defaultToolbarItems(), // ツールバーのユーティリティ項目の表示/順序
   // ツールバーに直接表示する拡張機能のID(Edge風。それ以外はパズルボタンのメニューから使う)
   pinnedExtensions: [],
+  // 自動入力(住所・個人情報/お支払い方法)のON/OFF
+  autofillAddresses: true,
+  autofillCards: true,
 };
 const DEFAULT_THEME = { accent: '#6c8cff', background: 'auto', backgroundImage: '', customCss: '' };
 const THEME_BACKGROUNDS = ['auto', 'dawn', 'day', 'dusk', 'night', 'plain', 'image'];
@@ -70,6 +74,7 @@ const browser = {
   gestures: null,
   theme: null,
   passwords: null,
+  autofill: null,
 
   extensions: new ExtensionSupport(),
   adblock: new AdBlock(),
@@ -115,7 +120,7 @@ const pagePreloadSessions = new WeakSet();
 function registerPagePreloads(session) {
   if (pagePreloadSessions.has(session)) return;
   pagePreloadSessions.add(session);
-  for (const name of ['gesture-preload.js', 'password-preload.js', 'media-preload.js']) {
+  for (const name of ['gesture-preload.js', 'autofill-preload.js', 'media-preload.js']) {
     session.registerPreloadScript({ type: 'frame', filePath: path.join(PRELOAD_DIR, name) });
   }
 }
@@ -156,6 +161,7 @@ browser.initData = () => {
   browser.gestures = new Gestures(store(profile, 'gestures', Gestures.defaults()));
   browser.theme = store(profile, 'theme', { ...DEFAULT_THEME });
   browser.passwords = new Passwords(store(profile, 'passwords', []));
+  browser.autofill = new Autofill(store(profile, 'autofill', {}));
 };
 
 browser.flushAll = () => {
@@ -169,6 +175,7 @@ browser.flushAll = () => {
   browser.gestures?.store.flush();
   browser.theme?.flush();
   browser.passwords?.store.flush();
+  browser.autofill?.store.flush();
   browser.keybindings?.store.flush();
   browser.localServers?.store.flush();
   for (const ctx of windows.all()) {
@@ -527,6 +534,7 @@ browser.applyActiveProfile = ({ recreateTabs, previousProfileId } = {}) => {
   browser.theme.flush();
   browser.theme = store(profile, 'theme', { ...DEFAULT_THEME });
   browser.passwords.setStore(store(profile, 'passwords', []));
+  browser.autofill.setStore(store(profile, 'autofill', {}));
 
   const session = browser.profiles.sessionFor(profile);
   registerInternalProtocol(session);
@@ -687,6 +695,14 @@ browser.sendTheme = () => {
 browser.sendPasswords = () => {
   if (!browser.passwords) return;
   broadcast('passwords:state', browser.passwords.list());
+};
+
+browser.sendAutofill = () => {
+  if (!browser.autofill) return;
+  broadcast('autofill:state', {
+    addresses: browser.autofill.listAddresses(),
+    cards: browser.autofill.listCards(),
+  });
 };
 
 browser.sendExtensions = () => {

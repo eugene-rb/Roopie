@@ -14,6 +14,7 @@
       <a href="#section-extensions" class="toc-link">拡張機能</a>
       <a href="#section-gestures" class="toc-link">マウスジェスチャー</a>
       <a href="#section-passwords" class="toc-link">保存したパスワード</a>
+      <a href="#section-autofill" class="toc-link">自動入力</a>
       <a href="#section-theme" class="toc-link">テーマ</a>
       <a href="#section-browser" class="toc-link">ブラウザ設定</a>
       <a href="#section-toolbar" class="toc-link">ツールバー</a>
@@ -114,9 +115,54 @@
           <span class="slider"></span>
         </label>
       </div>
+      <div class="account-add passwords-tools">
+        <input id="passwords-search" class="search" type="text" placeholder="パスワードを検索" autocomplete="off" />
+        <button id="passwords-import" class="btn">インポート</button>
+        <button id="passwords-export" class="btn">エクスポート</button>
+      </div>
       <div id="passwords-list" class="list"></div>
+      <div id="passwords-excluded-wrap" class="hidden">
+        <div class="setting-name excluded-title">保存しないサイト</div>
+        <div id="passwords-excluded" class="list"></div>
+      </div>
       <div class="gesture-footer">
         <button id="passwords-clear" class="btn danger">すべて削除</button>
+      </div>
+    </div>
+    </section>
+
+    <section id="section-autofill">
+    <h2 class="section-title">自動入力<span class="scope-badge" data-scope-key="autofill"></span></h2>
+    <div class="card">
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">住所や個人情報の保存と自動入力</div>
+          <div class="setting-desc">フォームにフォーカスすると保存した住所・氏名・電話番号などを候補として表示します</div>
+        </div>
+        <label class="switch">
+          <input id="autofill-addresses" type="checkbox" />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div id="addresses-list" class="list"></div>
+      <div class="gesture-footer">
+        <button id="address-add" class="btn">住所を追加</button>
+      </div>
+    </div>
+    <div class="card autofill-card-gap">
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">お支払い方法の保存と自動入力</div>
+          <div class="setting-desc" id="cards-desc">カード番号はOSの暗号化で保護されます。セキュリティコード(CVC)は保存しません</div>
+        </div>
+        <label class="switch">
+          <input id="autofill-cards" type="checkbox" />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div id="cards-list" class="list"></div>
+      <div class="gesture-footer">
+        <button id="card-add" class="btn">カードを追加</button>
       </div>
     </div>
     </section>

@@ -1199,6 +1199,99 @@ body {
   margin-top: 8px;
 }
 
+/* パスワードの検索+エクスポート/インポートの行 */
+.passwords-tools {
+  margin-top: 12px;
+}
+
+/* 「保存しないサイト」小見出し */
+.excluded-title {
+  margin-top: 16px;
+  margin-bottom: 4px;
+}
+
+#passwords-excluded {
+  margin-top: 4px;
+}
+
+/* 自動入力セクション: 住所カードとお支払いカードの間隔 */
+.autofill-card-gap {
+  margin-top: 16px;
+}
+
+#addresses-list,
+#cards-list {
+  margin-top: 8px;
+}
+
+/* ---- 自動入力/パスワード編集の共通フォームモーダル ---- */
+.af-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.af-modal {
+  width: 480px;
+  max-width: calc(100vw - 40px);
+  max-height: calc(100vh - 60px);
+  overflow-y: auto;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+}
+
+.af-modal h3 {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.af-modal-note {
+  margin-bottom: 12px;
+}
+
+.af-modal-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.af-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.af-field.half {
+  width: calc(50% - 5px);
+}
+
+.af-field-label {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.af-field-input {
+  width: 100%;
+}
+
+.af-modal-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.af-modal-actions .spacer {
+  flex: 1;
+}
+
 .section-title {
   margin: 32px 0 12px;
   font-size: 15px;

@@ -14,6 +14,7 @@ const SHARABLE_KEYS = [
   'gestures',
   'theme',
   'passwords',
+  'autofill',
 ];
 
 const DEFAULT_SHARED = {
@@ -24,6 +25,7 @@ const DEFAULT_SHARED = {
   gestures: false,
   theme: false,
   passwords: false,
+  autofill: false,
 };
 
 const COLORS = ['#6c8cff', '#4bbf8a', '#ffb454', '#e5709b', '#a78bfa', '#4dc4d9'];

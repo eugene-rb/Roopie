@@ -4,6 +4,7 @@ const windows = require('./windows');
 const browser = require('./browser');
 const GoogleAccounts = require('./google-accounts');
 const Passwords = require('./passwords');
+const Autofill = require('./autofill');
 const { showTabMenu } = require('./tab-context-menu');
 const {
   showSidePanelPositionMenu,
@@ -60,6 +61,43 @@ async function fetchPageTitle(rawUrl) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+// パスワードCSVのインポート用ミニパーサー(RFC 4180: 引用符・カンマ・改行入りに対応)
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let field = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"' && text[i + 1] === '"') {
+        field += '"';
+        i++;
+      } else if (ch === '"') {
+        inQuotes = false;
+      } else {
+        field += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ',') {
+      row.push(field);
+      field = '';
+    } else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i++;
+      row.push(field);
+      field = '';
+      if (row.some((f) => f !== '')) rows.push(row);
+      row = [];
+    } else {
+      field += ch;
+    }
+  }
+  row.push(field);
+  if (row.some((f) => f !== '')) rows.push(row);
+  return rows;
 }
 
 // IPCは「送信元のウィンドウ」に対して処理する
@@ -365,14 +403,25 @@ function registerIpc() {
   ipcMain.on('sidepanel:resize', (e, deltaX) => panelOf(e)?.resizeBy(deltaX));
 
   // ---- パスワード ----
+  // ページ側の引数は信用せず、送信元フレームのURLからオリジンを導出する
+  const frameOrigin = (e) => {
+    try {
+      return new URL(e.senderFrame.url).origin;
+    } catch {
+      return null;
+    }
+  };
+
   // ページのpreloadがログイン送信を検出したら、未保存のときだけUIに確認バーを出す
-  ipcMain.on('passwords:captured', (e, { origin, username, password } = {}) => {
+  ipcMain.on('passwords:captured', (e, { username, password } = {}) => {
     const ctx = ctxOf(e);
     const passwords = browser.passwords;
+    const origin = frameOrigin(e);
     if (!passwords || !ctx || ctx.incognito) return; // シークレットでは保存しない
     if (!origin || !username || !password) return;
     if (browser.settings?.data.savePasswords === false) return;
     if (!Passwords.available()) return;
+    if (passwords.isExcluded(origin)) return; // 「このサイトでは保存しない」
     if (passwords.matches(origin, username, password)) return; // 同じ内容なら何も出さない
 
     browser.pendingPassword = { origin, username, password };
@@ -393,10 +442,39 @@ function registerIpc() {
   ipcMain.on('passwords:dismiss', () => {
     browser.pendingPassword = null;
   });
+  // 確認バーの「このサイトでは保存しない」
+  ipcMain.on('passwords:never-save', () => {
+    const pending = browser.pendingPassword;
+    browser.pendingPassword = null;
+    if (pending) browser.passwords?.addNeverSave(pending.origin);
+  });
 
-  // シークレットでは自動入力もしない
-  ipcMain.handle('passwords:for-origin', (e, origin) => {
-    if (ctxOf(e)?.incognito) return [];
+  // ページのオートフィルに出す候補一覧。パスワード本体は含めない(選択時に別途取得)
+  ipcMain.handle('autofill:page-data', (e) => {
+    const ctx = ctxOf(e);
+    const origin = frameOrigin(e);
+    const settings = browser.settings?.data ?? {};
+    if (!ctx || ctx.incognito || !origin) return { usernames: [], addresses: [], cards: [] };
+    return {
+      usernames:
+        settings.savePasswords === false ? [] : browser.passwords?.usernamesForOrigin(origin) ?? [],
+      addresses: settings.autofillAddresses === false ? [] : browser.autofill?.listAddresses() ?? [],
+      cards: settings.autofillCards === false ? [] : browser.autofill?.listCards() ?? [],
+    };
+  });
+
+  // 選択された1件の資格情報を返す(最終使用日時を更新)。シークレットでは返さない
+  ipcMain.handle('passwords:credential', (e, username) => {
+    const origin = frameOrigin(e);
+    if (!origin || ctxOf(e)?.incognito) return null;
+    if (browser.settings?.data.savePasswords === false) return null;
+    return browser.passwords?.credential(origin, username) ?? null;
+  });
+
+  // 保存済みが1件だけの時の自動入力用(従来挙動)。シークレットでは自動入力もしない
+  ipcMain.handle('passwords:for-origin', (e) => {
+    const origin = frameOrigin(e);
+    if (!origin || ctxOf(e)?.incognito) return [];
     if (browser.settings?.data.savePasswords === false) return [];
     return browser.passwords?.forOrigin(origin) ?? [];
   });
@@ -404,6 +482,11 @@ function registerIpc() {
   ipcMain.handle('passwords:list', () => browser.passwords?.list() ?? []);
   ipcMain.handle('passwords:reveal', (_e, id) => browser.passwords?.reveal(id) ?? null);
   ipcMain.handle('passwords:available', () => Passwords.available());
+  ipcMain.handle('passwords:update', (_e, id, patch) => {
+    const ok = browser.passwords?.update(id, patch ?? {}) ?? false;
+    if (ok) browser.sendPasswords();
+    return ok;
+  });
   ipcMain.on('passwords:remove', (_e, id) => {
     browser.passwords?.remove(id);
     browser.sendPasswords();
@@ -411,6 +494,98 @@ function registerIpc() {
   ipcMain.on('passwords:clear', () => {
     browser.passwords?.clear();
     browser.sendPasswords();
+  });
+
+  // 除外リスト(このサイトでは保存しない)
+  ipcMain.handle('passwords:excluded', () => browser.passwords?.neverSave ?? []);
+  ipcMain.on('passwords:excluded-remove', (_e, origin) => {
+    browser.passwords?.removeNeverSave(origin);
+    browser.sendPasswords();
+  });
+
+  // CSVエクスポート/インポート(Chrome互換: name,url,username,password)
+  ipcMain.handle('passwords:export', async (e) => {
+    const items = browser.passwords?.exportAll() ?? [];
+    if (!items.length) return { count: 0 };
+    const { canceled, filePath } = await dialog.showSaveDialog(ctxOf(e)?.window, {
+      title: 'パスワードをエクスポート',
+      defaultPath: 'Roopie Passwords.csv',
+      filters: [{ name: 'CSV', extensions: ['csv'] }],
+    });
+    if (canceled || !filePath) return null;
+    const esc = (s) => `"${String(s).replaceAll('"', '""')}"`;
+    const lines = ['name,url,username,password'];
+    for (const p of items) {
+      let host = p.origin;
+      try {
+        host = new URL(p.origin).hostname;
+      } catch {}
+      lines.push([esc(host), esc(p.origin), esc(p.username), esc(p.password)].join(','));
+    }
+    await fs.promises.writeFile(filePath, '﻿' + lines.join('\r\n'), 'utf8');
+    return { count: items.length };
+  });
+
+  ipcMain.handle('passwords:import', async (e) => {
+    const { canceled, filePaths } = await dialog.showOpenDialog(ctxOf(e)?.window, {
+      title: 'パスワードをインポート',
+      filters: [{ name: 'CSV', extensions: ['csv'] }],
+      properties: ['openFile'],
+    });
+    if (canceled || !filePaths?.[0]) return null;
+    const text = (await fs.promises.readFile(filePaths[0], 'utf8')).replace(/^﻿/, '');
+    const rows = parseCsv(text);
+    if (!rows.length) return { imported: 0, skipped: 0 };
+    // ヘッダー行から列位置を決める(Chrome/Edge/Firefoxのエクスポート形式に対応)
+    const header = rows[0].map((h) => h.trim().toLowerCase());
+    const urlCol = header.findIndex((h) => h === 'url' || h === 'origin');
+    const userCol = header.findIndex((h) => h === 'username');
+    const passCol = header.findIndex((h) => h === 'password');
+    if (urlCol === -1 || userCol === -1 || passCol === -1) return { imported: 0, skipped: rows.length };
+    let imported = 0;
+    let skipped = 0;
+    for (const row of rows.slice(1)) {
+      try {
+        const origin = new URL(row[urlCol]).origin;
+        if (browser.passwords?.save(origin, row[userCol]?.trim(), row[passCol])) imported++;
+        else skipped++;
+      } catch {
+        skipped++;
+      }
+    }
+    browser.sendPasswords();
+    return { imported, skipped };
+  });
+
+  // ---- 自動入力(住所・個人情報/お支払い方法) ----
+  ipcMain.handle('autofill:addresses', () => browser.autofill?.listAddresses() ?? []);
+  ipcMain.handle('autofill:address-save', (_e, patch) => {
+    const item = browser.autofill?.saveAddress(patch ?? {}) ?? null;
+    if (item) browser.sendAutofill();
+    return item;
+  });
+  ipcMain.on('autofill:address-remove', (_e, id) => {
+    browser.autofill?.removeAddress(id);
+    browser.sendAutofill();
+  });
+
+  ipcMain.handle('autofill:cards', () => browser.autofill?.listCards() ?? []);
+  ipcMain.handle('autofill:available', () => Autofill.available());
+  ipcMain.handle('autofill:card-save', (_e, payload) => {
+    const id = browser.autofill?.saveCard(payload ?? {}) ?? null;
+    if (id) browser.sendAutofill();
+    return id;
+  });
+  ipcMain.on('autofill:card-remove', (_e, id) => {
+    browser.autofill?.removeCard(id);
+    browser.sendAutofill();
+  });
+
+  // カード番号の復号はドロップダウンでユーザーが選択した時だけ
+  ipcMain.handle('autofill:card-fill', (e, id) => {
+    if (ctxOf(e)?.incognito) return null;
+    if (browser.settings?.data.autofillCards === false) return null;
+    return browser.autofill?.cardFill(id) ?? null;
   });
 
   // ---- 拡張機能 ----
