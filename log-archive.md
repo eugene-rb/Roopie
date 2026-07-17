@@ -658,3 +658,13 @@
 - context-menu.js / toolbar-context-menu.js / menu.js / tab-context-menu.js も ctx.profileId 基準に
 - **adblock.js の潜在バグ修正**: ghosteryの `enableBlockingInSession` はグローバルな ipcMain.handle を毎回登録するため、2セッション目で二重登録エラー(シークレット併用でも起きていた)。有効化前に removeHandler、無効化後は残セッションのコンテキストでハンドラ復旧
 - **検証**: `scripts/test-multi-profile.js` 新設(一時userDataで本物のbrowser.jsを起動し22件: 切替=新ウィンドウ/既存維持/データ・設定・ブックマーク分離/共有トグルのストア共有と解除/削除時のウィンドウクローズ/閉じ時のタブ保存)。既存スイート(autofill 27+27、widgets 18)も全て成功。start:verify クリーン
+
+## 2026-07-18: スタート画面グリッドの列数・行数をAndroidホーム画面風に設定可能に → 0fbad81
+
+- 前セッションが未コミットのまま残していた実装(main側の設定値`startGridCols`/`startGridRows`、IPCバリデーション、設定画面UI、newtab.jsのグリッド伸縮ロジック)を引き継いで検証・仕上げ
+- **newtab.js**: `applyGridMetrics()` が列数(4〜10)・行数(3〜8)とウィンドウ幅からセルサイズを算出し、`--grid-cols`/`--cell`/`--grid-height` のCSS変数に反映。設定変更は`onSettings`でライブ反映、リサイズはデバウンス(120ms)
+- **newtab.css**: `#quick-links`のセルサイズ・アイコン・文字サイズを固定値からすべて`var(--cell)`基準の`calc()`に変更
+- **バグ修正2件(E2Eで検出)**:
+  - テスト側: `getPropertyValue('--cell')`は`"84px"`のような文字列を返すため`Number()`ではなく`parseFloat()`で読む必要があった(既存のテストコードの不具合)
+  - アプリ側: 縦の行数を増やした状態で画面が狭いと、セルをMIN_CELL(30px)まで縮めても`#newtab`の`margin-top: -6vh`により時計が画面上端からはみ出るケースがあった → `--newtab-shift`というCSS変数を新設し、セル縮小だけで収まらない場合は上方向オフセットを-6vh→0vhの範囲で段階的に緩める二段の安全弁に変更
+- **検証**: `scripts/test-newtab-widgets.js`にグリッド設定のライブ反映・縮小・安全弁のテストを追加(既定列数反映/セルサイズ正の数/列数変更のライブ反映/行数を増やすとセル縮小/時計が画面上端で欠けない/列数を戻すと反映、の6件)。全24件成功。`npm run build:css`でapp.css再生成、start:verifyでクラッシュ・コンソールエラー無し確認
