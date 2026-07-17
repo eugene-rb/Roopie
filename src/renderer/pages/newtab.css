@@ -147,13 +147,24 @@ body[data-bg="plain"] #vignette {
 }
 
 /* ---- クイックリンク(アイコンタイル) ---- */
+/* ショートカット+ウィジェットの統合グリッド(スマホのホーム画面風) */
 #quick-links {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 84px);
+  grid-auto-rows: 84px;
+  grid-auto-flow: row dense;
+  gap: 14px;
   justify-content: center;
-  gap: 18px 14px;
   margin-top: 44px;
-  max-width: 620px;
+  width: min(620px, calc(100vw - 48px));
+}
+
+.grid-item.quick-link {
+  justify-self: center;
+}
+
+.grid-item.dragging {
+  opacity: 0.4;
 }
 
 /* ローカルサーバーのサジェスト(ショートカットの下) */
@@ -543,4 +554,355 @@ body[data-bg="plain"] .quick-link .tile {
 
 body[data-bg="plain"] .quick-link:hover .tile {
   background: var(--card-hover);
+}
+
+/* =========================================================
+   ウィジェット(天気/ノートパッド/カレンダー/ニュース)
+   ========================================================= */
+.widget {
+  display: flex;
+  flex-direction: column;
+  grid-column: span 2;
+  grid-row: span 2;
+  min-width: 0;
+  min-height: 0;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(14px);
+  color: rgba(255, 255, 255, 0.92);
+  overflow: hidden;
+}
+
+.widget-news {
+  grid-column: span 3;
+}
+
+body[data-bg="plain"] .widget {
+  background: var(--card);
+  color: var(--text);
+}
+
+.widget-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 6px 2px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: grab;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.widget-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.widget-menu-btn {
+  border: none;
+  background: none;
+  color: inherit;
+  opacity: 0.6;
+  cursor: pointer;
+  font-size: 14px;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.widget-menu-btn:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.widget-body {
+  flex: 1;
+  min-height: 0;
+  padding: 4px 12px 10px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.widget-note {
+  opacity: 0.7;
+  font-size: 12px;
+  margin: auto;
+}
+
+/* ---- 天気 ---- */
+.weather-now {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.weather-icon {
+  font-size: 30px;
+  line-height: 1;
+}
+
+.weather-temp {
+  font-size: 32px;
+  font-weight: 300;
+  line-height: 1;
+}
+
+.weather-days {
+  display: flex;
+  gap: 6px;
+  margin-top: auto;
+}
+
+.weather-day {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  font-size: 10px;
+}
+
+.weather-range {
+  opacity: 0.85;
+}
+
+/* ---- ノートパッド ---- */
+.notepad-textarea {
+  flex: 1;
+  width: 100%;
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.notepad-textarea::placeholder {
+  color: inherit;
+  opacity: 0.5;
+}
+
+/* ---- カレンダー ---- */
+.cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 2px;
+  flex-shrink: 0;
+}
+
+.cal-nav {
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 15px;
+  opacity: 0.7;
+  width: 22px;
+  border-radius: 6px;
+}
+
+.cal-nav:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  flex: 1;
+  min-height: 0;
+  font-size: 10px;
+  text-align: center;
+  align-items: center;
+}
+
+.cal-weekday {
+  opacity: 0.6;
+}
+
+.cal-day.today {
+  background: var(--accent);
+  color: #fff;
+  border-radius: 50%;
+  width: 17px;
+  height: 17px;
+  line-height: 17px;
+  justify-self: center;
+}
+
+.cal-day.sun {
+  color: #ffa8a8;
+}
+
+.cal-day.sat {
+  color: #a8c8ff;
+}
+
+body[data-bg="plain"] .cal-day.sun {
+  color: #e05b5b;
+}
+
+body[data-bg="plain"] .cal-day.sat {
+  color: #5b8de0;
+}
+
+/* ---- ニュース ---- */
+.news-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.news-item {
+  color: inherit;
+  text-decoration: none;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.9;
+  border-radius: 6px;
+  padding: 2px 6px;
+  flex-shrink: 0;
+}
+
+.news-item:hover {
+  background: rgba(255, 255, 255, 0.12);
+  opacity: 1;
+}
+
+/* ---- ウィジェット内の設定UI(天気の場所検索/ニュースのフィード管理) ---- */
+.widget-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  overflow-y: auto;
+  font-size: 12px;
+}
+
+.widget-setup-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.widget-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  border-radius: 8px;
+  padding: 5px 8px;
+  background: rgba(0, 0, 0, 0.25);
+  color: inherit;
+  outline: none;
+  font-size: 12px;
+}
+
+body[data-bg="plain"] .widget-input {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.widget-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.15);
+  color: inherit;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.widget-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.widget-btn-primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.widget-setup-results {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow-y: auto;
+}
+
+.widget-setup-result {
+  text-align: left;
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 4px 8px;
+  color: inherit;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.widget-setup-result:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.widget-feed-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+}
+
+.widget-feed-row span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- 追加/ウィジェットの小さなポップアップメニュー ---- */
+.grid-popup {
+  position: fixed;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  background: #23262e;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.grid-popup-item {
+  display: block;
+  text-align: left;
+  border: none;
+  background: none;
+  color: #e5e7eb;
+  padding: 8px 12px;
+  border-radius: 7px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.grid-popup-item:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.grid-popup-item:disabled {
+  opacity: 0.4;
+  cursor: default;
 }

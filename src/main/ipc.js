@@ -14,6 +14,7 @@ const {
 } = require('./toolbar-context-menu');
 const { searchUrl } = require('./search-engines');
 const { normalizeToolbarItems } = require('./toolbar-items');
+const { geocode, weather, fetchRss } = require('./widgets');
 
 // ページのタイトルをHTMLの<title>から取得する(ショートカット追加時の名前自動設定用)。
 // 本文全体は読まず、</title>が見つかるまで先頭256KBだけ読む
@@ -270,6 +271,17 @@ function registerIpc() {
   );
   ipcMain.on('bookmarks:update-item', (_e, id, patch) => browser.bookmarks?.updateItem(id, patch));
   ipcMain.handle('page:fetch-title', (_e, url) => fetchPageTitle(url));
+
+  // ---- スタート画面のウィジェット(グリッド配置はページ単位) ----
+  ipcMain.handle('widgets:layout', (_e, pageId) => browser.widgets?.layoutFor(pageId) ?? []);
+  ipcMain.on('widgets:set-layout', (_e, pageId, items) => browser.widgets?.setLayout(pageId, items));
+  ipcMain.handle('widgets:add', (_e, pageId, widgetType) => browser.widgets?.addWidget(pageId, widgetType) ?? null);
+  ipcMain.on('widgets:remove', (_e, pageId, id) => browser.widgets?.removeWidget(pageId, id));
+  ipcMain.on('widgets:config', (_e, pageId, id, patch) => browser.widgets?.updateConfig(pageId, id, patch));
+  // 天気・RSSは内部ページのCSPを通れないためメインで代理取得する
+  ipcMain.handle('widgets:geocode', (_e, query) => geocode(query));
+  ipcMain.handle('widgets:weather', (_e, lat, lon) => weather(lat, lon));
+  ipcMain.handle('widgets:rss', (_e, url) => fetchRss(url));
 
   // ---- 履歴(シークレットウィンドウからは参照させない)----
   ipcMain.handle('history:list', (e, query) =>

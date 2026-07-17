@@ -17,6 +17,7 @@ const AdBlock = require('./adblock');
 const Tor = require('./tor');
 const Passwords = require('./passwords');
 const Autofill = require('./autofill');
+const { Widgets } = require('./widgets');
 const Store = require('./store');
 const windows = require('./windows');
 const { defaultToolbarItems, normalizeToolbarItems } = require('./toolbar-items');
@@ -75,6 +76,7 @@ const browser = {
   theme: null,
   passwords: null,
   autofill: null,
+  widgets: null,
 
   extensions: new ExtensionSupport(),
   adblock: new AdBlock(),
@@ -162,6 +164,7 @@ browser.initData = () => {
   browser.theme = store(profile, 'theme', { ...DEFAULT_THEME });
   browser.passwords = new Passwords(store(profile, 'passwords', []));
   browser.autofill = new Autofill(store(profile, 'autofill', {}));
+  browser.widgets = new Widgets(store(profile, 'start-widgets', {}));
 };
 
 browser.flushAll = () => {
@@ -176,6 +179,7 @@ browser.flushAll = () => {
   browser.theme?.flush();
   browser.passwords?.store.flush();
   browser.autofill?.store.flush();
+  browser.widgets?.store.flush();
   browser.keybindings?.store.flush();
   browser.localServers?.store.flush();
   for (const ctx of windows.all()) {
@@ -535,6 +539,7 @@ browser.applyActiveProfile = ({ recreateTabs, previousProfileId } = {}) => {
   browser.theme = store(profile, 'theme', { ...DEFAULT_THEME });
   browser.passwords.setStore(store(profile, 'passwords', []));
   browser.autofill.setStore(store(profile, 'autofill', {}));
+  browser.widgets.setStore(store(profile, 'start-widgets', {}));
 
   const session = browser.profiles.sessionFor(profile);
   registerInternalProtocol(session);

@@ -21,6 +21,16 @@ if (location.protocol === 'roopie:') {
     fetchPageTitle: (url) => ipcRenderer.invoke('page:fetch-title', url),
     openShortcutFolder: (folderPath) => ipcRenderer.send('fs:open-folder', folderPath),
 
+    // スタート画面のウィジェット(グリッド配置・天気・RSS)
+    getWidgetLayout: (pageId) => ipcRenderer.invoke('widgets:layout', pageId),
+    setWidgetLayout: (pageId, items) => ipcRenderer.send('widgets:set-layout', pageId, items),
+    addWidget: (pageId, widgetType) => ipcRenderer.invoke('widgets:add', pageId, widgetType),
+    removeWidget: (pageId, id) => ipcRenderer.send('widgets:remove', pageId, id),
+    setWidgetConfig: (pageId, id, patch) => ipcRenderer.send('widgets:config', pageId, id, patch),
+    geocodeCity: (query) => ipcRenderer.invoke('widgets:geocode', query),
+    getWeather: (lat, lon) => ipcRenderer.invoke('widgets:weather', lat, lon),
+    getRss: (url) => ipcRenderer.invoke('widgets:rss', url),
+
     listHistory: (query) => ipcRenderer.invoke('history:list', query),
     removeHistory: (id) => ipcRenderer.send('history:remove', id),
     clearHistory: () => ipcRenderer.send('history:clear'),
