@@ -37,7 +37,7 @@
     <section id="section-google">
     <h2 class="section-title">Googleアカウント<span class="scope-badge is-global" title="プロファイルに関わらず、ブラウザ全体で1つの一覧を使います">常に全体共通</span></h2>
     <div class="card">
-      <p class="note" style="margin-bottom: 12px">
+      <p class="note note-tight">
         ブラウザに登録したアカウントを、各プロファイルで「使う/使わない」と「プライマリ(既定でログインするアカウント)」として選べます。
         実際のログインは各プロファイルのセッションで一度行う必要があり、以降はそのプロファイル内でログイン状態が保持されます。
       </p>
@@ -46,23 +46,23 @@
         <input id="account-label" class="search" type="text" placeholder="表示名(任意)" autocomplete="off" />
         <button id="account-add-btn" class="btn">登録</button>
       </div>
-      <div id="accounts" class="list" style="margin-top: 14px"></div>
+      <div id="accounts" class="list"></div>
     </div>
     </section>
 
     <section id="section-extensions">
     <h2 class="section-title">拡張機能<span class="scope-badge" title="共有トグルはなく、常に使用中のプロファイルだけに保存されます">プロファイル個別</span></h2>
     <div class="card">
-      <p class="note" style="margin-bottom: 12px">
+      <p class="note note-tight">
         Chromeウェブストアの拡張機能ID(URLの <code>chrome.google.com/webstore/detail/.../<b>ここ</b></code> の部分)を指定してインストールできます。
         拡張機能は使用中のプロファイルに保存されます。<br />
         ⚠ Electronの制約上、<b>uBlock Originなどのブロッキング型拡張機能は動作しません</b>(広告ブロックは内蔵機能をご利用ください)。Dark Readerなどコンテンツスクリプト型の拡張機能は動作します。
       </p>
       <div class="account-add">
-        <input id="extension-id" class="search" type="text" placeholder="拡張機能ID(32文字の英字)" autocomplete="off" style="flex: 1; width: auto" />
+        <input id="extension-id" class="search" type="text" placeholder="拡張機能ID(32文字の英字)" autocomplete="off" />
         <button id="extension-install-btn" class="btn">インストール</button>
       </div>
-      <div id="extensions-list" class="ext-list" style="margin-top: 14px"></div>
+      <div id="extensions-list" class="ext-list"></div>
     </div>
     </section>
 
@@ -114,7 +114,7 @@
           <span class="slider"></span>
         </label>
       </div>
-      <div id="passwords-list" class="list" style="margin-top: 8px"></div>
+      <div id="passwords-list" class="list"></div>
       <div class="gesture-footer">
         <button id="passwords-clear" class="btn danger">すべて削除</button>
       </div>

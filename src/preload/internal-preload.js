@@ -18,6 +18,7 @@ if (location.protocol === 'roopie:') {
     updateShortcut: (id, patch) => ipcRenderer.send('bookmarks:update-item', id, patch),
     removeShortcut: (id) => ipcRenderer.send('bookmarks:remove', id),
     pickShortcutFolder: () => ipcRenderer.invoke('fs:pick-folder'),
+    fetchPageTitle: (url) => ipcRenderer.invoke('page:fetch-title', url),
     openShortcutFolder: (folderPath) => ipcRenderer.send('fs:open-folder', folderPath),
 
     listHistory: (query) => ipcRenderer.invoke('history:list', query),

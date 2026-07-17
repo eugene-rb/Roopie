@@ -1,5 +1,5 @@
 const fs = require('fs');
-const { ipcMain, dialog, shell } = require('electron');
+const { ipcMain, dialog, shell, net } = require('electron');
 const windows = require('./windows');
 const browser = require('./browser');
 const GoogleAccounts = require('./google-accounts');
@@ -13,6 +13,54 @@ const {
 } = require('./toolbar-context-menu');
 const { searchUrl } = require('./search-engines');
 const { normalizeToolbarItems } = require('./toolbar-items');
+
+// ページのタイトルをHTMLの<title>から取得する(ショートカット追加時の名前自動設定用)。
+// 本文全体は読まず、</title>が見つかるまで先頭256KBだけ読む
+function decodeHtmlEntities(s) {
+  const named = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+  return s.replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (all, ent) => {
+    if (ent[0] === '#') {
+      const code = /^#x/i.test(ent) ? parseInt(ent.slice(2), 16) : parseInt(ent.slice(1), 10);
+      return Number.isFinite(code) && code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : all;
+    }
+    return named[ent.toLowerCase()] ?? all;
+  });
+}
+
+async function fetchPageTitle(rawUrl) {
+  const input = String(rawUrl ?? '').trim();
+  const url = /^[a-z][a-z0-9+.-]*:/i.test(input) ? input : `https://${input}`;
+  if (!/^https?:/i.test(url)) return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await net.fetch(url, { signal: controller.signal });
+    if (!res.ok || !res.body) return null;
+    const charset = /charset=([\w-]+)/i.exec(res.headers.get('content-type') ?? '')?.[1];
+    let decoder;
+    try {
+      decoder = new TextDecoder(charset || 'utf-8');
+    } catch {
+      decoder = new TextDecoder();
+    }
+    const reader = res.body.getReader();
+    let html = '';
+    while (html.length < 262144) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      html += decoder.decode(value, { stream: true });
+      if (/<\/title>/i.test(html)) break;
+    }
+    reader.cancel().catch(() => {});
+    const m = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    if (!m) return null;
+    return decodeHtmlEntities(m[1]).replace(/\s+/g, ' ').trim() || null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 // IPCは「送信元のウィンドウ」に対して処理する
 const ctxOf = (e) => windows.contextFor(e.sender);
@@ -183,6 +231,7 @@ function registerIpc() {
     browser.bookmarks?.addShortcut(folderId, payload ?? {})
   );
   ipcMain.on('bookmarks:update-item', (_e, id, patch) => browser.bookmarks?.updateItem(id, patch));
+  ipcMain.handle('page:fetch-title', (_e, url) => fetchPageTitle(url));
 
   // ---- 履歴(シークレットウィンドウからは参照させない)----
   ipcMain.handle('history:list', (e, query) =>

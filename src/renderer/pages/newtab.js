@@ -75,6 +75,15 @@ function shortcutTarget(shortcut) {
   return shortcutKind(shortcut) === 'folder' ? shortcut.url.slice('file://'.length) : shortcut.url;
 }
 
+// 入力URL(スキーム省略可)のホスト名。取れなければ空文字
+function hostnameOf(target) {
+  try {
+    return new URL(/^[a-z][a-z0-9+.-]*:/i.test(target) ? target : `https://${target}`).hostname;
+  } catch {
+    return '';
+  }
+}
+
 // リンク先のfavicon URL(既定アイコン)。ホストが取れないURLはnull
 function faviconUrlFor(url) {
   try {
@@ -261,7 +270,7 @@ function openShortcutModal(existing) {
   const nameInput = document.createElement('input');
   nameInput.className = 'search';
   nameInput.type = 'text';
-  nameInput.placeholder = '名前';
+  nameInput.placeholder = '名前(空欄ならページタイトルを自動取得)';
   nameInput.value = existing?.title ?? '';
   modal.appendChild(nameInput);
 
@@ -372,9 +381,18 @@ function openShortcutModal(existing) {
   saveBtn.textContent = '保存';
   saveBtn.addEventListener('click', async () => {
     const kind = kindFolder.input.checked ? 'folder' : 'url';
-    const name = nameInput.value.trim();
+    let name = nameInput.value.trim();
     const target = kind === 'folder' ? pickedFolder : urlInput.value.trim();
-    if (!name || !target) return;
+    if (!target) return;
+    if (!name) {
+      if (kind !== 'url') return;
+      // 名前が空欄ならページのタイトルを自動取得(失敗時はホスト名)
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'タイトル取得中…';
+      name = (await window.roopieInternal.fetchPageTitle(target)) || hostnameOf(target) || target;
+      saveBtn.disabled = false;
+      saveBtn.textContent = '保存';
+    }
 
     if (existing) {
       const patch = { kind, title: name, target };

@@ -163,6 +163,13 @@ body {
   -webkit-app-region: drag;
   /* 右上のウィンドウ操作ボタン(OSオーバーレイ)と重ならないように空ける */
   padding-right: calc(100vw - env(titlebar-area-width, 100vw) + 8px);
+  transition: background 0.15s, box-shadow 0.15s;
+}
+
+/* 選択テキストをドラッグ中の受け皿ハイライト(ドロップで検索) */
+#tab-bar.drag-search {
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent);
 }
 
 /* タブバー縦横切替(左上に配置。ウィンドウ移動用のドラッグ領域を上書き) */
@@ -274,7 +281,7 @@ body {
   cursor: default;
   flex-shrink: 1;
   overflow: hidden;
-  transition: background 0.12s, color 0.12s;
+  transition: background 0.12s, color 0.12s, transform 0.15s, opacity 0.15s;
 }
 
 .tab:hover {
@@ -292,9 +299,10 @@ body {
   display: none;
 }
 
-/* ドラッグ並べ替え */
+/* ドラッグ並べ替え: つまみ上げた感が出るように少し縮小して薄くする */
 .tab.dragging {
   opacity: 0.4;
+  transform: scale(0.94);
 }
 
 .tab.drop-before,
@@ -311,6 +319,14 @@ body {
   width: 2px;
   border-radius: 1px;
   background: var(--accent);
+  animation: drop-marker-in 0.12s ease-out;
+}
+
+@keyframes drop-marker-in {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
 }
 
 .tab.drop-before::before {
@@ -319,6 +335,25 @@ body {
 
 .tab.drop-after::after {
   right: -3px;
+}
+
+/* 縦タブ時はタブが縦に並ぶので、挿入位置の目印も上下の横線にする */
+.chrome-body.vertical-tabs .tab.drop-before::before,
+.chrome-body.vertical-tabs .tab.drop-after::after {
+  left: 4px;
+  right: 4px;
+  width: auto;
+  height: 2px;
+}
+
+.chrome-body.vertical-tabs .tab.drop-before::before {
+  top: -3px;
+  bottom: auto;
+}
+
+.chrome-body.vertical-tabs .tab.drop-after::after {
+  top: auto;
+  bottom: -3px;
 }
 
 /* 画面分割中の2タブに付ける、ペアだと分かる強調表示 */
@@ -1148,6 +1183,20 @@ body {
   font-size: 13px;
   line-height: 1.7;
   color: var(--text-dim);
+}
+
+/* カード内の説明文と一覧の余白(CSPでインラインstyleは使えないためクラスで持つ) */
+.note-tight {
+  margin-bottom: 12px;
+}
+
+#accounts,
+#extensions-list {
+  margin-top: 14px;
+}
+
+#passwords-list {
+  margin-top: 8px;
 }
 
 .section-title {
