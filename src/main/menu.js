@@ -28,11 +28,16 @@ function setupMenu() {
       label: 'ファイル',
       submenu: [
         { label: '新しいタブ', accelerator: accel('newTab'), click: () => tabs()?.createTab() },
-        { label: '新しいウィンドウ', accelerator: accel('newWindow'), click: () => browser.createWindow() },
+        {
+          label: '新しいウィンドウ',
+          accelerator: accel('newWindow'),
+          // フォーカス中のウィンドウと同じプロファイルで開く(Edge挙動)
+          click: () => browser.createWindow({ profileId: windows.focused()?.profileId }),
+        },
         {
           label: '新しいシークレットウィンドウ',
           accelerator: accel('newIncognito'),
-          click: () => browser.createWindow({ incognito: true }),
+          click: () => browser.createWindow({ incognito: true, profileId: windows.focused()?.profileId }),
         },
         { type: 'separator' },
         { label: 'タブを閉じる', accelerator: accel('closeTab'), click: () => tabs()?.closeActiveTab() },

@@ -2,23 +2,28 @@ const { Menu, MenuItem } = require('electron');
 const browser = require('./browser');
 const { TOOLBAR_ITEMS, normalizeToolbarItems } = require('./toolbar-items');
 
-function setSidePanelPosition(value) {
-  if (!browser.settings || value === browser.settings.data.sidePanelPosition) return;
-  browser.settings.data.sidePanelPosition = value;
-  browser.settings.save();
-  browser.applySidePanelPosition();
-  browser.sendSettings();
+// ウィンドウのプロファイルの設定を引く(Edge挙動: ウィンドウごとにプロファイルが異なる)
+function bundleOf(ctx) {
+  return browser.bundleFor(ctx?.profileId ?? browser.profiles?.activeId);
 }
 
-function addPositionItems(menu) {
-  if (!browser.settings) return;
-  const current = browser.settings.data.sidePanelPosition === 'left' ? 'left' : 'right';
+function setSidePanelPosition(bundle, value) {
+  if (!bundle || value === bundle.settings.data.sidePanelPosition) return;
+  bundle.settings.data.sidePanelPosition = value;
+  bundle.settings.save();
+  browser.applySidePanelPositionFor(bundle.profileId);
+  browser.sendSettingsFor(bundle.profileId);
+}
+
+function addPositionItems(menu, bundle) {
+  if (!bundle) return;
+  const current = bundle.settings.data.sidePanelPosition === 'left' ? 'left' : 'right';
   menu.append(
     new MenuItem({
       label: '右側に表示',
       type: 'radio',
       checked: current === 'right',
-      click: () => setSidePanelPosition('right'),
+      click: () => setSidePanelPosition(bundle, 'right'),
     })
   );
   menu.append(
@@ -26,7 +31,7 @@ function addPositionItems(menu) {
       label: '左側に表示',
       type: 'radio',
       checked: current === 'left',
-      click: () => setSidePanelPosition('left'),
+      click: () => setSidePanelPosition(bundle, 'left'),
     })
   );
 }
@@ -34,10 +39,11 @@ function addPositionItems(menu) {
 /**
  * サイドパネルの開閉ボタン(非表示中だけツールバーに出る)を右クリックしたときのメニュー。
  */
-function showSidePanelPositionMenu() {
-  if (!browser.settings) return;
+function showSidePanelPositionMenu(ctx) {
+  const bundle = bundleOf(ctx);
+  if (!bundle) return;
   const menu = new Menu();
-  addPositionItems(menu);
+  addPositionItems(menu, bundle);
   menu.popup();
 }
 
@@ -45,10 +51,12 @@ function showSidePanelPositionMenu() {
  * サイドバー(アイコンレール)の何もない部分を右クリックしたときのメニュー。
  * 左右の切り替えに加えて、Webパネルの追加・サイドバー自体の非表示を行える。
  */
-function showSidePanelRailMenu(panel) {
-  if (!browser.settings || !panel) return;
+function showSidePanelRailMenu(ctx) {
+  const bundle = bundleOf(ctx);
+  const panel = ctx?.sidePanel;
+  if (!bundle || !panel) return;
   const menu = new Menu();
-  addPositionItems(menu);
+  addPositionItems(menu, bundle);
   menu.append(new MenuItem({ type: 'separator' }));
   menu.append(new MenuItem({ label: 'ウェブパネルを追加...', click: () => panel.promptAddWeb() }));
   menu.append(new MenuItem({ label: 'サイドバーを非表示', click: () => panel.hide() }));
@@ -78,8 +86,9 @@ function showWebPanelMenu(panel, id) {
  * 各項目の表示/非表示をチェックボックスで切り替え、設定画面(並び替え)へも誘導する。
  */
 function showToolbarMenu(ctx) {
-  if (!browser.settings) return;
-  const items = normalizeToolbarItems(browser.settings.data.toolbarItems);
+  const bundle = bundleOf(ctx);
+  if (!bundle) return;
+  const items = normalizeToolbarItems(bundle.settings.data.toolbarItems);
   const visibleById = new Map(items.map((it) => [it.id, it.visible]));
   const menu = new Menu();
   for (const { id, label } of TOOLBAR_ITEMS) {
@@ -90,9 +99,9 @@ function showToolbarMenu(ctx) {
         checked: visibleById.get(id) !== false,
         click: () => {
           const next = items.map((it) => (it.id === id ? { ...it, visible: !it.visible } : it));
-          browser.settings.data.toolbarItems = next;
-          browser.settings.save();
-          browser.sendSettings();
+          bundle.settings.data.toolbarItems = next;
+          bundle.settings.save();
+          browser.sendSettingsFor(bundle.profileId);
         },
       })
     );

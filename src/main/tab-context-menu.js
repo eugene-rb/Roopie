@@ -1,5 +1,6 @@
 const { Menu, MenuItem, clipboard } = require('electron');
 const browser = require('./browser');
+const windows = require('./windows');
 
 /**
  * タブバーでの右クリックメニュー。画面分割(並べて表示)の入り口はここにある。
@@ -46,8 +47,9 @@ function showTabMenu(tabManager, tabId) {
       label: 'タブを新しいウィンドウに移動',
       click: () => {
         const url = wc.getURL();
+        const profileId = windows.contextFor(wc)?.profileId;
         tabManager.closeTab(tabId);
-        browser.createWindow({ url });
+        browser.createWindow({ url, profileId });
       },
     });
   }

@@ -105,6 +105,9 @@ function parseCsv(text) {
 const ctxOf = (e) => windows.contextFor(e.sender);
 const tabsOf = (e) => ctxOf(e)?.tabManager ?? null;
 const panelOf = (e) => ctxOf(e)?.sidePanel ?? null;
+// 送信元ウィンドウのプロファイルのデータ一式(Edge挙動: ウィンドウごとにプロファイルが異なる)
+const bundleOf = (e) => browser.bundleFor(ctxOf(e)?.profileId ?? browser.profiles?.activeId);
+const profileIdOf = (e) => ctxOf(e)?.profileId ?? browser.profiles?.activeId;
 
 function registerIpc() {
   // ---- タブ ----
@@ -113,7 +116,7 @@ function registerIpc() {
   ipcMain.on('tabs:search-new-tab', (e, text) => {
     const query = String(text ?? '').trim();
     if (!query) return;
-    tabsOf(e)?.createTab(searchUrl(browser.settings?.data.searchEngine, query));
+    tabsOf(e)?.createTab(searchUrl(bundleOf(e)?.settings.data.searchEngine, query));
   });
   ipcMain.on('tabs:close', (e, id) => tabsOf(e)?.closeTab(id));
   ipcMain.on('tabs:switch', (e, id) => tabsOf(e)?.switchTab(id));
@@ -149,10 +152,10 @@ function registerIpc() {
       if (zone) {
         tabManager.dropSplit(id, zone);
       } else if (info?.belowBar && tabManager.getTab(id) && tabManager.tabs.length > 1) {
-        // タブバーの下へ落とした = 新しいウィンドウへ切り離す
+        // タブバーの下へ落とした = 新しいウィンドウへ切り離す(同じプロファイルのまま)
         const url = tabManager.getTab(id).view.webContents.getURL();
         tabManager.closeTab(id);
-        browser.createWindow({ url, x: info.screenX, y: info.screenY });
+        browser.createWindow({ url, x: info.screenX, y: info.screenY, profileId: ctx.profileId });
       }
     }, 40);
   });
@@ -178,8 +181,11 @@ function registerIpc() {
   ipcMain.on('split:resize-end', (e) => tabsOf(e)?.splitResizeEnd());
 
   // ---- ウィンドウ ----
-  ipcMain.on('window:new', () => browser.createWindow());
-  ipcMain.on('window:new-incognito', () => browser.createWindow({ incognito: true }));
+  // 新しいウィンドウは呼び出し元ウィンドウと同じプロファイルで開く(Edge挙動)
+  ipcMain.on('window:new', (e) => browser.createWindow({ profileId: profileIdOf(e) }));
+  ipcMain.on('window:new-incognito', (e) =>
+    browser.createWindow({ incognito: true, profileId: profileIdOf(e) })
+  );
 
   ipcMain.on('ui:chrome-height', (e, height) => tabsOf(e)?.setChromeHeight(height));
   ipcMain.on('ui:toggle-bookmark-bar', () => browser.toggleBookmarkBar());
@@ -191,7 +197,7 @@ function registerIpc() {
     tabManager.showOverlay(true);
     tabManager.overlay.webContents.send('menu:show', {
       profiles: browser.profiles.list(),
-      activeId: browser.profiles.activeId,
+      activeId: profileIdOf(e), // 「使用中」はこのウィンドウのプロファイル
       anchor,
     });
   });
@@ -202,11 +208,11 @@ function registerIpc() {
     const ctx = ctxOf(e);
     if (!ctx || ctx.incognito || !ctx.tabManager.overlay || !browser.profiles) return;
     const tabManager = ctx.tabManager;
-    const profile = browser.profiles.active();
+    const profile = browser.profiles.list().find((p) => p.id === ctx.profileId) ?? browser.profiles.active();
     tabManager.showOverlay(true);
     tabManager.overlay.webContents.send('menu:show-extensions', {
       extensions: browser.extensions.list(browser.profiles.sessionFor(profile)),
-      pinned: browser.settings?.data.pinnedExtensions ?? [],
+      pinned: bundleOf(e)?.settings.data.pinnedExtensions ?? [],
       // アンカーはウィンドウ座標で届く。オーバーレイは縦タブ時に左へずれるので補正する
       anchor: anchor ? { ...anchor, right: anchor.right - tabManager.chromeLeft } : null,
       partition: browser.profiles.partitionFor(profile),
@@ -218,13 +224,14 @@ function registerIpc() {
   });
 
   // ピン留めの切り替え(拡張機能メニューのピンボタンから)
-  ipcMain.on('extensions:set-pinned', (_e, ids) => {
-    if (!browser.settings) return;
-    browser.settings.data.pinnedExtensions = Array.isArray(ids)
+  ipcMain.on('extensions:set-pinned', (e, ids) => {
+    const bundle = bundleOf(e);
+    if (!bundle) return;
+    bundle.settings.data.pinnedExtensions = Array.isArray(ids)
       ? ids.filter((id) => typeof id === 'string').slice(0, 200)
       : [];
-    browser.settings.save();
-    browser.sendSettings();
+    bundle.settings.save();
+    browser.sendSettingsFor(bundle.profileId);
   });
 
   // QRコードのポップアップもオーバーレイに描画する(タブより手前に出すため)
@@ -258,26 +265,26 @@ function registerIpc() {
 
   // ---- ブックマーク ----
   ipcMain.on('bookmarks:toggle-current', (e) => tabsOf(e)?.toggleBookmarkForActiveTab());
-  ipcMain.on('bookmarks:remove', (_e, id) => browser.bookmarks?.remove(id));
-  ipcMain.on('bookmarks:rename', (_e, id, title) => browser.bookmarks?.rename(id, title));
-  ipcMain.handle('bookmarks:list', () => browser.bookmarks?.list() ?? []);
+  ipcMain.on('bookmarks:remove', (e, id) => bundleOf(e)?.bookmarks.remove(id));
+  ipcMain.on('bookmarks:rename', (e, id, title) => bundleOf(e)?.bookmarks.rename(id, title));
+  ipcMain.handle('bookmarks:list', (e) => bundleOf(e)?.bookmarks.list() ?? []);
 
   // ---- スタート画面のショートカット(bookmarksの中の "start" フォルダ以下) ----
-  ipcMain.handle('bookmarks:start-pages', () => browser.bookmarks?.startPages() ?? []);
-  ipcMain.handle('bookmarks:start-page-add', (_e, title) => browser.bookmarks?.addStartPage(title) ?? null);
-  ipcMain.handle('bookmarks:children', (_e, folderId) => browser.bookmarks?.children(folderId) ?? []);
-  ipcMain.handle('bookmarks:add-shortcut', (_e, folderId, payload) =>
-    browser.bookmarks?.addShortcut(folderId, payload ?? {})
+  ipcMain.handle('bookmarks:start-pages', (e) => bundleOf(e)?.bookmarks.startPages() ?? []);
+  ipcMain.handle('bookmarks:start-page-add', (e, title) => bundleOf(e)?.bookmarks.addStartPage(title) ?? null);
+  ipcMain.handle('bookmarks:children', (e, folderId) => bundleOf(e)?.bookmarks.children(folderId) ?? []);
+  ipcMain.handle('bookmarks:add-shortcut', (e, folderId, payload) =>
+    bundleOf(e)?.bookmarks.addShortcut(folderId, payload ?? {})
   );
-  ipcMain.on('bookmarks:update-item', (_e, id, patch) => browser.bookmarks?.updateItem(id, patch));
+  ipcMain.on('bookmarks:update-item', (e, id, patch) => bundleOf(e)?.bookmarks.updateItem(id, patch));
   ipcMain.handle('page:fetch-title', (_e, url) => fetchPageTitle(url));
 
   // ---- スタート画面のウィジェット(グリッド配置はページ単位) ----
-  ipcMain.handle('widgets:layout', (_e, pageId) => browser.widgets?.layoutFor(pageId) ?? []);
-  ipcMain.on('widgets:set-layout', (_e, pageId, items) => browser.widgets?.setLayout(pageId, items));
-  ipcMain.handle('widgets:add', (_e, pageId, widgetType) => browser.widgets?.addWidget(pageId, widgetType) ?? null);
-  ipcMain.on('widgets:remove', (_e, pageId, id) => browser.widgets?.removeWidget(pageId, id));
-  ipcMain.on('widgets:config', (_e, pageId, id, patch) => browser.widgets?.updateConfig(pageId, id, patch));
+  ipcMain.handle('widgets:layout', (e, pageId) => bundleOf(e)?.widgets.layoutFor(pageId) ?? []);
+  ipcMain.on('widgets:set-layout', (e, pageId, items) => bundleOf(e)?.widgets.setLayout(pageId, items));
+  ipcMain.handle('widgets:add', (e, pageId, widgetType) => bundleOf(e)?.widgets.addWidget(pageId, widgetType) ?? null);
+  ipcMain.on('widgets:remove', (e, pageId, id) => bundleOf(e)?.widgets.removeWidget(pageId, id));
+  ipcMain.on('widgets:config', (e, pageId, id, patch) => bundleOf(e)?.widgets.updateConfig(pageId, id, patch));
   // 天気・RSSは内部ページのCSPを通れないためメインで代理取得する
   ipcMain.handle('widgets:geocode', (_e, query) => geocode(query));
   ipcMain.handle('widgets:weather', (_e, lat, lon) => weather(lat, lon));
@@ -285,25 +292,26 @@ function registerIpc() {
 
   // ---- 履歴(シークレットウィンドウからは参照させない)----
   ipcMain.handle('history:list', (e, query) =>
-    ctxOf(e)?.incognito ? [] : browser.history?.list(query) ?? []
+    ctxOf(e)?.incognito ? [] : bundleOf(e)?.history.list(query) ?? []
   );
-  ipcMain.on('history:remove', (_e, id) => browser.history?.remove(id));
-  ipcMain.on('history:clear', () => browser.history?.clear());
+  ipcMain.on('history:remove', (e, id) => bundleOf(e)?.history.remove(id));
+  ipcMain.on('history:clear', (e) => bundleOf(e)?.history.clear());
 
   // ---- ダウンロード ----
-  ipcMain.handle('downloads:list', () => browser.downloads?.list() ?? []);
-  ipcMain.on('downloads:open', (_e, id) => browser.downloads?.open(id));
-  ipcMain.on('downloads:show-in-folder', (_e, id) => browser.downloads?.showInFolder(id));
-  ipcMain.on('downloads:pause', (_e, id) => browser.downloads?.pause(id));
-  ipcMain.on('downloads:resume', (_e, id) => browser.downloads?.resume(id));
-  ipcMain.on('downloads:cancel', (_e, id) => browser.downloads?.cancel(id));
-  ipcMain.on('downloads:remove', (_e, id) => browser.downloads?.remove(id));
-  ipcMain.on('downloads:clear', () => browser.downloads?.clear());
+  ipcMain.handle('downloads:list', (e) => bundleOf(e)?.downloads.list() ?? []);
+  ipcMain.on('downloads:open', (e, id) => bundleOf(e)?.downloads.open(id));
+  ipcMain.on('downloads:show-in-folder', (e, id) => bundleOf(e)?.downloads.showInFolder(id));
+  ipcMain.on('downloads:pause', (e, id) => bundleOf(e)?.downloads.pause(id));
+  ipcMain.on('downloads:resume', (e, id) => bundleOf(e)?.downloads.resume(id));
+  ipcMain.on('downloads:cancel', (e, id) => bundleOf(e)?.downloads.cancel(id));
+  ipcMain.on('downloads:remove', (e, id) => bundleOf(e)?.downloads.remove(id));
+  ipcMain.on('downloads:clear', (e) => bundleOf(e)?.downloads.clear());
 
   // ---- プロファイル ----
-  ipcMain.handle('profiles:list', () => ({
+  ipcMain.handle('profiles:list', (e) => ({
     profiles: browser.profiles?.list() ?? [],
-    activeId: browser.profiles?.activeId ?? null,
+    // 「使用中」は問い合わせ元ウィンドウのプロファイル(Edge挙動)
+    activeId: profileIdOf(e) ?? null,
   }));
   ipcMain.on('profiles:create', (_e, name) => {
     browser.profiles?.create(name);
@@ -313,11 +321,8 @@ function registerIpc() {
     browser.profiles?.rename(id, name);
     browser.sendProfiles();
   });
-  ipcMain.on('profiles:remove', (_e, id) => {
-    const wasActive = browser.profiles?.activeId === id;
-    // 使用中のプロファイルを消した場合だけ、別プロファイルへ切り替えてタブを作り直す
-    if (browser.profiles?.remove(id)) browser.applyActiveProfile({ recreateTabs: wasActive });
-  });
+  // プロファイルの削除: そのプロファイルのウィンドウも閉じる(Edge挙動)
+  ipcMain.on('profiles:remove', (_e, id) => browser.removeProfile(id));
   ipcMain.on('profiles:switch', (_e, id) => browser.switchProfile(id));
   ipcMain.on('profiles:set-shared', (_e, id, key, shared) => browser.setShared(id, key, shared));
   ipcMain.on('profiles:set-icon', (_e, id, icon) => {
@@ -355,14 +360,16 @@ function registerIpc() {
     return GoogleAccounts.signedInAccounts(browser.profiles.sessionFor(profile));
   });
 
-  // ログインはそのプロファイルのセッションで行う必要があるので、必要なら先に切り替える
+  // ログインはそのプロファイルのセッションで行う必要がある。
+  // 別プロファイルなら、そのプロファイルの新しいウィンドウでログインページを開く(Edge挙動)
   ipcMain.on('google:login', (e, profileId, accountId) => {
     const profile = browser.profiles?.list().find((p) => p.id === profileId);
     if (!profile) return;
     const target = accountId ?? profile.google.primaryId;
     const account = target ? browser.googleAccounts?.find(target) : null;
-    if (profileId !== browser.profiles.activeId) browser.switchProfile(profileId);
-    tabsOf(e)?.createTab(GoogleAccounts.loginUrl(account?.email));
+    const loginUrl = GoogleAccounts.loginUrl(account?.email);
+    if (profileId !== profileIdOf(e)) browser.switchProfile(profileId, { url: loginUrl });
+    else tabsOf(e)?.createTab(loginUrl);
   });
 
   ipcMain.on('google:signout', async (_e, profileId) => {
@@ -376,8 +383,8 @@ function registerIpc() {
   ipcMain.on('sidepanel:toggle', (e) => panelOf(e)?.toggle());
   ipcMain.on('sidepanel:hide', (e) => panelOf(e)?.hide());
   ipcMain.on('sidepanel:open-section', (e, key) => panelOf(e)?.openSection(key));
-  ipcMain.on('sidepanel:context-menu', () => showSidePanelPositionMenu());
-  ipcMain.on('sidepanel:rail-context-menu', (e) => showSidePanelRailMenu(panelOf(e)));
+  ipcMain.on('sidepanel:context-menu', (e) => showSidePanelPositionMenu(ctxOf(e)));
+  ipcMain.on('sidepanel:rail-context-menu', (e) => showSidePanelRailMenu(ctxOf(e)));
 
   // ツールバーのユーティリティ群を右クリック → 表示/非表示の切り替えメニュー
   ipcMain.on('toolbar:context-menu', (e) => showToolbarMenu(ctxOf(e)));
@@ -391,19 +398,19 @@ function registerIpc() {
   // 追加/編集モーダルが閉じた(モーダル用に広げたホストパネルを畳む)
   ipcMain.on('sidepanel:edit-done', (e) => panelOf(e)?.closeEditHost());
 
-  // ---- リードリスト(後で読む。ブラウザ全体・プロファイル単位) ----
-  ipcMain.handle('readlist:list', () => browser.readlist?.list() ?? []);
+  // ---- リードリスト(後で読む。プロファイル単位) ----
+  ipcMain.handle('readlist:list', (e) => bundleOf(e)?.readlist.list() ?? []);
   ipcMain.on('readlist:add-current', (e) => {
     const tabManager = tabsOf(e);
     const tab = tabManager?.getTab(tabManager.activeTabId);
     if (!tab || tab.isInternal) return;
     const wc = tab.view.webContents;
     const url = wc.getURL();
-    if (url) browser.readlist?.add(url, wc.getTitle() || url, tab.favicon ?? null);
+    if (url) bundleOf(e)?.readlist.add(url, wc.getTitle() || url, tab.favicon ?? null);
   });
-  ipcMain.on('readlist:remove', (_e, id) => browser.readlist?.remove(id));
-  ipcMain.on('readlist:set-read', (_e, id, read) => browser.readlist?.setRead(id, read));
-  ipcMain.on('readlist:clear-read', () => browser.readlist?.clearRead());
+  ipcMain.on('readlist:remove', (e, id) => bundleOf(e)?.readlist.remove(id));
+  ipcMain.on('readlist:set-read', (e, id, read) => bundleOf(e)?.readlist.setRead(id, read));
+  ipcMain.on('readlist:clear-read', (e) => bundleOf(e)?.readlist.clearRead());
 
   // ---- ローカルサーバー検知(スタートページのサジェスト) ----
   ipcMain.handle('local-servers:list', () => browser.localServers?.detect() ?? []);
@@ -427,16 +434,18 @@ function registerIpc() {
   // ページのpreloadがログイン送信を検出したら、未保存のときだけUIに確認バーを出す
   ipcMain.on('passwords:captured', (e, { username, password } = {}) => {
     const ctx = ctxOf(e);
-    const passwords = browser.passwords;
+    const bundle = bundleOf(e);
+    const passwords = bundle?.passwords;
     const origin = frameOrigin(e);
     if (!passwords || !ctx || ctx.incognito) return; // シークレットでは保存しない
     if (!origin || !username || !password) return;
-    if (browser.settings?.data.savePasswords === false) return;
+    if (bundle.settings.data.savePasswords === false) return;
     if (!Passwords.available()) return;
     if (passwords.isExcluded(origin)) return; // 「このサイトでは保存しない」
     if (passwords.matches(origin, username, password)) return; // 同じ内容なら何も出さない
 
-    browser.pendingPassword = { origin, username, password };
+    // どのプロファイルのウィンドウで拾ったかを覚えておく(保存先を間違えないため)
+    browser.pendingPassword = { origin, username, password, profileId: bundle.profileId };
     ctx.window.webContents.send('passwords:prompt', {
       origin,
       username,
@@ -448,8 +457,8 @@ function registerIpc() {
     const pending = browser.pendingPassword;
     if (!pending) return;
     browser.pendingPassword = null;
-    browser.passwords?.save(pending.origin, pending.username, pending.password);
-    browser.sendPasswords();
+    browser.bundleFor(pending.profileId)?.passwords.save(pending.origin, pending.username, pending.password);
+    browser.sendPasswordsFor(pending.profileId);
   });
   ipcMain.on('passwords:dismiss', () => {
     browser.pendingPassword = null;
@@ -458,66 +467,69 @@ function registerIpc() {
   ipcMain.on('passwords:never-save', () => {
     const pending = browser.pendingPassword;
     browser.pendingPassword = null;
-    if (pending) browser.passwords?.addNeverSave(pending.origin);
+    if (pending) browser.bundleFor(pending.profileId)?.passwords.addNeverSave(pending.origin);
   });
 
   // ページのオートフィルに出す候補一覧。パスワード本体は含めない(選択時に別途取得)
   ipcMain.handle('autofill:page-data', (e) => {
     const ctx = ctxOf(e);
+    const bundle = bundleOf(e);
     const origin = frameOrigin(e);
-    const settings = browser.settings?.data ?? {};
-    if (!ctx || ctx.incognito || !origin) return { usernames: [], addresses: [], cards: [] };
+    const settings = bundle?.settings.data ?? {};
+    if (!ctx || ctx.incognito || !origin || !bundle) return { usernames: [], addresses: [], cards: [] };
     return {
       usernames:
-        settings.savePasswords === false ? [] : browser.passwords?.usernamesForOrigin(origin) ?? [],
-      addresses: settings.autofillAddresses === false ? [] : browser.autofill?.listAddresses() ?? [],
-      cards: settings.autofillCards === false ? [] : browser.autofill?.listCards() ?? [],
+        settings.savePasswords === false ? [] : bundle.passwords.usernamesForOrigin(origin),
+      addresses: settings.autofillAddresses === false ? [] : bundle.autofill.listAddresses(),
+      cards: settings.autofillCards === false ? [] : bundle.autofill.listCards(),
     };
   });
 
   // 選択された1件の資格情報を返す(最終使用日時を更新)。シークレットでは返さない
   ipcMain.handle('passwords:credential', (e, username) => {
     const origin = frameOrigin(e);
-    if (!origin || ctxOf(e)?.incognito) return null;
-    if (browser.settings?.data.savePasswords === false) return null;
-    return browser.passwords?.credential(origin, username) ?? null;
+    const bundle = bundleOf(e);
+    if (!origin || !bundle || ctxOf(e)?.incognito) return null;
+    if (bundle.settings.data.savePasswords === false) return null;
+    return bundle.passwords.credential(origin, username) ?? null;
   });
 
   // 保存済みが1件だけの時の自動入力用(従来挙動)。シークレットでは自動入力もしない
   ipcMain.handle('passwords:for-origin', (e) => {
     const origin = frameOrigin(e);
-    if (!origin || ctxOf(e)?.incognito) return [];
-    if (browser.settings?.data.savePasswords === false) return [];
-    return browser.passwords?.forOrigin(origin) ?? [];
+    const bundle = bundleOf(e);
+    if (!origin || !bundle || ctxOf(e)?.incognito) return [];
+    if (bundle.settings.data.savePasswords === false) return [];
+    return bundle.passwords.forOrigin(origin);
   });
 
-  ipcMain.handle('passwords:list', () => browser.passwords?.list() ?? []);
-  ipcMain.handle('passwords:reveal', (_e, id) => browser.passwords?.reveal(id) ?? null);
+  ipcMain.handle('passwords:list', (e) => bundleOf(e)?.passwords.list() ?? []);
+  ipcMain.handle('passwords:reveal', (e, id) => bundleOf(e)?.passwords.reveal(id) ?? null);
   ipcMain.handle('passwords:available', () => Passwords.available());
-  ipcMain.handle('passwords:update', (_e, id, patch) => {
-    const ok = browser.passwords?.update(id, patch ?? {}) ?? false;
-    if (ok) browser.sendPasswords();
+  ipcMain.handle('passwords:update', (e, id, patch) => {
+    const ok = bundleOf(e)?.passwords.update(id, patch ?? {}) ?? false;
+    if (ok) browser.sendPasswordsFor(profileIdOf(e));
     return ok;
   });
-  ipcMain.on('passwords:remove', (_e, id) => {
-    browser.passwords?.remove(id);
-    browser.sendPasswords();
+  ipcMain.on('passwords:remove', (e, id) => {
+    bundleOf(e)?.passwords.remove(id);
+    browser.sendPasswordsFor(profileIdOf(e));
   });
-  ipcMain.on('passwords:clear', () => {
-    browser.passwords?.clear();
-    browser.sendPasswords();
+  ipcMain.on('passwords:clear', (e) => {
+    bundleOf(e)?.passwords.clear();
+    browser.sendPasswordsFor(profileIdOf(e));
   });
 
   // 除外リスト(このサイトでは保存しない)
-  ipcMain.handle('passwords:excluded', () => browser.passwords?.neverSave ?? []);
-  ipcMain.on('passwords:excluded-remove', (_e, origin) => {
-    browser.passwords?.removeNeverSave(origin);
-    browser.sendPasswords();
+  ipcMain.handle('passwords:excluded', (e) => bundleOf(e)?.passwords.neverSave ?? []);
+  ipcMain.on('passwords:excluded-remove', (e, origin) => {
+    bundleOf(e)?.passwords.removeNeverSave(origin);
+    browser.sendPasswordsFor(profileIdOf(e));
   });
 
   // CSVエクスポート/インポート(Chrome互換: name,url,username,password)
   ipcMain.handle('passwords:export', async (e) => {
-    const items = browser.passwords?.exportAll() ?? [];
+    const items = bundleOf(e)?.passwords.exportAll() ?? [];
     if (!items.length) return { count: 0 };
     const { canceled, filePath } = await dialog.showSaveDialog(ctxOf(e)?.window, {
       title: 'パスワードをエクスポート',
@@ -559,71 +571,77 @@ function registerIpc() {
     for (const row of rows.slice(1)) {
       try {
         const origin = new URL(row[urlCol]).origin;
-        if (browser.passwords?.save(origin, row[userCol]?.trim(), row[passCol])) imported++;
+        if (bundleOf(e)?.passwords.save(origin, row[userCol]?.trim(), row[passCol])) imported++;
         else skipped++;
       } catch {
         skipped++;
       }
     }
-    browser.sendPasswords();
+    browser.sendPasswordsFor(profileIdOf(e));
     return { imported, skipped };
   });
 
   // ---- 自動入力(住所・個人情報/お支払い方法) ----
-  ipcMain.handle('autofill:addresses', () => browser.autofill?.listAddresses() ?? []);
-  ipcMain.handle('autofill:address-save', (_e, patch) => {
-    const item = browser.autofill?.saveAddress(patch ?? {}) ?? null;
-    if (item) browser.sendAutofill();
+  ipcMain.handle('autofill:addresses', (e) => bundleOf(e)?.autofill.listAddresses() ?? []);
+  ipcMain.handle('autofill:address-save', (e, patch) => {
+    const item = bundleOf(e)?.autofill.saveAddress(patch ?? {}) ?? null;
+    if (item) browser.sendAutofillFor(profileIdOf(e));
     return item;
   });
-  ipcMain.on('autofill:address-remove', (_e, id) => {
-    browser.autofill?.removeAddress(id);
-    browser.sendAutofill();
+  ipcMain.on('autofill:address-remove', (e, id) => {
+    bundleOf(e)?.autofill.removeAddress(id);
+    browser.sendAutofillFor(profileIdOf(e));
   });
 
-  ipcMain.handle('autofill:cards', () => browser.autofill?.listCards() ?? []);
+  ipcMain.handle('autofill:cards', (e) => bundleOf(e)?.autofill.listCards() ?? []);
   ipcMain.handle('autofill:available', () => Autofill.available());
-  ipcMain.handle('autofill:card-save', (_e, payload) => {
-    const id = browser.autofill?.saveCard(payload ?? {}) ?? null;
-    if (id) browser.sendAutofill();
+  ipcMain.handle('autofill:card-save', (e, payload) => {
+    const id = bundleOf(e)?.autofill.saveCard(payload ?? {}) ?? null;
+    if (id) browser.sendAutofillFor(profileIdOf(e));
     return id;
   });
-  ipcMain.on('autofill:card-remove', (_e, id) => {
-    browser.autofill?.removeCard(id);
-    browser.sendAutofill();
+  ipcMain.on('autofill:card-remove', (e, id) => {
+    bundleOf(e)?.autofill.removeCard(id);
+    browser.sendAutofillFor(profileIdOf(e));
   });
 
   // カード番号の復号はドロップダウンでユーザーが選択した時だけ
   ipcMain.handle('autofill:card-fill', (e, id) => {
-    if (ctxOf(e)?.incognito) return null;
-    if (browser.settings?.data.autofillCards === false) return null;
-    return browser.autofill?.cardFill(id) ?? null;
+    const bundle = bundleOf(e);
+    if (!bundle || ctxOf(e)?.incognito) return null;
+    if (bundle.settings.data.autofillCards === false) return null;
+    return bundle.autofill.cardFill(id) ?? null;
   });
 
-  // ---- 拡張機能 ----
-  ipcMain.handle('extensions:install', async (_e, extensionId) => {
-    const profile = browser.profiles.active();
+  // ---- 拡張機能(送信元ウィンドウのプロファイルに対して操作する) ----
+  const profileOf = (e) => {
+    const id = profileIdOf(e);
+    return browser.profiles.list().find((p) => p.id === id) ?? browser.profiles.active();
+  };
+  ipcMain.handle('extensions:install', async (e, extensionId) => {
+    const profile = profileOf(e);
     const session = browser.profiles.sessionFor(profile);
     const ext = await browser.extensions.install(session, profile.id, extensionId);
-    browser.sendExtensions();
+    browser.sendExtensionsFor(profile.id);
     return { id: ext.id, name: ext.name, version: ext.version };
   });
-  ipcMain.handle('extensions:list', () =>
-    browser.extensions.list(browser.profiles.sessionFor(browser.profiles.active()))
+  ipcMain.handle('extensions:list', (e) =>
+    browser.extensions.list(browser.profiles.sessionFor(profileOf(e)))
   );
-  ipcMain.on('extensions:remove', async (_e, extensionId) => {
-    const profile = browser.profiles.active();
+  ipcMain.on('extensions:remove', async (e, extensionId) => {
+    const profile = profileOf(e);
     const session = browser.profiles.sessionFor(profile);
     await browser.extensions.remove(session, profile.id, extensionId);
-    browser.sendExtensions();
+    browser.sendExtensionsFor(profile.id);
   });
 
   // ---- テーマ ----
-  ipcMain.handle('theme:get', () => browser.theme?.data ?? { ...browser.DEFAULT_THEME });
-  ipcMain.on('theme:set', (_e, patch) => {
-    if (!browser.theme) return;
-    browser.applyThemePatch(browser.theme, patch);
-    browser.sendTheme();
+  ipcMain.handle('theme:get', (e) => bundleOf(e)?.theme.data ?? { ...browser.DEFAULT_THEME });
+  ipcMain.on('theme:set', (e, patch) => {
+    const bundle = bundleOf(e);
+    if (!bundle) return;
+    browser.applyThemePatch(bundle.theme, patch);
+    browser.sendThemeFor(bundle.profileId);
   });
 
   // プロファイルを切り替えずに、そのプロファイルのテーマを読み書きする(設定画面のプロファイルカード用)
@@ -631,20 +649,20 @@ function registerIpc() {
   ipcMain.on('theme:set-for', (_e, profileId, patch) => browser.setThemeFor(profileId, patch));
 
   // ---- マウスジェスチャー ----
-  ipcMain.handle('gestures:config', () => browser.gestures?.config() ?? null);
-  ipcMain.on('gestures:set', (_e, config) => {
-    browser.gestures?.update(config);
-    browser.sendGestures();
+  ipcMain.handle('gestures:config', (e) => bundleOf(e)?.gestures.config() ?? null);
+  ipcMain.on('gestures:set', (e, config) => {
+    bundleOf(e)?.gestures.update(config);
+    browser.sendGesturesFor(profileIdOf(e));
   });
-  ipcMain.on('gestures:reset', () => {
-    browser.gestures?.reset();
-    browser.sendGestures();
+  ipcMain.on('gestures:reset', (e) => {
+    bundleOf(e)?.gestures.reset();
+    browser.sendGesturesFor(profileIdOf(e));
   });
 
   // ジェスチャーpreloadからのアクション実行要求(送信元のタブに対して実行する)
   ipcMain.on('gestures:perform', (e, action) => {
     const tabManager = tabsOf(e);
-    if (!browser.gestures?.data.enabled || !tabManager) return;
+    if (!bundleOf(e)?.gestures.data.enabled || !tabManager) return;
     const wc = e.sender;
     switch (action) {
       case 'back':
@@ -685,9 +703,10 @@ function registerIpc() {
   });
 
   // ---- 設定 ----
-  ipcMain.handle('settings:get', () => browser.settings?.data ?? { ...browser.DEFAULT_SETTINGS });
-  ipcMain.on('settings:set', (_e, key, value) => {
-    const settings = browser.settings;
+  ipcMain.handle('settings:get', (e) => bundleOf(e)?.settings.data ?? { ...browser.DEFAULT_SETTINGS });
+  ipcMain.on('settings:set', (e, key, value) => {
+    const bundle = bundleOf(e);
+    const settings = bundle?.settings;
     if (!settings || !(key in browser.DEFAULT_SETTINGS)) return;
     if (key === 'toolbarItems') {
       settings.data[key] = normalizeToolbarItems(value);
@@ -697,13 +716,14 @@ function registerIpc() {
       settings.data[key] = value;
     }
     settings.save();
-    if (key === 'adblock') browser.applyAdblock();
-    if (key === 'mediaDocked') browser.applyMediaDocked();
-    if (key === 'downloadPath') browser.applyDownloadPath();
-    if (key === 'tabBarPosition') browser.applyTabBarPosition();
-    if (key === 'sidePanelPosition') browser.applySidePanelPosition();
-    if (key === 'searchEngine') browser.applySearchEngine();
-    browser.sendSettings();
+    const profileId = bundle.profileId;
+    if (key === 'adblock') browser.applyAdblockFor(profileId);
+    if (key === 'mediaDocked') browser.applyMediaDockedFor(profileId);
+    if (key === 'downloadPath') browser.applyDownloadPathFor(profileId);
+    if (key === 'tabBarPosition') browser.applyTabBarPositionFor(profileId);
+    if (key === 'sidePanelPosition') browser.applySidePanelPositionFor(profileId);
+    if (key === 'searchEngine') browser.applySearchEngineFor(profileId);
+    browser.sendSettingsFor(profileId);
   });
 
   // ---- ショートカット割り当て(アプリ全体) ----

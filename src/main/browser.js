@@ -129,14 +129,73 @@ function registerPagePreloads(session) {
 
 // ---- データの初期化 ----
 
+// Storeは実ファイルパスで共有する。共有トグルONの項目は複数プロファイルが同じファイルを
+// 指すため、別々のStoreインスタンスを作ると書き込みが互いに巻き戻ってしまう
+const storeCache = new Map(); // filePath -> Store
 function store(profile, key, defaultValue) {
-  return new Store(browser.profiles.dataFile(profile, key), defaultValue);
+  const file = browser.profiles.dataFile(profile, key);
+  let s = storeCache.get(file);
+  if (!s) {
+    s = new Store(file, defaultValue);
+    storeCache.set(file, s);
+  }
+  return s;
 }
 browser.store = store;
 
+// プロファイルごとのデータ一式(Edge挙動: 複数プロファイルのウィンドウが同時に開くため、
+// アクティブ1つではなくプロファイル単位で保持する)。
+// インスタンスはプロファイルにつき1つを維持し(TabManager等が参照を持つ)、
+// 共有トグル変更時は setStore で保存先だけ差し替える(applyProfileStores)
+const profileData = new Map(); // profileId -> bundle
+
+browser.bundleFor = (profileId) => {
+  if (!browser.profiles) return null;
+  const existing = profileData.get(profileId);
+  if (existing) return existing;
+  const profile = browser.profiles.list().find((p) => p.id === profileId);
+  if (!profile) return null;
+  const bundle = {
+    profileId,
+    history: new History(store(profile, 'history', [])),
+    bookmarks: new Bookmarks(store(profile, 'bookmarks', []), () => browser.sendBookmarksFor(profileId)),
+    readlist: new Readlist(store(profile, 'readlist', []), () => browser.sendReadlistFor(profileId)),
+    downloads: new Downloads(store(profile, 'downloads', []), () => browser.sendDownloadsFor(profileId)),
+    settings: store(profile, 'settings', { ...DEFAULT_SETTINGS }),
+    gestures: new Gestures(store(profile, 'gestures', Gestures.defaults())),
+    theme: store(profile, 'theme', { ...DEFAULT_THEME }),
+    passwords: new Passwords(store(profile, 'passwords', [])),
+    autofill: new Autofill(store(profile, 'autofill', {})),
+    widgets: new Widgets(store(profile, 'start-widgets', {})),
+  };
+  profileData.set(profileId, bundle);
+  return bundle;
+};
+
+browser.activeBundle = () => browser.bundleFor(browser.profiles?.activeId);
+
+// 互換ゲッター: browser.bookmarks 等は「アクティブ(=最後に選ばれた)プロファイル」の束を指す。
+// ウィンドウ起点の処理は必ず ctx.profileId から bundleFor で引くこと
+for (const key of [
+  'history',
+  'bookmarks',
+  'readlist',
+  'downloads',
+  'settings',
+  'gestures',
+  'theme',
+  'passwords',
+  'autofill',
+  'widgets',
+]) {
+  Object.defineProperty(browser, key, {
+    get: () => browser.activeBundle()?.[key] ?? null,
+    configurable: true,
+  });
+}
+
 browser.initData = () => {
   browser.profiles = new Profiles();
-  const profile = browser.profiles.active();
 
   // Googleアカウント一覧はプロファイル横断で共有する
   browser.googleAccounts = new GoogleAccounts(
@@ -155,33 +214,15 @@ browser.initData = () => {
     new Store(path.join(app.getPath('userData'), 'local-servers.json'), { dismissed: [] })
   );
 
-  browser.history = new History(store(profile, 'history', []));
-  browser.bookmarks = new Bookmarks(store(profile, 'bookmarks', []), () => browser.sendBookmarks());
-  browser.readlist = new Readlist(store(profile, 'readlist', []), () => browser.sendReadlist());
-  browser.downloads = new Downloads(store(profile, 'downloads', []), () => browser.sendDownloads());
-  browser.settings = store(profile, 'settings', { ...DEFAULT_SETTINGS });
-  browser.gestures = new Gestures(store(profile, 'gestures', Gestures.defaults()));
-  browser.theme = store(profile, 'theme', { ...DEFAULT_THEME });
-  browser.passwords = new Passwords(store(profile, 'passwords', []));
-  browser.autofill = new Autofill(store(profile, 'autofill', {}));
-  browser.widgets = new Widgets(store(profile, 'start-widgets', {}));
+  browser.bundleFor(browser.profiles.activeId);
 };
 
 browser.flushAll = () => {
   browser.profiles?.store.flush();
   browser.googleAccounts?.store.flush();
-  browser.history?.store.flush();
-  browser.bookmarks?.store.flush();
-  browser.readlist?.store.flush();
-  browser.downloads?.store.flush();
-  browser.settings?.flush();
-  browser.gestures?.store.flush();
-  browser.theme?.flush();
-  browser.passwords?.store.flush();
-  browser.autofill?.store.flush();
-  browser.widgets?.store.flush();
   browser.keybindings?.store.flush();
   browser.localServers?.store.flush();
+  for (const s of storeCache.values()) s.flush();
   for (const ctx of windows.all()) {
     if (!ctx.incognito) ctx.sidePanel.store.flush();
   }
@@ -210,8 +251,11 @@ function memoryStore(defaultValue) {
 
 // url を指定すると、そのURLのタブ1枚だけで開く(タブのドラッグ切り離し用)。
 // x/yはタブを離した画面座標(ドラッグ切り離し時、その位置に新しいウィンドウを出すため)
-browser.createWindow = ({ incognito = false, url, x, y } = {}) => {
-  const profile = browser.profiles.active();
+// profileId を指定するとそのプロファイルのウィンドウとして開く(Edge挙動。省略時はアクティブ)。
+// restoreTabs を渡すと初期タブの代わりにそのタブ構成を復元する
+browser.createWindow = ({ incognito = false, url, x, y, profileId, restoreTabs } = {}) => {
+  const profile = browser.profiles.list().find((p) => p.id === profileId) ?? browser.profiles.active();
+  const bundle = browser.bundleFor(profile.id);
   const session = incognito ? createIncognitoSession() : browser.profiles.sessionFor(profile);
   const frameColor = incognito ? FRAME_COLOR_INCOGNITO : FRAME_COLOR;
 
@@ -237,21 +281,21 @@ browser.createWindow = ({ incognito = false, url, x, y } = {}) => {
 
   registerInternalProtocol(session);
   registerPagePreloads(session);
-  if (!incognito) browser.downloads.attachSession(session);
-  browser.applyAdblock(session);
-  browser.applyDownloadPath(session);
+  if (!incognito) bundle.downloads.attachSession(session);
+  browser.applyAdblockTo(session, bundle);
+  browser.applyDownloadPathTo(session, bundle);
   // Tor設定はプロファイル単位。シークレットは対象外(素の一時セッション)
   if (!incognito) browser.applyTorForProfile(profile).catch((err) => console.error('Torの適用に失敗:', err));
 
   const tabManager = new TabManager(window, {
-    history: incognito ? NULL_HISTORY : browser.history,
-    bookmarks: browser.bookmarks,
+    history: incognito ? NULL_HISTORY : bundle.history,
+    bookmarks: bundle.bookmarks,
     session,
   });
   tabManager.setOverlay(createOverlayView(session));
-  tabManager.setChromeLeft(browser.settings.data.tabBarPosition === 'left' ? TAB_BAR_WIDTH : 0);
-  tabManager.setSidePanelSide(browser.settings.data.sidePanelPosition === 'left' ? 'left' : 'right');
-  tabManager.setSearchEngine(browser.settings.data.searchEngine);
+  tabManager.setChromeLeft(bundle.settings.data.tabBarPosition === 'left' ? TAB_BAR_WIDTH : 0);
+  tabManager.setSidePanelSide(bundle.settings.data.sidePanelPosition === 'left' ? 'left' : 'right');
+  tabManager.setSearchEngine(bundle.settings.data.searchEngine);
 
   const sidePanel = new SidePanel(window, {
     session,
@@ -266,16 +310,25 @@ browser.createWindow = ({ incognito = false, url, x, y } = {}) => {
   const mediaPlayer = new MediaPlayer(window, {
     session,
     tabManager,
-    corner: browser.settings.data.mediaCorner,
+    corner: bundle.settings.data.mediaCorner,
     onDrag: (corner) => {
-      browser.settings.data.mediaCorner = corner;
-      browser.settings.save();
+      bundle.settings.data.mediaCorner = corner;
+      bundle.settings.save();
     },
   });
-  mediaPlayer.setDocked(browser.settings.data.mediaDocked);
+  mediaPlayer.setDocked(bundle.settings.data.mediaDocked);
   tabManager.setMediaPlayer(mediaPlayer);
 
-  const ctx = windows.add({ window, tabManager, sidePanel, mediaPlayer, session, incognito, media: null });
+  const ctx = windows.add({
+    window,
+    tabManager,
+    sidePanel,
+    mediaPlayer,
+    session,
+    incognito,
+    profileId: profile.id,
+    media: null,
+  });
 
   // 再生中だったタブを閉じたら、フローティングプレイヤー/サイドパネルの表示も消す
   tabManager.onTabClosed = (tab) => {
@@ -303,13 +356,26 @@ browser.createWindow = ({ incognito = false, url, x, y } = {}) => {
   window.webContents.once('did-finish-load', () => {
     window.webContents.send('ui:window', { incognito });
     browser.sendAllTo(ctx);
-    tabManager.createTab(url || undefined);
+    if (restoreTabs?.length) tabManager.restoreTabs(restoreTabs);
+    else tabManager.createTab(url || undefined);
   });
 
   // マウスの戻る/進むボタン
   window.on('app-command', (_e, command) => {
     if (command === 'browser-backward') tabManager.goBack();
     if (command === 'browser-forward') tabManager.goForward();
+  });
+
+  // そのプロファイルの最後のウィンドウを閉じるとき、タブ構成を保存する
+  // (次にプロファイルを開いたとき同じタブで再開できるように。Edgeのワークスペース風)
+  window.on('close', () => {
+    if (incognito) return;
+    if (!browser.profiles.list().some((p) => p.id === profile.id)) return; // プロファイル削除時
+    const others = windows.normal().filter((c) => c !== ctx && c.profileId === profile.id);
+    if (others.length) return;
+    const s = store(profile, 'session-tabs', []);
+    s.data = [tabManager.snapshotTabs()];
+    s.flush();
   });
 
   // シークレットのセッションはウィンドウを閉じたら破棄する
@@ -340,14 +406,17 @@ function createOverlayView(session) {
 
 // ---- 広告ブロック ----
 
-// 設定に応じて、指定セッション(省略時は全ウィンドウ)へ適用する
-browser.applyAdblock = (session) => {
-  const enabled = browser.settings?.data.adblock !== false;
-  const targets = session ? [session] : windows.all().map((c) => c.session);
-  for (const target of targets) {
-    browser.adblock
-      .apply(target, enabled)
-      .catch((err) => console.error('広告ブロックの適用に失敗:', err));
+// 1セッションへ、そのプロファイルの設定を適用する
+browser.applyAdblockTo = (session, bundle) => {
+  const enabled = bundle?.settings.data.adblock !== false;
+  browser.adblock.apply(session, enabled).catch((err) => console.error('広告ブロックの適用に失敗:', err));
+};
+
+// 指定プロファイルの全ウィンドウ(シークレット含む)へ適用する
+browser.applyAdblockFor = (profileId) => {
+  const bundle = browser.bundleFor(profileId);
+  for (const ctx of windows.all()) {
+    if (ctx.profileId === profileId) browser.applyAdblockTo(ctx.session, bundle);
   }
 };
 
@@ -421,29 +490,17 @@ browser.applyThemePatch = (themeStore, patch) => {
   themeStore.save();
 };
 
-// 任意のプロファイルのテーマを読む(アクティブでなくてもよい。設定画面のプロファイルカード用)
+// 任意のプロファイルのテーマを読む(設定画面のプロファイルカード用)
 browser.themeFor = (profileId) => {
-  const profile = browser.profiles.list().find((p) => p.id === profileId);
-  if (!profile) return { ...DEFAULT_THEME };
-  if (profile.id === browser.profiles.activeId) return browser.theme.data;
-  const s = store(profile, 'theme', { ...DEFAULT_THEME });
-  const data = { ...s.data };
-  s.flush();
-  return data;
+  return browser.bundleFor(profileId)?.theme.data ?? { ...DEFAULT_THEME };
 };
 
-// 任意のプロファイルのテーマを書く(アクティブなら即座にUIへ反映、そうでなければディスクにのみ保存)
+// 任意のプロファイルのテーマを書く(そのプロファイルのウィンドウがあれば即座にUIへ反映)
 browser.setThemeFor = (profileId, patch) => {
-  const profile = browser.profiles.list().find((p) => p.id === profileId);
-  if (!profile) return;
-  if (profile.id === browser.profiles.activeId) {
-    browser.applyThemePatch(browser.theme, patch);
-    browser.sendTheme();
-    return;
-  }
-  const s = store(profile, 'theme', { ...DEFAULT_THEME });
-  browser.applyThemePatch(s, patch);
-  s.flush();
+  const bundle = browser.bundleFor(profileId);
+  if (!bundle) return;
+  browser.applyThemePatch(bundle.theme, patch);
+  browser.sendThemeFor(profileId);
 };
 
 // ---- Googleアカウントの自動検出 ----
@@ -489,106 +546,107 @@ browser.checkGoogleAutoRegister = (session) => {
 
 // ---- ダウンロード先 ----
 
-// 設定に応じて、指定セッション(省略時は全ウィンドウ)へダウンロード先を適用する
-browser.applyDownloadPath = (session) => {
-  const dir = browser.settings?.data.downloadPath;
+// 1セッションへ、そのプロファイルのダウンロード先を適用する
+browser.applyDownloadPathTo = (session, bundle) => {
+  const dir = bundle?.settings.data.downloadPath;
   if (!dir) return; // 空ならElectronのOS既定のままにする
-  const targets = session ? [session] : windows.all().map((c) => c.session);
-  for (const target of targets) target.setDownloadPath(dir);
+  session.setDownloadPath(dir);
+};
+
+browser.applyDownloadPathFor = (profileId) => {
+  const bundle = browser.bundleFor(profileId);
+  for (const ctx of windows.all()) {
+    if (ctx.profileId === profileId) browser.applyDownloadPathTo(ctx.session, bundle);
+  }
 };
 
 // ---- タブバーの位置(上部/左側) ----
 
-// 設定に応じて、指定セッション(省略時は全ウィンドウ)のタブバーレイアウトを切り替える
-browser.applyTabBarPosition = (session) => {
-  const left = browser.settings?.data.tabBarPosition === 'left' ? TAB_BAR_WIDTH : 0;
-  const targets = session ? windows.all().filter((c) => c.session === session) : windows.all();
-  for (const ctx of targets) ctx.tabManager.setChromeLeft(left);
+// そのプロファイルの全ウィンドウのタブバーレイアウトを切り替える
+browser.applyTabBarPositionFor = (profileId) => {
+  const left = browser.bundleFor(profileId)?.settings.data.tabBarPosition === 'left' ? TAB_BAR_WIDTH : 0;
+  for (const ctx of windows.all()) {
+    if (ctx.profileId === profileId) ctx.tabManager.setChromeLeft(left);
+  }
 };
 
 // ---- サイドパネルの左右位置 ----
 
-browser.applySidePanelPosition = (session) => {
-  const side = browser.settings?.data.sidePanelPosition === 'left' ? 'left' : 'right';
-  const targets = session ? windows.all().filter((c) => c.session === session) : windows.all();
-  for (const ctx of targets) ctx.tabManager.setSidePanelSide(side);
+browser.applySidePanelPositionFor = (profileId) => {
+  const side = browser.bundleFor(profileId)?.settings.data.sidePanelPosition === 'left' ? 'left' : 'right';
+  for (const ctx of windows.all()) {
+    if (ctx.profileId === profileId) ctx.tabManager.setSidePanelSide(side);
+  }
 };
 
 // ---- 検索エンジン ----
 
-browser.applySearchEngine = (session) => {
-  const engine = browser.settings?.data.searchEngine;
-  const targets = session ? windows.all().filter((c) => c.session === session) : windows.all();
-  for (const ctx of targets) ctx.tabManager.setSearchEngine(engine);
+browser.applySearchEngineFor = (profileId) => {
+  const engine = browser.bundleFor(profileId)?.settings.data.searchEngine;
+  for (const ctx of windows.all()) {
+    if (ctx.profileId === profileId) ctx.tabManager.setSearchEngine(engine);
+  }
 };
 
 // ---- プロファイル ----
 
-// アクティブなプロファイルのデータ/セッションを各機能へ適用する
-browser.applyActiveProfile = ({ recreateTabs, previousProfileId } = {}) => {
-  const profile = browser.profiles.active();
+// 共有トグル変更などで、そのプロファイルの保存先を作り直して各所へ反映する
+// (インスタンスは維持し、setStoreで差し替えるのでTabManager等の参照はそのまま生きる)
+browser.applyProfileStores = (profileId) => {
+  const bundle = profileData.get(profileId);
+  const profile = browser.profiles.list().find((p) => p.id === profileId);
+  if (!bundle || !profile) return;
 
-  browser.history.setStore(store(profile, 'history', []));
-  browser.bookmarks.setStore(store(profile, 'bookmarks', []));
-  browser.readlist.setStore(store(profile, 'readlist', []));
-  browser.downloads.setStore(store(profile, 'downloads', []));
-  browser.settings.flush();
-  browser.settings = store(profile, 'settings', { ...DEFAULT_SETTINGS });
-  browser.gestures.setStore(store(profile, 'gestures', Gestures.defaults()));
-  browser.theme.flush();
-  browser.theme = store(profile, 'theme', { ...DEFAULT_THEME });
-  browser.passwords.setStore(store(profile, 'passwords', []));
-  browser.autofill.setStore(store(profile, 'autofill', {}));
-  browser.widgets.setStore(store(profile, 'start-widgets', {}));
+  bundle.history.setStore(store(profile, 'history', []));
+  bundle.bookmarks.setStore(store(profile, 'bookmarks', []));
+  bundle.readlist.setStore(store(profile, 'readlist', []));
+  bundle.downloads.setStore(store(profile, 'downloads', []));
+  bundle.settings = store(profile, 'settings', { ...DEFAULT_SETTINGS });
+  bundle.gestures.setStore(store(profile, 'gestures', Gestures.defaults()));
+  bundle.theme = store(profile, 'theme', { ...DEFAULT_THEME });
+  bundle.passwords.setStore(store(profile, 'passwords', []));
+  bundle.autofill.setStore(store(profile, 'autofill', {}));
+  bundle.widgets.setStore(store(profile, 'start-widgets', {}));
 
-  const session = browser.profiles.sessionFor(profile);
-  registerInternalProtocol(session);
-  registerPagePreloads(session);
-  browser.downloads.attachSession(session);
-  browser.extensions
-    .attach(session, profile.id)
-    .catch((err) => console.error('拡張機能サポートの初期化に失敗:', err));
-
-  const normalWindows = windows.normal();
-
-  // 離れるプロファイルの各ウィンドウのタブ構成を保存する。
-  // Edgeのワークスペースのように、次に戻ってきたときに同じタブ構成で再開できるようにする
-  if (recreateTabs && previousProfileId && previousProfileId !== profile.id) {
-    const previousProfile = browser.profiles.list().find((p) => p.id === previousProfileId);
-    if (previousProfile) {
-      const snapshot = normalWindows.map((ctx) => ctx.tabManager.snapshotTabs());
-      const s = store(previousProfile, 'session-tabs', []);
-      s.data = snapshot;
-      s.flush();
+  for (const ctx of windows.normal()) {
+    if (ctx.profileId === profileId) {
+      ctx.sidePanel.setStore(store(profile, 'sidepanel', { webPanels: [], notes: '' }));
     }
   }
-  const incomingTabs = recreateTabs ? store(profile, 'session-tabs', []).data : null;
-
-  // プロファイルの切り替えはシークレット以外の全ウィンドウに適用する
-  for (const [index, ctx] of normalWindows.entries()) {
-    ctx.session = session;
-    ctx.sidePanel.setStore(store(profile, 'sidepanel', { webPanels: [], notes: '' }));
-    if (recreateTabs) {
-      ctx.tabManager.switchSession(session);
-      const saved = incomingTabs?.[index]?.tabs;
-      if (saved?.length) ctx.tabManager.restoreTabs(saved);
-      else ctx.tabManager.createTab();
-      ctx.sidePanel.switchSession(session);
-    }
+  browser.applyAdblockFor(profileId);
+  browser.applyDownloadPathFor(profileId);
+  browser.applyTabBarPositionFor(profileId);
+  browser.applySidePanelPositionFor(profileId);
+  browser.applySearchEngineFor(profileId);
+  for (const ctx of windows.all()) {
+    if (ctx.profileId === profileId) browser.sendAllTo(ctx);
   }
-  browser.applyAdblock();
-  browser.applyDownloadPath();
-  browser.applyTabBarPosition();
-  browser.applySidePanelPosition();
-  browser.applySearchEngine();
-  browser.applyTorForProfile(profile).catch((err) => console.error('Torの適用に失敗:', err));
-  browser.sendAll();
 };
 
-browser.switchProfile = (id) => {
-  const previousProfileId = browser.profiles.activeId;
-  if (!browser.profiles.switchTo(id)) return;
-  browser.applyActiveProfile({ recreateTabs: true, previousProfileId });
+// Edge挙動: プロファイルの切り替え=そのプロファイルの新しいウィンドウを開く。
+// 既存のウィンドウは元のプロファイルのまま残る(複数プロファイルの同時利用)。
+// そのプロファイルのウィンドウがまだ無ければ、前回閉じたときのタブ構成を復元する
+browser.switchProfile = (id, { url } = {}) => {
+  const profile = browser.profiles.list().find((p) => p.id === id);
+  if (!profile) return null;
+  browser.profiles.switchTo(id); // 新しいウィンドウの既定プロファイルとして記憶
+
+  const hasWindow = windows.normal().some((c) => c.profileId === id);
+  const saved = !hasWindow && !url ? store(profile, 'session-tabs', []).data?.[0]?.tabs : null;
+  const ctx = browser.createWindow({ profileId: id, url, restoreTabs: saved?.length ? saved : null });
+  browser.sendProfiles();
+  return ctx;
+};
+
+// プロファイルの削除: そのプロファイルのウィンドウも閉じる(Edgeと同じ)。
+// 全ウィンドウが無くなったら、残ったアクティブプロファイルのウィンドウを開く
+browser.removeProfile = (id) => {
+  if (!browser.profiles.remove(id)) return;
+  const targets = windows.normal().filter((c) => c.profileId === id);
+  for (const ctx of targets) ctx.window.close();
+  profileData.delete(id);
+  if (!windows.normal().length) browser.createWindow({ profileId: browser.profiles.activeId });
+  browser.sendProfiles();
 };
 
 // プロファイルのTor ON/OFFを切り替えて、そのセッションへ即時反映する
@@ -600,17 +658,21 @@ browser.setProfileTor = async (id, enabled) => {
   browser.sendTor();
 };
 
-// 共有トグルの変更は、そのプロファイルがアクティブなときだけ保存先の切り替えが必要
+// 共有トグルの変更: そのプロファイルのデータ束が生成済みなら保存先を差し替える
 browser.setShared = (id, key, shared) => {
   browser.profiles.setShared(id, key, shared);
-  if (id === browser.profiles.activeId) browser.applyActiveProfile();
-  else browser.sendProfiles();
+  browser.applyProfileStores(id);
+  browser.sendProfiles();
 };
 
+// フォーカス中のウィンドウのプロファイル設定を切り替える(アプリメニューから)
 browser.toggleBookmarkBar = () => {
-  browser.settings.data.showBookmarkBar = !browser.settings.data.showBookmarkBar;
-  browser.settings.save();
-  browser.sendSettings();
+  const ctx = windows.focused();
+  const bundle = browser.bundleFor(ctx?.profileId ?? browser.profiles.activeId);
+  if (!bundle) return;
+  bundle.settings.data.showBookmarkBar = !bundle.settings.data.showBookmarkBar;
+  bundle.settings.save();
+  browser.sendSettingsFor(bundle.profileId);
 };
 
 // ---- レンダラーへの状態送信 ----
@@ -627,46 +689,58 @@ function broadcast(channel, payload) {
   for (const ctx of windows.all()) sendToContext(ctx, channel, payload);
 }
 
-function profilesPayload() {
+// 指定プロファイルのウィンドウ(そのプロファイルで開いたシークレット含む)だけに送る
+function broadcastProfile(profileId, channel, payload) {
+  for (const ctx of windows.all()) {
+    if (ctx.profileId === profileId) sendToContext(ctx, channel, payload);
+  }
+}
+
+function profilesPayload(ctx) {
   return {
     // 拡張機能アイコン(<browser-action-list>)がプロファイルごとのセッションを
     // 指し示せるよう、partition名も一緒に送る
     profiles: browser.profiles.list().map((p) => ({ ...p, partition: browser.profiles.partitionFor(p) })),
-    activeId: browser.profiles.activeId,
+    // 「使用中」はウィンドウごとに異なる(Edge挙動)。送信先ウィンドウのプロファイルを入れる
+    activeId: ctx?.profileId ?? browser.profiles.activeId,
     googleAccounts: browser.googleAccounts?.list() ?? [],
   };
 }
 
-function downloadsPayload() {
-  return { items: browser.downloads.list(), hasActive: browser.downloads.hasActive() };
+function downloadsPayload(bundle) {
+  return { items: bundle.downloads.list(), hasActive: bundle.downloads.hasActive() };
 }
 
-browser.sendBookmarks = () => {
-  if (!browser.bookmarks) return;
-  broadcast('bookmarks:state', browser.bookmarks.list());
-  for (const ctx of windows.all()) ctx.tabManager.sendState(); // スターボタンの状態を更新
+browser.sendBookmarksFor = (profileId) => {
+  const bundle = profileData.get(profileId);
+  if (!bundle) return;
+  broadcastProfile(profileId, 'bookmarks:state', bundle.bookmarks.list());
+  for (const ctx of windows.all()) {
+    if (ctx.profileId === profileId) ctx.tabManager.sendState(); // スターボタンの状態を更新
+  }
 };
 
-browser.sendReadlist = () => {
-  if (!browser.readlist) return;
-  broadcast('readlist:state', browser.readlist.list());
+browser.sendReadlistFor = (profileId) => {
+  const bundle = profileData.get(profileId);
+  if (bundle) broadcastProfile(profileId, 'readlist:state', bundle.readlist.list());
 };
 
-browser.sendDownloads = () => {
-  if (!browser.downloads) return;
-  broadcast('downloads:state', downloadsPayload());
+browser.sendDownloadsFor = (profileId) => {
+  const bundle = profileData.get(profileId);
+  if (bundle) broadcastProfile(profileId, 'downloads:state', downloadsPayload(bundle));
 };
 
 browser.sendProfiles = () => {
   if (!browser.profiles) return;
-  broadcast('profiles:state', profilesPayload());
+  for (const ctx of windows.all()) sendToContext(ctx, 'profiles:state', profilesPayload(ctx));
 };
 
-browser.sendSettings = () => {
-  if (!browser.settings) return;
+browser.sendSettingsFor = (profileId) => {
+  const bundle = profileData.get(profileId);
+  if (!bundle) return;
   // 全ての利用側が正しい形の配列を受け取れるよう、配信前に正規化して保持する
-  browser.settings.data.toolbarItems = normalizeToolbarItems(browser.settings.data.toolbarItems);
-  broadcast('ui:settings', browser.settings.data);
+  bundle.settings.data.toolbarItems = normalizeToolbarItems(bundle.settings.data.toolbarItems);
+  broadcastProfile(profileId, 'ui:settings', bundle.settings.data);
 };
 
 browser.sendKeybindings = () => {
@@ -674,12 +748,14 @@ browser.sendKeybindings = () => {
   broadcast('keybindings:state', browser.keybindings.config());
 };
 
-browser.sendGestures = () => {
-  if (!browser.gestures) return;
-  const config = browser.gestures.config();
-  broadcast('gestures:state', config); // 設定画面(内部ページ)向け
+browser.sendGesturesFor = (profileId) => {
+  const bundle = profileData.get(profileId);
+  if (!bundle) return;
+  const config = bundle.gestures.config();
+  broadcastProfile(profileId, 'gestures:state', config); // 設定画面(内部ページ)向け
   // 各タブのジェスチャーpreload向け(通常タブにも送る必要があるためbroadcastとは別)
   for (const ctx of windows.all()) {
+    if (ctx.profileId !== profileId) continue;
     for (const tab of ctx.tabManager.tabs) {
       if (!tab.view.webContents.isDestroyed()) tab.view.webContents.send('gestures:config', config);
     }
@@ -692,28 +768,30 @@ browser.sendSidePanel = (ctx) => {
   sendToContext(ctx, 'sidepanel:state', ctx.sidePanel.state());
 };
 
-browser.sendTheme = () => {
-  if (!browser.theme) return;
-  broadcast('theme:state', browser.theme.data);
+browser.sendThemeFor = (profileId) => {
+  const bundle = profileData.get(profileId);
+  if (bundle) broadcastProfile(profileId, 'theme:state', bundle.theme.data);
 };
 
-browser.sendPasswords = () => {
-  if (!browser.passwords) return;
-  broadcast('passwords:state', browser.passwords.list());
+browser.sendPasswordsFor = (profileId) => {
+  const bundle = profileData.get(profileId);
+  if (bundle) broadcastProfile(profileId, 'passwords:state', bundle.passwords.list());
 };
 
-browser.sendAutofill = () => {
-  if (!browser.autofill) return;
-  broadcast('autofill:state', {
-    addresses: browser.autofill.listAddresses(),
-    cards: browser.autofill.listCards(),
+browser.sendAutofillFor = (profileId) => {
+  const bundle = profileData.get(profileId);
+  if (!bundle) return;
+  broadcastProfile(profileId, 'autofill:state', {
+    addresses: bundle.autofill.listAddresses(),
+    cards: bundle.autofill.listCards(),
   });
 };
 
-browser.sendExtensions = () => {
-  if (!browser.profiles) return;
-  const session = browser.profiles.sessionFor(browser.profiles.active());
-  broadcast('extensions:state', browser.extensions.list(session));
+browser.sendExtensionsFor = (profileId) => {
+  const profile = browser.profiles?.list().find((p) => p.id === profileId);
+  if (!profile) return;
+  const session = browser.profiles.sessionFor(profile);
+  broadcastProfile(profileId, 'extensions:state', browser.extensions.list(session));
 };
 
 // メディア再生状態はウィンドウごとに異なる。フローティングプレイヤーとサイドパネルの
@@ -724,35 +802,36 @@ browser.sendMedia = (ctx) => {
   ctx.mediaPlayer.setState(ctx.media);
 };
 
-// 「サイドパネルに格納」設定の変更を全ウィンドウのプレイヤーへ反映する
-browser.applyMediaDocked = () => {
-  const docked = browser.settings?.data.mediaDocked === true;
-  for (const ctx of windows.all()) ctx.mediaPlayer.setDocked(docked);
+// 「サイドパネルに格納」設定の変更を、そのプロファイルのウィンドウのプレイヤーへ反映する
+browser.applyMediaDockedFor = (profileId) => {
+  const docked = browser.bundleFor(profileId)?.settings.data.mediaDocked === true;
+  for (const ctx of windows.all()) {
+    if (ctx.profileId === profileId) ctx.mediaPlayer.setDocked(docked);
+  }
 };
 
 browser.sendAll = () => {
-  browser.sendProfiles();
-  browser.sendSettings();
-  browser.sendGestures();
-  browser.sendBookmarks();
-  browser.sendDownloads();
-  browser.sendTheme();
-  browser.sendPasswords();
-  browser.sendExtensions();
-  browser.sendTor();
-  for (const ctx of windows.all()) browser.sendSidePanel(ctx);
+  for (const ctx of windows.all()) browser.sendAllTo(ctx);
+  browser.sendKeybindings();
 };
 
-// 新しく開いたウィンドウにだけ現在の状態を流し込む
+// 1つのウィンドウに、そのウィンドウのプロファイルの状態一式を流し込む
 browser.sendAllTo = (ctx) => {
-  sendToContext(ctx, 'profiles:state', profilesPayload());
-  sendToContext(ctx, 'ui:settings', browser.settings.data);
-  sendToContext(ctx, 'extensions:state', browser.extensions.list(browser.profiles.sessionFor(browser.profiles.active())));
-  sendToContext(ctx, 'gestures:state', browser.gestures.config());
-  sendToContext(ctx, 'bookmarks:state', browser.bookmarks.list());
-  sendToContext(ctx, 'readlist:state', browser.readlist.list());
-  sendToContext(ctx, 'downloads:state', downloadsPayload());
-  sendToContext(ctx, 'theme:state', browser.theme.data);
+  const bundle = browser.bundleFor(ctx.profileId) ?? browser.activeBundle();
+  if (!bundle) return;
+  const profile = browser.profiles.list().find((p) => p.id === bundle.profileId);
+  bundle.settings.data.toolbarItems = normalizeToolbarItems(bundle.settings.data.toolbarItems);
+  sendToContext(ctx, 'profiles:state', profilesPayload(ctx));
+  sendToContext(ctx, 'ui:settings', bundle.settings.data);
+  if (profile) {
+    sendToContext(ctx, 'extensions:state', browser.extensions.list(browser.profiles.sessionFor(profile)));
+  }
+  sendToContext(ctx, 'gestures:state', bundle.gestures.config());
+  sendToContext(ctx, 'bookmarks:state', bundle.bookmarks.list());
+  sendToContext(ctx, 'readlist:state', bundle.readlist.list());
+  sendToContext(ctx, 'downloads:state', downloadsPayload(bundle));
+  sendToContext(ctx, 'theme:state', bundle.theme.data);
+  sendToContext(ctx, 'passwords:state', bundle.passwords.list());
   sendToContext(ctx, 'tor:status', browser.tor.state());
   browser.sendSidePanel(ctx);
 };

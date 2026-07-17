@@ -18,17 +18,20 @@ function attachContextMenu(webContents, tabManager) {
 
     // 送信元タブ(favicon参照・現在のセッション判定に使う)
     const ownTab = tabManager.tabs.find((t) => t.view.webContents === webContents);
+    // このウィンドウのプロファイルのデータ束(Edge挙動: ウィンドウごとにプロファイルが異なる)
+    const ownCtx = windows.contextFor(webContents);
+    const bundle = browser.bundleFor(ownCtx?.profileId ?? browser.profiles?.activeId);
 
     // ---- リンク ----
     if (params.linkURL) {
       add({ label: 'リンクを新しいタブで開く', click: () => tabManager.createTab(params.linkURL) });
       add({
         label: 'リンクを新しいウィンドウで開く',
-        click: () => browser.createWindow({ url: params.linkURL }),
+        click: () => browser.createWindow({ url: params.linkURL, profileId: ownCtx?.profileId }),
       });
       add({
         label: 'リンクをシークレットウィンドウで開く',
-        click: () => browser.createWindow({ incognito: true, url: params.linkURL }),
+        click: () => browser.createWindow({ incognito: true, url: params.linkURL, profileId: ownCtx?.profileId }),
       });
       separator();
       if (params.linkText) {
@@ -42,7 +45,7 @@ function attachContextMenu(webContents, tabManager) {
       });
       add({
         label: 'リーディングリストに追加',
-        click: () => browser.readlist?.add(params.linkURL, params.linkText || params.linkURL, null),
+        click: () => bundle?.readlist.add(params.linkURL, params.linkText || params.linkURL, null),
       });
       separator();
     }
@@ -94,7 +97,7 @@ function attachContextMenu(webContents, tabManager) {
       const text = params.selectionText.trim();
       add({ label: 'コピー', role: 'copy' });
       const label = text.length > MAX_SELECTION_LABEL ? `${text.slice(0, MAX_SELECTION_LABEL)}…` : text;
-      const engineId = browser.settings?.data.searchEngine;
+      const engineId = bundle?.settings.data.searchEngine;
       const engineName = SEARCH_ENGINES[engineId]?.name ?? SEARCH_ENGINES.google.name;
       add({
         label: `「${label}」を${engineName}で検索`,
@@ -168,7 +171,7 @@ function attachContextMenu(webContents, tabManager) {
       });
       add({
         label: 'リーディングリストに追加',
-        click: () => browser.readlist?.add(url, webContents.getTitle() || url, ownTab?.favicon ?? null),
+        click: () => bundle?.readlist.add(url, webContents.getTitle() || url, ownTab?.favicon ?? null),
       });
       add({ label: '印刷', click: () => webContents.print() });
       add({ label: 'ページのソースを表示', click: () => tabManager.createTab(`view-source:${url}`) });
