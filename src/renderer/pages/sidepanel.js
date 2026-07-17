@@ -134,6 +134,49 @@ function renderBookmarks(items) {
 
 window.roopieInternal.onBookmarksState((items) => renderBookmarks(items));
 
+// ---- ブックマークの追加モーダル ----
+const bookmarkAddModal = $('bookmark-add');
+const bookmarkAddUrl = $('bookmark-add-url');
+const bookmarkAddName = $('bookmark-add-name');
+const bookmarkAddError = $('bookmark-add-error');
+
+function openBookmarkAddModal() {
+  bookmarkAddUrl.value = '';
+  bookmarkAddName.value = '';
+  bookmarkAddError.classList.add('hidden');
+  bookmarkAddModal.classList.remove('hidden');
+  bookmarkAddUrl.focus();
+}
+
+function closeBookmarkAddModal() {
+  bookmarkAddModal.classList.add('hidden');
+}
+
+function applyBookmarkAdd() {
+  const raw = bookmarkAddUrl.value.trim();
+  if (!looksLikeUrl(raw)) {
+    bookmarkAddError.textContent = '正しいURLを入力してください';
+    bookmarkAddError.classList.remove('hidden');
+    return;
+  }
+  const url = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`;
+  window.roopieInternal.addBookmark(url, bookmarkAddName.value.trim() || url);
+  closeBookmarkAddModal();
+}
+
+$('bookmark-add-btn').addEventListener('click', openBookmarkAddModal);
+$('bookmark-add-apply').addEventListener('click', applyBookmarkAdd);
+$('bookmark-add-cancel').addEventListener('click', closeBookmarkAddModal);
+bookmarkAddModal.addEventListener('click', (e) => {
+  if (e.target === bookmarkAddModal) closeBookmarkAddModal(); // 背景クリックで閉じる
+});
+for (const input of [bookmarkAddUrl, bookmarkAddName]) {
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') applyBookmarkAdd();
+    else if (e.key === 'Escape') closeBookmarkAddModal();
+  });
+}
+
 // ---- 履歴 ----
 let historyTimer = null;
 

@@ -8,6 +8,7 @@ if (location.protocol === 'roopie:') {
 
     listBookmarks: () => ipcRenderer.invoke('bookmarks:list'),
     listAllBookmarks: () => ipcRenderer.invoke('bookmarks:all'),
+    addBookmark: (url, title) => ipcRenderer.send('bookmarks:add', url, title),
     removeBookmark: (id) => ipcRenderer.send('bookmarks:remove', id),
     renameBookmark: (id, title) => ipcRenderer.send('bookmarks:rename', id, title),
     moveBookmark: (id, parentId) => ipcRenderer.send('bookmarks:move', id, parentId),

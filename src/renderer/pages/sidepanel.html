@@ -25,6 +25,7 @@
       </div>
 
       <div id="section-bookmarks" class="section">
+        <button id="bookmark-add-btn" class="btn readlist-add">ブックマークを追加</button>
         <div id="bookmark-list" class="panel-list"></div>
       </div>
 
@@ -84,6 +85,23 @@
         <svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
       </button>
       <div class="spacer"></div>
+    </div>
+  </div>
+
+  <!-- ブックマークの追加(パネルの「ブックマークを追加」ボタンから開く) -->
+  <div id="bookmark-add" class="modal-backdrop hidden">
+    <div class="modal">
+      <div class="modal-title">ブックマークを追加</div>
+
+      <input id="bookmark-add-url" class="panel-input" type="text" placeholder="URLを入力(例: example.com)" spellcheck="false" autocomplete="off" />
+      <input id="bookmark-add-name" class="panel-input" type="text" placeholder="名前(省略するとURL)" spellcheck="false" autocomplete="off" />
+
+      <div id="bookmark-add-error" class="modal-error hidden"></div>
+
+      <div class="modal-actions">
+        <button id="bookmark-add-cancel" class="btn">キャンセル</button>
+        <button id="bookmark-add-apply" class="btn primary">追加</button>
+      </div>
     </div>
   </div>
 
