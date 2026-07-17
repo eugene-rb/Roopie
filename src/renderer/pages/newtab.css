@@ -166,6 +166,12 @@ body[data-bg="plain"] #vignette {
   justify-self: center;
 }
 
+/* aタグ・imgは既定でネイティブドラッグ対象になり、独自のpointerドラッグと衝突するため無効化 */
+.grid-item,
+.grid-item * {
+  -webkit-user-drag: none;
+}
+
 .grid-item.dragging {
   z-index: 80;
   cursor: grabbing;

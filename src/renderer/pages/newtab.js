@@ -330,6 +330,7 @@ function shortcutItemEl(shortcut) {
   const el = document.createElement(kind === 'folder' ? 'div' : 'a');
   el.className = 'quick-link';
   el.title = `${shortcut.title}\n${target}`;
+  el.draggable = false; // <a>は既定でネイティブドラッグ対象になり、独自のpointerドラッグと衝突するため無効化
   if (kind === 'url') {
     el.href = shortcut.url;
   } else {
