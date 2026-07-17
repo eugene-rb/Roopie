@@ -110,6 +110,36 @@ function registerIpc() {
   });
   ipcMain.on('menu:close', (e) => tabsOf(e)?.showOverlay(false));
 
+  // 拡張機能メニュー(Edgeのパズルボタン風)。全拡張の一覧+ピン留め切替をオーバーレイに描画する
+  ipcMain.on('menu:open-extensions', (e, anchor) => {
+    const ctx = ctxOf(e);
+    if (!ctx || ctx.incognito || !ctx.tabManager.overlay || !browser.profiles) return;
+    const tabManager = ctx.tabManager;
+    const profile = browser.profiles.active();
+    tabManager.showOverlay(true);
+    tabManager.overlay.webContents.send('menu:show-extensions', {
+      extensions: browser.extensions.list(browser.profiles.sessionFor(profile)),
+      pinned: browser.settings?.data.pinnedExtensions ?? [],
+      // アンカーはウィンドウ座標で届く。オーバーレイは縦タブ時に左へずれるので補正する
+      anchor: anchor ? { ...anchor, right: anchor.right - tabManager.chromeLeft } : null,
+      partition: browser.profiles.partitionFor(profile),
+      // 拡張システムのtabIdはwebContentsのid
+      activeTabId: tabManager.activeWebContents()?.id ?? -1,
+      // 拡張ポップアップのアンカーをウィンドウ座標へ戻すためのオーバーレイ原点
+      offset: { x: tabManager.chromeLeft, y: tabManager.chromeHeight },
+    });
+  });
+
+  // ピン留めの切り替え(拡張機能メニューのピンボタンから)
+  ipcMain.on('extensions:set-pinned', (_e, ids) => {
+    if (!browser.settings) return;
+    browser.settings.data.pinnedExtensions = Array.isArray(ids)
+      ? ids.filter((id) => typeof id === 'string').slice(0, 200)
+      : [];
+    browser.settings.save();
+    browser.sendSettings();
+  });
+
   // QRコードのポップアップもオーバーレイに描画する(タブより手前に出すため)
   ipcMain.on('menu:open-qr', (e, payload) => {
     const tabManager = tabsOf(e);
@@ -423,7 +453,13 @@ function registerIpc() {
   ipcMain.on('settings:set', (_e, key, value) => {
     const settings = browser.settings;
     if (!settings || !(key in browser.DEFAULT_SETTINGS)) return;
-    settings.data[key] = key === 'toolbarItems' ? normalizeToolbarItems(value) : value;
+    if (key === 'toolbarItems') {
+      settings.data[key] = normalizeToolbarItems(value);
+    } else if (key === 'pinnedExtensions') {
+      settings.data[key] = Array.isArray(value) ? value.filter((id) => typeof id === 'string').slice(0, 200) : [];
+    } else {
+      settings.data[key] = value;
+    }
     settings.save();
     if (key === 'adblock') browser.applyAdblock();
     if (key === 'mediaDocked') browser.applyMediaDocked();

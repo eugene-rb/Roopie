@@ -153,6 +153,14 @@ if (location.protocol === 'roopie:') {
     // プルダウンメニュー(オーバーレイ)用
     onMenuShow: (cb) => ipcRenderer.on('menu:show', (_e, payload) => cb(payload)),
     closeMenu: () => ipcRenderer.send('menu:close'),
+
+    // 拡張機能メニュー(Edgeのパズルボタン風)
+    onExtensionsMenu: (cb) => ipcRenderer.on('menu:show-extensions', (_e, payload) => cb(payload)),
+    setPinnedExtensions: (ids) => ipcRenderer.send('extensions:set-pinned', ids),
+    // electron-chrome-extensions のリモートAPIで拡張のポップアップを開く
+    // (anchorRectはウィンドウ座標。allowRemoteなハンドラのため内部ページから呼べる)
+    activateBrowserAction: (partition, details) =>
+      ipcRenderer.invoke('crx-msg-remote', partition, 'browserAction.activate', details),
     newWindow: () => ipcRenderer.send('window:new'),
     newIncognitoWindow: () => ipcRenderer.send('window:new-incognito'),
 

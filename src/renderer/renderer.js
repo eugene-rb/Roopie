@@ -296,7 +296,43 @@ function renderExtensionActions(partition) {
   list.setAttribute('alignment', 'top right');
   list.setAttribute('partition', partition);
   area.replaceChildren(list);
+  // Edge風: ピン留めした拡張だけツールバーに出す。アイコンはshadowRoot(open)に
+  // 非同期で生えるため、追加を監視して都度フィルタを適用する
+  new MutationObserver(applyExtensionPinning).observe(list.shadowRoot, { childList: true });
+  applyExtensionPinning();
 }
+
+// ---- 拡張機能(Edge風: ピン留め+パズルボタンのメニュー) ----
+let pinnedExtensions = [];
+let extensionsCount = 0;
+const extensionsMenuBtn = $('extensions-menu-btn');
+
+// ツールバーの拡張アイコンをピン留め済みだけに絞る(それ以外はパズルメニューから使う)
+function applyExtensionPinning() {
+  const list = document.getElementById('extensions-list');
+  if (!list?.shadowRoot) return;
+  for (const node of list.shadowRoot.querySelectorAll('.action')) {
+    node.style.display = pinnedExtensions.includes(node.id) ? '' : 'none';
+  }
+}
+
+// パズルボタンは拡張が1つ以上あるときだけ表示(シークレットでは拡張自体が無効)
+function updateExtensionsMenuBtn() {
+  extensionsMenuBtn.classList.toggle('hidden', isIncognito || extensionsCount === 0);
+}
+
+window.roopie.onExtensionsState((items) => {
+  extensionsCount = items?.length ?? 0;
+  updateExtensionsMenuBtn();
+});
+
+extensionsMenuBtn.addEventListener('click', () => {
+  const rect = extensionsMenuBtn.getBoundingClientRect();
+  window.roopie.openExtensionsMenu({
+    right: Math.round(rect.right),
+    bottom: Math.round(rect.bottom - chromeEl.offsetHeight),
+  });
+});
 
 // プロファイルのアイコン(文字/絵文字/画像)を1つの.avatar要素に反映する
 function renderAvatar(el, profile) {
@@ -362,6 +398,8 @@ window.roopie.onSettings((settings) => {
   sidePanelPosition = settings.sidePanelPosition === 'left' ? 'left' : 'right';
   applySidePanelButtonPosition();
   applyToolbarItems(settings.toolbarItems);
+  pinnedExtensions = Array.isArray(settings.pinnedExtensions) ? settings.pinnedExtensions : [];
+  applyExtensionPinning();
   reportChromeHeight();
 });
 
@@ -449,6 +487,7 @@ window.roopie.onWindowInfo(({ incognito }) => {
   document.body.classList.toggle('incognito', !!incognito);
   if (incognito) {
     $('extensions-area').replaceChildren();
+    updateExtensionsMenuBtn();
     // シークレットでは履歴・パスワード関連のUIを出さない
     $('history-btn').classList.add('hidden');
     starBtn.title = 'このページをブックマーク (Ctrl+D)';

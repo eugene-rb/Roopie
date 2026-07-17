@@ -467,6 +467,10 @@ contextBridge.exposeInMainWorld('roopie', {
   openProfileMenu: (anchor) => ipcRenderer.send('menu:open-profiles', anchor),
   openQr: (payload) => ipcRenderer.send('menu:open-qr', payload),
 
+  // 拡張機能(Edge風のパズルボタンメニュー)
+  openExtensionsMenu: (anchor) => ipcRenderer.send('menu:open-extensions', anchor),
+  onExtensionsState: (cb) => ipcRenderer.on('extensions:state', (_e, items) => cb(items)),
+
   // メインプロセスからの通知
   onTabsState: (cb) => ipcRenderer.on('tabs:state', (_e, state) => cb(state)),
   onBookmarksState: (cb) => ipcRenderer.on('bookmarks:state', (_e, items) => cb(items)),

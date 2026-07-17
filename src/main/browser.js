@@ -36,6 +36,8 @@ const DEFAULT_SETTINGS = {
   sidePanelPosition: 'right', // 'left' | 'right'
   searchEngine: 'google', // 'google' | 'duckduckgo' | 'yahoo' | 'bing' | 'ecosia' | 'startpage'
   toolbarItems: defaultToolbarItems(), // ツールバーのユーティリティ項目の表示/順序
+  // ツールバーに直接表示する拡張機能のID(Edge風。それ以外はパズルボタンのメニューから使う)
+  pinnedExtensions: [],
 };
 const DEFAULT_THEME = { accent: '#6c8cff', background: 'auto', backgroundImage: '', customCss: '' };
 const THEME_BACKGROUNDS = ['auto', 'dawn', 'day', 'dusk', 'night', 'plain', 'image'];
@@ -724,6 +726,7 @@ browser.sendAll = () => {
 browser.sendAllTo = (ctx) => {
   sendToContext(ctx, 'profiles:state', profilesPayload());
   sendToContext(ctx, 'ui:settings', browser.settings.data);
+  sendToContext(ctx, 'extensions:state', browser.extensions.list(browser.profiles.sessionFor(browser.profiles.active())));
   sendToContext(ctx, 'gestures:state', browser.gestures.config());
   sendToContext(ctx, 'bookmarks:state', browser.bookmarks.list());
   sendToContext(ctx, 'readlist:state', browser.readlist.list());

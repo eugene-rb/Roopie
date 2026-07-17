@@ -59,10 +59,14 @@
         </button>
       </div>
 
-      <!-- インストール済み拡張機能のツールバーアイコン(ポップアップも含めライブラリが管理)。
+      <!-- ピン留めした拡張機能のツールバーアイコン(ポップアップも含めライブラリが管理)。
            <browser-action-list> はDOM接続時のpartitionでしか更新を購読しないため、
            プロファイル確定後に renderer.js がこの中へ要素を生成する -->
       <div id="extensions-area"></div>
+      <!-- Edgeのパズルボタン: 全拡張の一覧メニュー(ピン留め切替つき)。拡張が1つ以上あるとき表示 -->
+      <button id="extensions-menu-btn" class="icon-btn hidden" title="拡張機能">
+        <svg viewBox="0 0 24 24"><path d="M20.5 11H19V7a2 2 0 0 0-2-2h-4V3.5a2.5 2.5 0 0 0-5 0V5H4a2 2 0 0 0-2 2v3.5h1.5a2.5 2.5 0 0 1 0 5H2V20a2 2 0 0 0 2 2h3.5v-1.5a2.5 2.5 0 0 1 5 0V22H17a2 2 0 0 0 2-2v-4h1.5a2.5 2.5 0 0 0 0-5z"/></svg>
+      </button>
 
       <div id="toolbar-utility">
         <button id="downloads-btn" class="icon-btn" title="ダウンロード (Ctrl+J)">

@@ -60,6 +60,7 @@ const MARGIN = 8;
 // メインプロセスから「このアンカー位置に、このプロファイル一覧で開いて」と指示が来る
 window.roopieInternal.onMenuShow(({ profiles, activeId, anchor }) => {
   qrPopup.classList.add('hidden');
+  extMenu.classList.add('hidden');
   renderItems(profiles, activeId);
   menu.classList.remove('hidden');
   position(menu, anchor, MENU_WIDTH);
@@ -124,12 +125,13 @@ function position(el, anchor, width) {
 function close() {
   menu.classList.add('hidden');
   qrPopup.classList.add('hidden');
+  extMenu.classList.add('hidden');
   window.roopieInternal.closeMenu();
 }
 
 // ポップアップの外側をクリックしたら閉じる
 backdrop.addEventListener('mousedown', (e) => {
-  if (!menu.contains(e.target) && !qrPopup.contains(e.target)) close();
+  if (!menu.contains(e.target) && !qrPopup.contains(e.target) && !extMenu.contains(e.target)) close();
 });
 
 document.addEventListener('keydown', (e) => {
@@ -148,6 +150,102 @@ document.getElementById('new-window').addEventListener('click', () => {
 
 document.getElementById('new-incognito').addEventListener('click', () => {
   window.roopieInternal.newIncognitoWindow();
+  close();
+});
+
+// =========================================================
+// 拡張機能メニュー(Edgeのパズルボタン風)
+// =========================================================
+const extMenu = document.getElementById('ext-menu');
+const extItems = document.getElementById('ext-items');
+const EXT_MENU_WIDTH = 280;
+let extContext = null; // { partition, activeTabId, offset }
+
+window.roopieInternal.onExtensionsMenu(({ extensions, pinned, anchor, partition, activeTabId, offset }) => {
+  menu.classList.add('hidden');
+  qrPopup.classList.add('hidden');
+  extContext = { partition, activeTabId, offset: offset ?? { x: 0, y: 0 } };
+  renderExtensionItems(extensions ?? [], new Set(pinned ?? []));
+  extMenu.classList.remove('hidden');
+  position(extMenu, anchor ?? { right: window.innerWidth - MARGIN }, EXT_MENU_WIDTH);
+});
+
+const PIN_SVG =
+  '<svg viewBox="0 0 24 24"><path d="M12 16v6"/><path d="M9 4h6l1 6 2.5 3.5h-13L8 10z"/></svg>';
+
+function renderExtensionItems(extensions, pinnedSet) {
+  extItems.textContent = '';
+  if (!extensions.length) {
+    const empty = document.createElement('div');
+    empty.className = 'ext-empty';
+    empty.textContent = '拡張機能はインストールされていません';
+    extItems.appendChild(empty);
+    return;
+  }
+
+  for (const ext of extensions) {
+    const item = document.createElement('button');
+    item.className = 'menu-item';
+    item.title = ext.name;
+
+    const iconWrap = document.createElement('span');
+    iconWrap.className = 'ext-icon';
+    if (ext.icon) {
+      const img = document.createElement('img');
+      img.src = ext.icon;
+      img.alt = '';
+      iconWrap.appendChild(img);
+    } else {
+      iconWrap.textContent = (ext.name[0] || '?').toUpperCase();
+    }
+    item.appendChild(iconWrap);
+
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = ext.name;
+    item.appendChild(name);
+
+    // ピン留めの切替(ツールバーに直接表示するか)。行のクリック(実行)とは分ける
+    const pin = document.createElement('span');
+    pin.className = 'ext-pin' + (pinnedSet.has(ext.id) ? ' active' : '');
+    pin.title = pinnedSet.has(ext.id) ? 'ツールバーに表示しない' : 'ツールバーに表示';
+    pin.innerHTML = PIN_SVG;
+    pin.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (pinnedSet.has(ext.id)) pinnedSet.delete(ext.id);
+      else pinnedSet.add(ext.id);
+      pin.classList.toggle('active', pinnedSet.has(ext.id));
+      pin.title = pinnedSet.has(ext.id) ? 'ツールバーに表示しない' : 'ツールバーに表示';
+      window.roopieInternal.setPinnedExtensions([...pinnedSet]);
+    });
+    item.appendChild(pin);
+
+    // 行クリックで拡張を実行(ポップアップを開く)。アンカーはオーバーレイ座標に
+    // オーバーレイの原点を足してウィンドウ座標へ補正する
+    item.addEventListener('click', () => {
+      if (!extContext?.partition) return;
+      const rect = item.getBoundingClientRect();
+      const details = {
+        eventType: 'click',
+        extensionId: ext.id,
+        tabId: extContext.activeTabId ?? -1,
+        anchorRect: {
+          x: Math.round(rect.left + extContext.offset.x),
+          y: Math.round(rect.top + extContext.offset.y),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+        },
+      };
+      const partition = extContext.partition;
+      close(); // 先にメニューを閉じてから開く(フォーカスがポップアップに残るように)
+      window.roopieInternal.activateBrowserAction(partition, details).catch(() => {});
+    });
+    extItems.appendChild(item);
+  }
+}
+
+document.getElementById('ext-manage').addEventListener('click', () => {
+  window.roopieInternal.openTab('roopie://settings');
   close();
 });
 
