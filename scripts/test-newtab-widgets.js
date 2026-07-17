@@ -166,6 +166,94 @@ app.whenReady().then(async () => {
   check('タッチスワイプでp1に戻る(4件)', await js(`document.querySelectorAll('#quick-links .grid-item').length`), 4);
   check('ページドットのactiveがp1になる', await js(`document.querySelectorAll('.page-dot')[0]?.classList.contains('active')`), true);
 
+  // ---- ドラッグでの並べ替え(座標モデル。グリッド線プレビュー・入れ替え・自動上詰めなしを検証) ----
+  const DRAG_GAP = 14; // newtab.js の GRID_GAP と同じ値
+  function parseSpan(str) {
+    const [start, , span] = str.split(' ');
+    return { start: Number(start) - 1, span: Number(span) };
+  }
+  async function posOf(selector) {
+    const [col, row] = await js(
+      `(() => { const el = document.querySelector(${JSON.stringify(selector)}).closest('.grid-item'); return [el.style.gridColumn, el.style.gridRow]; })()`
+    );
+    const c = parseSpan(col);
+    const r = parseSpan(row);
+    return { x: c.start, y: r.start, w: c.span, h: r.span };
+  }
+  async function centerOf(selector) {
+    return js(
+      `(() => { const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`
+    );
+  }
+  async function firePointer(selector, type, pointerId, x, y) {
+    await js(
+      `document.querySelector(${JSON.stringify(selector)}).dispatchEvent(new PointerEvent(${JSON.stringify(type)}, { pointerId: ${pointerId}, clientX: ${x}, clientY: ${y}, bubbles: true, cancelable: true, button: 0 }))`
+    );
+  }
+
+  // 1) Example(1x1のショートカット)を空きセルへドラッグ。オーバーレイのグリッド線+プレビューを確認
+  const cols = Number(await gridVar('--grid-cols'));
+  const cellPx1 = parseFloat(await gridVar('--cell'));
+  const step1 = cellPx1 + DRAG_GAP;
+  const exampleKey = await js(`document.querySelector('[data-grid-key^="s:"]').dataset.gridKey`);
+  const examplePos = await posOf(`[data-grid-key="${exampleKey}"]`);
+  const freeSpot = { x: cols - 1, y: 0 }; // 右上端は10列中まず埋まらない空きセル
+  const c1 = await centerOf(`[data-grid-key="${exampleKey}"]`);
+  const d1x = (freeSpot.x - examplePos.x) * step1;
+  const d1y = (freeSpot.y - examplePos.y) * step1;
+
+  await firePointer(`[data-grid-key="${exampleKey}"]`, 'pointerdown', 1, c1.x, c1.y);
+  await firePointer(`[data-grid-key="${exampleKey}"]`, 'pointermove', 1, c1.x + d1x, c1.y + d1y);
+  await sleep(50);
+  check('ドラッグ中はグリッド線オーバーレイが表示される', await js(`document.querySelectorAll('.grid-overlay-cell').length > 0`), true);
+  check('ドラッグ中はドロップ先プレビューが有効(緑)表示になる', await js(`document.querySelector('.grid-overlay-preview')?.classList.contains('valid')`), true);
+  await firePointer(`[data-grid-key="${exampleKey}"]`, 'pointerup', 1, c1.x + d1x, c1.y + d1y);
+  await sleep(200);
+  check('ドラッグ後はオーバーレイが消える', await js(`!document.querySelector('.grid-overlay')`), true);
+  const examplePosAfter = await posOf(`[data-grid-key="${exampleKey}"]`);
+  check('ドラッグで空きセルに移動できる', examplePosAfter.x === freeSpot.x && examplePosAfter.y === freeSpot.y, true);
+
+  // 2) 同じ大きさ(2x2)のウィジェット同士(天気/ノート)をドラッグすると入れ替わる
+  const weatherPos = await posOf('.widget-weather');
+  const notepadPos = await posOf('.widget-notepad');
+  const cellPx2 = parseFloat(await gridVar('--cell'));
+  const step2 = cellPx2 + DRAG_GAP;
+  const d2x = (notepadPos.x - weatherPos.x) * step2;
+  const d2y = (notepadPos.y - weatherPos.y) * step2;
+  const c2 = await centerOf('.widget-weather .widget-head');
+
+  await firePointer('.widget-weather .widget-head', 'pointerdown', 2, c2.x, c2.y);
+  await firePointer('.widget-weather .widget-head', 'pointermove', 2, c2.x + d2x, c2.y + d2y);
+  await sleep(50);
+  check('同サイズと重なるとプレビューが黄色(入れ替え)表示になる', await js(`document.querySelector('.grid-overlay-preview')?.classList.contains('swap')`), true);
+  await firePointer('.widget-weather .widget-head', 'pointerup', 2, c2.x + d2x, c2.y + d2y);
+  await sleep(200);
+  const weatherPosAfter = await posOf('.widget-weather');
+  const notepadPosAfter = await posOf('.widget-notepad');
+  check(
+    '同じ大きさのウィジェット同士はドラッグで入れ替わる',
+    weatherPosAfter.x === notepadPos.x &&
+      weatherPosAfter.y === notepadPos.y &&
+      notepadPosAfter.x === weatherPos.x &&
+      notepadPosAfter.y === weatherPos.y,
+    true
+  );
+
+  // 3) ノートパッドを削除しても他のアイテムの位置は変わらない(自動上詰めをしない)
+  const posBeforeDelete = await js(
+    `Object.fromEntries([...document.querySelectorAll('#quick-links .grid-item')].map((el) => [el.dataset.gridKey, el.style.gridColumn + '|' + el.style.gridRow]))`
+  );
+  await js(`document.querySelector('.widget-notepad .widget-menu-btn').click()`);
+  await sleep(100);
+  await js(`[...document.querySelectorAll('.grid-popup-item')].find((b) => b.textContent.includes('削除')).click()`);
+  await sleep(300);
+  const posAfterDelete = await js(
+    `Object.fromEntries([...document.querySelectorAll('#quick-links .grid-item')].map((el) => [el.dataset.gridKey, el.style.gridColumn + '|' + el.style.gridRow]))`
+  );
+  const notepadGone = !Object.keys(posAfterDelete).some((k) => k.includes('notepad'));
+  const othersUnchanged = Object.keys(posAfterDelete).every((k) => posAfterDelete[k] === posBeforeDelete[k]);
+  check('ウィジェット削除後も残りのアイテムは動かない(自動上詰めなし)', notepadGone && othersUnchanged, true);
+
   // ---- 共通アイコンピッカー(icon-picker.js): ボタンがパネル幅からはみ出さないこと ----
   await js(`document.querySelector('.quick-link-add').click()`);
   await sleep(100);

@@ -20,8 +20,8 @@ let gridCols = 6;
 let gridRows = 3;
 
 function applyGridMetrics() {
-  const cols = Math.min(10, Math.max(4, Math.round(gridCols) || 6));
-  const rows = Math.min(8, Math.max(3, Math.round(gridRows) || 3));
+  const cols = effectiveCols();
+  const rows = effectiveRows();
 
   // グリッドは#newtabの箱の幅に縛られず独立に伸縮する(centerで見た目上はみ出さず中央寄せされる)
   const targetW = window.innerWidth * GRID_WIDTH_RATIO;
@@ -203,26 +203,77 @@ function shortcutTileEl(shortcut) {
 // グリッド(ショートカット+ウィジェットをスマホのホーム画面風に配置)
 // 並び順は widgets:layout(ページ単位)が持ち、ショートカットの実体はbookmarksのまま
 // =========================================================
-let gridItems = []; // [{type:'shortcut', shortcut} | {type:'widget', id, widgetType, config}]
+let gridItems = []; // [{type:'shortcut', shortcut, x, y} | {type:'widget', id, widgetType, config, x, y, w, h}]
 let gridElToItem = new Map();
 
 const WIDGET_META = {
-  weather: { name: '天気', icon: '🌤️' },
-  notepad: { name: 'ノート', icon: '📝' },
-  calendar: { name: 'カレンダー', icon: '📅' },
-  news: { name: 'ニュース', icon: '📰' },
+  weather: { name: '天気', icon: '🌤️', w: 2, h: 2 },
+  notepad: { name: 'ノート', icon: '📝', w: 2, h: 2 },
+  calendar: { name: 'カレンダー', icon: '📅', w: 2, h: 2 },
+  news: { name: 'ニュース', icon: '📰', w: 3, h: 2 },
 };
+
+function effectiveCols() {
+  return Math.min(10, Math.max(4, Math.round(gridCols) || 6));
+}
+function effectiveRows() {
+  return Math.min(8, Math.max(3, Math.round(gridRows) || 3));
+}
+
+// ---- グリッドの座標(x,y)まわりの純粋関数(スマホのホーム画面風。空きセルを自前で探すだけで、
+// 既に置かれているアイテムの座標は絶対に動かさない=自動上詰めはしない) ----
+function itemSpan(item) {
+  return item.type === 'widget' ? [item.w, item.h] : [1, 1];
+}
+function footprintCells(x, y, w, h) {
+  const cells = [];
+  for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) cells.push(`${x + dx},${y + dy}`);
+  return cells;
+}
+function occupiedCells(items, exclude) {
+  const set = new Set();
+  for (const it of items) {
+    if (it === exclude || it.x == null || it.y == null) continue;
+    const [w, h] = itemSpan(it);
+    for (const c of footprintCells(it.x, it.y, w, h)) set.add(c);
+  }
+  return set;
+}
+function spotFits(x, y, w, h, cols, occupied) {
+  if (x < 0 || y < 0 || x + w > cols) return false;
+  return footprintCells(x, y, w, h).every((c) => !occupied.has(c));
+}
+function findFreeSpot(w, h, cols, occupied) {
+  for (let y = 0; y < 1000; y++) {
+    for (let x = 0; x <= cols - w; x++) {
+      if (spotFits(x, y, w, h, cols, occupied)) return { x, y };
+    }
+  }
+  return { x: 0, y: 0 };
+}
 
 function layoutForSave() {
   return gridItems.map((item) =>
     item.type === 'shortcut'
-      ? { type: 'shortcut', refId: item.shortcut.id }
-      : { type: 'widget', id: item.id, widgetType: item.widgetType, config: item.config }
+      ? { type: 'shortcut', refId: item.shortcut.id, x: item.x, y: item.y }
+      : {
+          type: 'widget',
+          id: item.id,
+          widgetType: item.widgetType,
+          config: item.config,
+          x: item.x,
+          y: item.y,
+          w: item.w,
+          h: item.h,
+        }
   );
 }
 
-// 保存済みの並びとブックマークの現状を突き合わせる(消えた参照は落とし、新規は末尾へ)
+// 保存済みの並びとブックマークの現状を突き合わせる(消えた参照は落とし、新規は空きセルへ)。
+// rawLayoutに座標を持つアイテムはその座標をそのまま使う(=動かさない)。座標が無いアイテム
+// (新規追加、または座標を持たない旧レイアウトからの移行)だけ空きセルを探して割り当てる
 function reconcileLayout(rawLayout, list) {
+  const cols = effectiveCols();
   const byId = new Map(list.map((s) => [s.id, s]));
   const seen = new Set();
   const items = [];
@@ -230,15 +281,36 @@ function reconcileLayout(rawLayout, list) {
     if (it.type === 'shortcut') {
       const shortcut = byId.get(it.refId);
       if (shortcut && !seen.has(shortcut.id)) {
-        items.push({ type: 'shortcut', shortcut });
+        items.push({ type: 'shortcut', shortcut, x: it.x, y: it.y });
         seen.add(shortcut.id);
       }
     } else if (it.type === 'widget' && WIDGET_META[it.widgetType]) {
-      items.push({ type: 'widget', id: it.id, widgetType: it.widgetType, config: it.config ?? {} });
+      const meta = WIDGET_META[it.widgetType];
+      items.push({
+        type: 'widget',
+        id: it.id,
+        widgetType: it.widgetType,
+        config: it.config ?? {},
+        x: it.x,
+        y: it.y,
+        w: Number.isInteger(it.w) ? it.w : meta.w,
+        h: Number.isInteger(it.h) ? it.h : meta.h,
+      });
     }
   }
   for (const shortcut of list.slice(0, MAX_QUICK_LINKS)) {
-    if (!seen.has(shortcut.id)) items.push({ type: 'shortcut', shortcut });
+    if (!seen.has(shortcut.id)) items.push({ type: 'shortcut', shortcut, x: undefined, y: undefined });
+  }
+
+  const occupied = occupiedCells(items);
+  for (const it of items) {
+    if (it.x == null || it.y == null) {
+      const [w, h] = itemSpan(it);
+      const spot = findFreeSpot(w, h, cols, occupied);
+      it.x = spot.x;
+      it.y = spot.y;
+      for (const c of footprintCells(spot.x, spot.y, w, h)) occupied.add(c);
+    }
   }
   return items;
 }
@@ -302,6 +374,11 @@ function widgetItemEl(item) {
   return el;
 }
 
+function applyItemPosition(el, x, y, w, h) {
+  el.style.gridColumn = `${x + 1} / span ${w}`;
+  el.style.gridRow = `${y + 1} / span ${h}`;
+}
+
 function renderGrid() {
   quickLinksEl.textContent = '';
   gridElToItem = new Map();
@@ -309,6 +386,9 @@ function renderGrid() {
   for (const item of gridItems) {
     const el = item.type === 'shortcut' ? shortcutItemEl(item.shortcut) : widgetItemEl(item);
     el.classList.add('grid-item');
+    el.dataset.gridKey = item.type === 'shortcut' ? `s:${item.shortcut.id}` : `w:${item.id}`;
+    const [w, h] = itemSpan(item);
+    applyItemPosition(el, item.x, item.y, w, h);
     gridElToItem.set(el, item);
     attachGridDrag(el, item);
     quickLinksEl.appendChild(el);
@@ -319,6 +399,8 @@ function renderGrid() {
   addTile.title = 'ショートカットやウィジェットを追加';
   addTile.innerHTML = '<div class="tile"><span class="plus">+</span></div><span class="label">追加</span>';
   addTile.addEventListener('click', () => openAddMenu(addTile));
+  const addSpot = findFreeSpot(1, 1, effectiveCols(), occupiedCells(gridItems));
+  applyItemPosition(addTile, addSpot.x, addSpot.y, 1, 1);
   quickLinksEl.appendChild(addTile);
 }
 
@@ -406,72 +488,212 @@ function openWidgetMenu(anchorEl, widgetEl, item) {
   popupMenu(anchorEl, entries);
 }
 
-// ---- ドラッグ&ドロップ並べ替え(スマホのホーム画面風にライブで詰め直す) ----
-let dragEl = null;
+// ---- ドラッグで並べ替え(スマホのホーム画面風。掴んだアイコン/ウィジェットだけがポインタに
+// 追従し、他のアイテムは自動で詰め直さない。ドロップ先が空きセルなら移動、同じ大きさの
+// アイテムと重なったら入れ替え、それ以外(サイズ違いと重なる等)は元の位置に戻すだけ) ----
+const DRAG_THRESHOLD = 6; // px。これ未満の移動はクリック扱い(誤爆防止)
+let dragState = null;
 
-function flipMove(mutate) {
-  const before = new Map();
-  for (const el of quickLinksEl.children) before.set(el, el.getBoundingClientRect());
-  mutate();
-  for (const el of quickLinksEl.children) {
-    const prev = before.get(el);
-    if (!prev || el === dragEl) continue;
-    const rect = el.getBoundingClientRect();
-    const dx = prev.left - rect.left;
-    const dy = prev.top - rect.top;
-    if (dx || dy) {
-      el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }], {
-        duration: 160,
-        easing: 'ease-out',
-      });
+function currentCellPx() {
+  const v = parseFloat(getComputedStyle(quickLinksEl).getPropertyValue('--cell'));
+  return Number.isFinite(v) && v > 0 ? v : 84;
+}
+
+// ドラッグ中はセルの区切り線+ドロップ先のプレビューを表示する(スマホのホーム画面風で直感的に
+// 操作できるように)。座標はposition:fixedで、#quick-linksの現在のスクロール位置を差し引いて
+// ドラッグ中のアイテム本体(同じくposition:fixed)とぴったり揃える
+function gridOrigin() {
+  const rect = quickLinksEl.getBoundingClientRect();
+  return { left: rect.left, top: rect.top - quickLinksEl.scrollTop };
+}
+function cellPixelRect(x, y, w, h) {
+  const cellPx = currentCellPx();
+  const step = cellPx + GRID_GAP;
+  const origin = gridOrigin();
+  return {
+    left: origin.left + x * step,
+    top: origin.top + y * step,
+    width: w * cellPx + (w - 1) * GRID_GAP,
+    height: h * cellPx + (h - 1) * GRID_GAP,
+  };
+}
+function findSwapTarget(item, x, y, w, h) {
+  return gridItems.find((it) => {
+    if (it === item) return false;
+    const [ow, oh] = itemSpan(it);
+    return it.x === x && it.y === y && ow === w && oh === h;
+  });
+}
+
+let dragOverlay = null;
+
+function showGridOverlay(item) {
+  const cols = effectiveCols();
+  const maxY = gridItems.reduce((m, it) => Math.max(m, it.y + itemSpan(it)[1]), 0);
+  const rows = Math.max(effectiveRows(), maxY + 1);
+
+  const root = document.createElement('div');
+  root.className = 'grid-overlay';
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const r = cellPixelRect(x, y, 1, 1);
+      const cell = document.createElement('div');
+      cell.className = 'grid-overlay-cell';
+      Object.assign(cell.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
+      root.appendChild(cell);
     }
   }
+  const preview = document.createElement('div');
+  preview.className = 'grid-overlay-preview';
+  root.appendChild(preview);
+  document.body.appendChild(root);
+  dragOverlay = { root, preview };
+  updateGridOverlayPreview(item, item.x, item.y);
+}
+
+function updateGridOverlayPreview(item, x, y) {
+  if (!dragOverlay) return;
+  const [w, h] = itemSpan(item);
+  const cols = effectiveCols();
+  const inBounds = x >= 0 && y >= 0 && x + w <= cols;
+  if (!inBounds) {
+    dragOverlay.preview.style.display = 'none';
+    return;
+  }
+  const r = cellPixelRect(x, y, w, h);
+  Object.assign(dragOverlay.preview.style, {
+    display: '',
+    left: `${r.left}px`,
+    top: `${r.top}px`,
+    width: `${r.width}px`,
+    height: `${r.height}px`,
+  });
+  const occupied = occupiedCells(gridItems, item);
+  const free = spotFits(x, y, w, h, cols, occupied);
+  const swapTarget = !free && findSwapTarget(item, x, y, w, h);
+  dragOverlay.preview.classList.toggle('valid', free);
+  dragOverlay.preview.classList.toggle('swap', !!swapTarget);
+  dragOverlay.preview.classList.toggle('blocked', !free && !swapTarget);
+}
+
+function hideGridOverlay() {
+  dragOverlay?.root.remove();
+  dragOverlay = null;
 }
 
 function attachGridDrag(el, item) {
   // ウィジェットはヘッダーだけ、ショートカットはタイル全体をつまめる
   const handle = item.type === 'widget' ? el.querySelector('.widget-head') : el;
-  handle.draggable = true;
-  handle.addEventListener('dragstart', (e) => {
-    dragEl = el;
-    el.classList.add('dragging');
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', item.type === 'shortcut' ? item.shortcut.url : 'widget');
-    if (item.type === 'widget') {
-      const rect = el.getBoundingClientRect();
-      e.dataTransfer.setDragImage(el, e.clientX - rect.left, e.clientY - rect.top);
-    }
+  handle.addEventListener('pointerdown', (e) => {
+    if (dragState || e.button !== 0) return;
+    const [w, h] = itemSpan(item);
+    dragState = {
+      item,
+      el,
+      handle,
+      pointerId: e.pointerId,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      originX: item.x,
+      originY: item.y,
+      w,
+      h,
+      moved: false,
+      targetX: item.x,
+      targetY: item.y,
+    };
   });
-  handle.addEventListener('dragend', () => {
-    el.classList.remove('dragging');
-    dragEl = null;
-    persistGridOrder();
-  });
+  handle.addEventListener('pointermove', onGridPointerMove);
+  handle.addEventListener('pointerup', onGridPointerUp);
+  handle.addEventListener('pointercancel', onGridPointerUp);
 }
 
-quickLinksEl.addEventListener('dragover', (e) => {
-  if (!dragEl) return;
-  e.preventDefault();
-  e.dataTransfer.dropEffect = 'move';
-  const target = e.target.closest?.('.grid-item');
-  if (!target || target === dragEl) return;
-  const rect = target.getBoundingClientRect();
-  const before = e.clientX - rect.left < rect.width / 2;
-  const ref = before ? target : target.nextSibling;
-  if (ref === dragEl || (before ? target.previousSibling : target.nextSibling) === dragEl) return;
-  flipMove(() => quickLinksEl.insertBefore(dragEl, ref));
-});
-quickLinksEl.addEventListener('drop', (e) => {
-  if (dragEl) e.preventDefault();
-});
+function beginDragVisual(state) {
+  const rect = state.el.getBoundingClientRect();
+  state.baseLeft = rect.left;
+  state.baseTop = rect.top;
+  state.el.classList.add('dragging');
+  Object.assign(state.el.style, {
+    position: 'fixed',
+    left: `${rect.left}px`,
+    top: `${rect.top}px`,
+    width: `${rect.width}px`,
+    height: `${rect.height}px`,
+  });
+  try {
+    state.handle.setPointerCapture?.(state.pointerId);
+  } catch {
+    // ポインタが既に離れている/合成イベント等でキャプチャできない場合は無視(座標計算はpointerIdに依らない)
+  }
+  showGridOverlay(state.item);
+}
+
+function endDragVisual(state) {
+  state.el.classList.remove('dragging');
+  Object.assign(state.el.style, { position: '', left: '', top: '', width: '', height: '' });
+  try {
+    state.handle.releasePointerCapture?.(state.pointerId);
+  } catch {
+    // 未キャプチャなら何もしない
+  }
+  hideGridOverlay();
+}
+
+function onGridPointerMove(e) {
+  if (!dragState || e.pointerId !== dragState.pointerId) return;
+  const dx = e.clientX - dragState.startClientX;
+  const dy = e.clientY - dragState.startClientY;
+  if (!dragState.moved) {
+    if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+    dragState.moved = true;
+    beginDragVisual(dragState);
+  }
+  dragState.el.style.left = `${dragState.baseLeft + dx}px`;
+  dragState.el.style.top = `${dragState.baseTop + dy}px`;
+
+  const step = currentCellPx() + GRID_GAP;
+  const cols = effectiveCols();
+  dragState.targetX = Math.min(cols - dragState.w, Math.max(0, dragState.originX + Math.round(dx / step)));
+  dragState.targetY = Math.max(0, dragState.originY + Math.round(dy / step));
+  updateGridOverlayPreview(dragState.item, dragState.targetX, dragState.targetY);
+}
+
+function onGridPointerUp(e) {
+  if (!dragState || e.pointerId !== dragState.pointerId) return;
+  const state = dragState;
+  dragState = null;
+  if (!state.moved) return; // 動いていなければ通常のクリックとして扱う(何もしない)
+  endDragVisual(state);
+  tryMoveItem(state.item, state.targetX, state.targetY);
+}
+
+function tryMoveItem(item, x, y) {
+  const [w, h] = itemSpan(item);
+  const cols = effectiveCols();
+  if ((x !== item.x || y !== item.y) && x >= 0 && y >= 0 && x + w <= cols) {
+    const occupied = occupiedCells(gridItems, item);
+    if (spotFits(x, y, w, h, cols, occupied)) {
+      item.x = x;
+      item.y = y;
+      persistGridOrder();
+    } else {
+      const other = findSwapTarget(item, x, y, w, h);
+      if (other) {
+        const ox = other.x;
+        const oy = other.y;
+        other.x = item.x;
+        other.y = item.y;
+        item.x = x;
+        item.y = y;
+        persistGridOrder();
+      }
+      // サイズ違いと重なる等、それ以外は何もしない(元の位置に戻すだけ)
+    }
+  }
+  renderGrid();
+}
 
 function persistGridOrder() {
-  const ordered = [];
-  for (const el of quickLinksEl.children) {
-    const item = gridElToItem.get(el);
-    if (item) ordered.push(item);
-  }
-  gridItems = ordered;
   if (currentPageId) window.roopieInternal.setWidgetLayout(currentPageId, layoutForSave());
 }
 
@@ -852,6 +1074,8 @@ async function loadShortcuts() {
   gridItems = reconcileLayout(rawLayout, list);
   renderGrid();
   applyGridMetrics();
+  // reconcileLayoutで新しく空きセルへ自動配置された座標をすぐ保存する(次回以降は動かさないため)
+  persistGridOrder();
 }
 
 async function loadPages() {

@@ -14,6 +14,15 @@ const WIDGET_TYPES = ['weather', 'notepad', 'calendar', 'news'];
 const MAX_ITEMS = 300;
 const MAX_NOTE_LENGTH = 50_000;
 const MAX_FEEDS = 10;
+const MAX_COORD = 500; // グリッド座標(x,y)の上限(暴走防止。実際のグリッドはずっと小さい)
+const MIN_WIDGET_SPAN = 1;
+const MAX_WIDGET_SPAN = 6;
+
+// 整数として妥当ならクランプして返す。無効/未指定ならundefined(=座標なし。レンダラー側で自動配置)
+function clampCoord(v, min, max) {
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : undefined;
+}
 
 class Widgets {
   constructor(store) {
@@ -40,20 +49,32 @@ class Widgets {
 
   sanitizeItem(item) {
     if (!item || typeof item !== 'object') return null;
+    const x = clampCoord(item.x, 0, MAX_COORD);
+    const y = clampCoord(item.y, 0, MAX_COORD);
     if (item.type === 'shortcut' && typeof item.refId === 'string') {
-      return { type: 'shortcut', refId: item.refId };
+      const out = { type: 'shortcut', refId: item.refId };
+      if (x !== undefined) out.x = x;
+      if (y !== undefined) out.y = y;
+      return out;
     }
     if (
       item.type === 'widget' &&
       typeof item.id === 'string' &&
       WIDGET_TYPES.includes(item.widgetType)
     ) {
-      return {
+      const out = {
         type: 'widget',
         id: item.id,
         widgetType: item.widgetType,
         config: this.sanitizeConfig(item.widgetType, item.config),
       };
+      if (x !== undefined) out.x = x;
+      if (y !== undefined) out.y = y;
+      const w = clampCoord(item.w, MIN_WIDGET_SPAN, MAX_WIDGET_SPAN);
+      const h = clampCoord(item.h, MIN_WIDGET_SPAN, MAX_WIDGET_SPAN);
+      if (w !== undefined) out.w = w;
+      if (h !== undefined) out.h = h;
+      return out;
     }
     return null;
   }

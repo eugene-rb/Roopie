@@ -152,7 +152,6 @@ body[data-bg="plain"] #vignette {
   display: grid;
   grid-template-columns: repeat(var(--grid-cols, 6), var(--cell, 84px));
   grid-auto-rows: var(--cell, 84px);
-  grid-auto-flow: row dense;
   align-content: start;
   gap: 14px;
   justify-content: center;
@@ -168,7 +167,48 @@ body[data-bg="plain"] #vignette {
 }
 
 .grid-item.dragging {
-  opacity: 0.4;
+  z-index: 80;
+  cursor: grabbing;
+  user-select: none;
+  transform: scale(1.05);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.4);
+}
+
+/* ドラッグ中のグリッド線+ドロップ先プレビュー(直感的に操作できるように) */
+.grid-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+}
+
+.grid-overlay-cell {
+  position: fixed;
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+}
+
+.grid-overlay-preview {
+  position: fixed;
+  display: none;
+  border-radius: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.grid-overlay-preview.valid {
+  border-color: rgba(120, 220, 150, 0.9);
+  background: rgba(120, 220, 150, 0.2);
+}
+
+.grid-overlay-preview.swap {
+  border-color: rgba(255, 200, 90, 0.9);
+  background: rgba(255, 200, 90, 0.18);
+}
+
+.grid-overlay-preview.blocked {
+  border-color: rgba(255, 100, 100, 0.9);
+  background: rgba(255, 100, 100, 0.16);
 }
 
 /* ローカルサーバーのサジェスト(ショートカットの下) */
@@ -566,8 +606,6 @@ body[data-bg="plain"] .quick-link:hover .tile {
 .widget {
   display: flex;
   flex-direction: column;
-  grid-column: span 2;
-  grid-row: span 2;
   min-width: 0;
   min-height: 0;
   border-radius: 16px;
@@ -575,10 +613,6 @@ body[data-bg="plain"] .quick-link:hover .tile {
   backdrop-filter: blur(14px);
   color: rgba(255, 255, 255, 0.92);
   overflow: hidden;
-}
-
-.widget-news {
-  grid-column: span 3;
 }
 
 body[data-bg="plain"] .widget {
