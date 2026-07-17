@@ -84,7 +84,7 @@ body[data-bg="plain"] #vignette {
   width: 100%;
   max-width: 680px;
   padding: 0 24px;
-  margin-top: -6vh;
+  margin-top: var(--newtab-shift, -6vh);
 }
 
 #clock {
@@ -150,13 +150,17 @@ body[data-bg="plain"] #vignette {
 /* ショートカット+ウィジェットの統合グリッド(スマホのホーム画面風) */
 #quick-links {
   display: grid;
-  grid-template-columns: repeat(auto-fill, 84px);
-  grid-auto-rows: 84px;
+  grid-template-columns: repeat(var(--grid-cols, 6), var(--cell, 84px));
+  grid-auto-rows: var(--cell, 84px);
   grid-auto-flow: row dense;
+  align-content: start;
   gap: 14px;
   justify-content: center;
   margin-top: 44px;
-  width: min(620px, calc(100vw - 48px));
+  max-width: calc(100vw - 48px);
+  height: var(--grid-height, auto);
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .grid-item.quick-link {
@@ -232,10 +236,10 @@ body[data-bg="plain"] #vignette {
   flex-direction: column;
   align-items: center;
   gap: 7px;
-  width: 68px;
+  width: calc(var(--cell, 84px) * 0.81);
   color: rgba(255, 255, 255, 0.8);
   text-decoration: none;
-  font-size: 11px;
+  font-size: clamp(9px, calc(var(--cell, 84px) * 0.131), 13px);
   font-weight: 300;
   text-align: center;
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.4);
@@ -245,9 +249,9 @@ body[data-bg="plain"] #vignette {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 16px;
+  width: calc(var(--cell, 84px) * 0.619);
+  height: calc(var(--cell, 84px) * 0.619);
+  border-radius: calc(var(--cell, 84px) * 0.19);
   background: rgba(255, 255, 255, 0.14);
   backdrop-filter: blur(14px);
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -261,12 +265,12 @@ body[data-bg="plain"] #vignette {
 }
 
 .quick-link img {
-  width: 24px;
-  height: 24px;
+  width: calc(var(--cell, 84px) * 0.286);
+  height: calc(var(--cell, 84px) * 0.286);
 }
 
 .quick-link .placeholder {
-  font-size: 18px;
+  font-size: calc(var(--cell, 84px) * 0.214);
   font-weight: 500;
   color: rgba(255, 255, 255, 0.9);
 }

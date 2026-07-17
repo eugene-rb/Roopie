@@ -1,7 +1,8 @@
-﻿// スタート画面ウィジェット(グリッド)のE2E検証(再利用可能)。
+﻿// スタート画面ウィジェット・グリッドサイズ設定のE2E検証(再利用可能)。
 // 実行: npx electron scripts/test-newtab-widgets.js
 // src/renderer/pages を静的配信し、stub-internal-preload.js で roopieInternal を差し替えて
-// newtab.html を実際に描画。追加メニュー→各ウィジェットの描画・設定・自動保存を検証する。
+// newtab.html を実際に描画。追加メニュー→各ウィジェットの描画・設定・自動保存、
+// および設定画面のグリッド列数・行数のライブ反映を検証する。
 const { app, BrowserWindow } = require('electron');
 const http = require('http');
 const fs = require('fs');
@@ -112,6 +113,29 @@ app.whenReady().then(async () => {
 
   // グリッド全体: ショートカット1 + 天気 + ノート + ニュース = 4
   check('最終的なグリッド項目数', await js(`document.querySelectorAll('#quick-links .grid-item').length`), 4);
+
+  // ---- グリッドの列数・行数設定(Android風の自由なグリッドサイズ) ----
+  const gridVar = (name) => js(`getComputedStyle(document.getElementById('quick-links')).getPropertyValue('${name}').trim()`);
+
+  check('既定の列数(6)が反映される', await gridVar('--grid-cols'), '6');
+  const defaultCell = parseFloat(await gridVar('--cell'));
+  check('既定のセルサイズが正の数', defaultCell > 0, true);
+
+  // 設定を横4・縦8に変更 → ライブ反映
+  await js(`window.roopieInternal.__setSettings({ startGridCols: 4, startGridRows: 8 })`);
+  await sleep(150);
+  check('列数4がライブ反映される', await gridVar('--grid-cols'), '4');
+  const tallCell = parseFloat(await gridVar('--cell'));
+  check('縦8行だとセルが既定より縮む', tallCell < defaultCell, true);
+
+  // 縦8行でも時計が画面外にはみ出ない(セル縮小→--newtab-shift緩和の二段安全弁が効く)
+  const clockTop = await js(`document.getElementById('clock').getBoundingClientRect().top`);
+  check('時計が画面上端で欠けない', clockTop >= 0, true);
+
+  // 設定を横10・縦3に戻す
+  await js(`window.roopieInternal.__setSettings({ startGridCols: 10, startGridRows: 3 })`);
+  await sleep(150);
+  check('列数10がライブ反映される', await gridVar('--grid-cols'), '10');
 
   server.close();
   console.log(failed ? `\n${failed}件失敗` : '\n全テスト成功');

@@ -1720,6 +1720,19 @@ body {
   color: var(--text-dim);
 }
 
+.grid-size-inputs {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 13px;
+}
+
+.grid-size-inputs input {
+  width: 56px;
+  margin-left: 6px;
+  text-align: center;
+}
+
 /* ツールバーのカスタマイズ(表示/非表示 + ドラッグ並べ替え) */
 .toolbar-items-list {
   display: flex;

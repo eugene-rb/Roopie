@@ -523,6 +523,16 @@ adblockToggle.addEventListener('change', () =>
   window.roopieInternal.setSetting('adblock', adblockToggle.checked)
 );
 
+// ---- スタート画面のグリッド列数・行数 ----
+const startGridColsInput = document.getElementById('start-grid-cols');
+const startGridRowsInput = document.getElementById('start-grid-rows');
+startGridColsInput.addEventListener('change', () =>
+  window.roopieInternal.setSetting('startGridCols', Number(startGridColsInput.value))
+);
+startGridRowsInput.addEventListener('change', () =>
+  window.roopieInternal.setSetting('startGridRows', Number(startGridRowsInput.value))
+);
+
 // ---- ダウンロード先 ----
 const downloadPathDesc = document.getElementById('download-path-desc');
 const downloadPathChangeBtn = document.getElementById('download-path-change');
@@ -1580,6 +1590,8 @@ window.roopieInternal.onSettings((settings) => {
   autofillCardsToggle.checked = settings.autofillCards !== false;
   renderDownloadPath(settings.downloadPath);
   renderToolbarItems(settings.toolbarItems);
+  startGridColsInput.value = settings.startGridCols || 6;
+  startGridRowsInput.value = settings.startGridRows || 4;
 });
 
 // 別タブでログインして戻ってきたときに「ログイン中」表示を更新する
@@ -1610,6 +1622,8 @@ document.addEventListener('visibilitychange', () => {
   autofillCardsToggle.checked = settings.autofillCards !== false;
   renderDownloadPath(settings.downloadPath);
   renderToolbarItems(settings.toolbarItems);
+  startGridColsInput.value = settings.startGridCols || 6;
+  startGridRowsInput.value = settings.startGridRows || 4;
   if (gestureConfig) gestureState = gestureConfig;
   if (themeConfig) themeState = themeConfig;
   render();

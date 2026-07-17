@@ -1,10 +1,64 @@
 const MAX_QUICK_LINKS = 10;
 
+const newtabEl = document.getElementById('newtab');
+const clockEl = document.getElementById('clock');
 const timeEl = document.getElementById('time');
 const dateEl = document.getElementById('date');
 const greetingEl = document.getElementById('greeting');
 const searchEl = document.getElementById('search');
 const quickLinksEl = document.getElementById('quick-links');
+const pageDotsEl = document.getElementById('shortcut-pages');
+const localServersEl = document.getElementById('local-servers');
+
+// ---- グリッドの列数・行数(設定画面から変更。Androidのホーム画面のように画面に合わせてセルが伸縮する) ----
+const GRID_GAP = 14;
+const MIN_MARGIN = 16; // 上下の要素と画面端に最低限残す余白
+const MIN_CELL = 30;
+const MAX_CELL = 116;
+let gridCols = 6;
+let gridRows = 4;
+
+function applyGridMetrics() {
+  const cols = Math.min(10, Math.max(4, Math.round(gridCols) || 6));
+  const rows = Math.min(8, Math.max(3, Math.round(gridRows) || 4));
+
+  const availW = Math.min(window.innerWidth, 680) - 48;
+  const cellFromWidth = Math.floor((availW - GRID_GAP * (cols - 1)) / cols);
+  const upperBound = Math.max(MIN_CELL, Math.min(MAX_CELL, cellFromWidth));
+
+  function fits() {
+    const clockTop = clockEl.getBoundingClientRect().top;
+    const tailEl = localServersEl.childElementCount ? localServersEl : pageDotsEl;
+    const tailBottom = tailEl.getBoundingClientRect().bottom;
+    return clockTop >= MIN_MARGIN && tailBottom <= window.innerHeight - MIN_MARGIN;
+  }
+
+  function apply(cell) {
+    quickLinksEl.style.setProperty('--grid-cols', cols);
+    quickLinksEl.style.setProperty('--cell', `${cell}px`);
+    quickLinksEl.style.setProperty('--grid-height', `${rows * cell + GRID_GAP * (rows - 1)}px`);
+  }
+
+  newtabEl.style.removeProperty('--newtab-shift');
+  for (let cell = upperBound; cell >= MIN_CELL; cell -= 2) {
+    apply(cell);
+    if (fits()) return;
+    if (cell === MIN_CELL) break;
+  }
+
+  // 最小セルでも収まらない場合(縦の行数を多くした狭い画面): 上にずらす分(既定-6vh)を
+  // 段階的に緩めて時計を画面内に収める
+  for (let vh = -6; vh <= 0; vh += 1) {
+    newtabEl.style.setProperty('--newtab-shift', `${vh}vh`);
+    if (fits()) return;
+  }
+}
+
+let gridMetricsResizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(gridMetricsResizeTimer);
+  gridMetricsResizeTimer = setTimeout(applyGridMetrics, 120);
+});
 
 // ---- 背景(テーマ設定が auto なら時間帯で切り替え) ----
 const bgEl = document.getElementById('bg');
@@ -756,8 +810,6 @@ const WIDGET_RENDERERS = {
 };
 
 // ---- ページ切り替え(複数ページ=startフォルダ直下の各サブフォルダ) ----
-const pageDotsEl = document.getElementById('shortcut-pages');
-
 function renderPageDots() {
   pageDotsEl.textContent = '';
   if (pages.length > 1) {
@@ -801,6 +853,7 @@ async function loadShortcuts() {
   shortcuts = list;
   gridItems = reconcileLayout(rawLayout, list);
   renderGrid();
+  applyGridMetrics();
 }
 
 async function loadPages() {
@@ -1003,7 +1056,6 @@ function openShortcutModal(existing) {
 
 // ---- ローカルサーバーのサジェスト(起動中の localhost:PORT を検知して表示) ----
 // 走査するのは代表的な開発ポートのみ。HTTP応答が返ったものだけを候補にする。
-const localServersEl = document.getElementById('local-servers');
 let localServerMenu = null;
 
 function closeLocalServerMenu() {
@@ -1094,6 +1146,7 @@ async function loadLocalServers() {
   grid.className = 'ls-grid';
   for (const server of servers) grid.appendChild(localServerTile(server));
   localServersEl.appendChild(grid);
+  applyGridMetrics();
 }
 
 // 長く開きっぱなしのタブでも、後から起動したサーバーを反映する
@@ -1105,3 +1158,12 @@ document.addEventListener('visibilitychange', () => {
 window.roopieInternal.onBookmarksState(() => loadPages());
 loadPages();
 loadLocalServers();
+
+// ---- 設定(グリッドの列数・行数。設定画面での変更をライブ反映) ----
+function applySettings(settings) {
+  gridCols = settings.startGridCols || 6;
+  gridRows = settings.startGridRows || 4;
+  applyGridMetrics();
+}
+window.roopieInternal.onSettings(applySettings);
+window.roopieInternal.getSettings().then(applySettings);

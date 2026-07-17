@@ -712,6 +712,10 @@ function registerIpc() {
       settings.data[key] = normalizeToolbarItems(value);
     } else if (key === 'pinnedExtensions') {
       settings.data[key] = Array.isArray(value) ? value.filter((id) => typeof id === 'string').slice(0, 200) : [];
+    } else if (key === 'startGridCols' || key === 'startGridRows') {
+      const [min, max] = key === 'startGridCols' ? browser.START_GRID_COLS_RANGE : browser.START_GRID_ROWS_RANGE;
+      const n = Math.round(Number(value));
+      settings.data[key] = Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : browser.DEFAULT_SETTINGS[key];
     } else {
       settings.data[key] = value;
     }

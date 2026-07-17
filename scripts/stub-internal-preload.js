@@ -9,6 +9,8 @@ const shortcuts = [
 let layout = [];
 const configCalls = [];
 const layoutCalls = [];
+let settings = { startGridCols: 6, startGridRows: 4 };
+let onSettingsCb = () => {};
 
 const FAKE_RSS = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0"><channel><title>テストフィード</title>
@@ -33,6 +35,14 @@ contextBridge.exposeInMainWorld('roopieInternal', {
   onBookmarksState: () => {},
   onThemeState: () => {},
   getTheme: async () => ({ accent: '#6c8cff', background: 'night', backgroundImage: '', customCss: '' }),
+  getSettings: async () => settings,
+  setSetting: (key, value) => {
+    settings = { ...settings, [key]: value };
+    onSettingsCb(settings);
+  },
+  onSettings: (cb) => {
+    onSettingsCb = cb;
+  },
 
   getWidgetLayout: async () => layout,
   setWidgetLayout: (_pageId, items) => {
@@ -64,5 +74,9 @@ contextBridge.exposeInMainWorld('roopieInternal', {
   getRss: async () => FAKE_RSS,
 
   // テストからの状態確認用
-  __stubState: () => ({ layout, configCalls, layoutCalls }),
+  __stubState: () => ({ layout, configCalls, layoutCalls, settings }),
+  __setSettings: (patch) => {
+    settings = { ...settings, ...patch };
+    onSettingsCb(settings);
+  },
 });
