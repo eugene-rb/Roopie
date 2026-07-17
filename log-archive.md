@@ -676,3 +676,9 @@
 - **アイコンピッカーのはみ出し修正**: 共通`.icon-picker-row`(icon-picker.js/menu.jsのQR中心マークピッカーが共用)に`flex-wrap: wrap`を追加。「画像をアップロード」+「既定に戻す(favicon)」のような長いラベル2つがパネル幅220pxを超えて右にはみ出していた不具合(ボタンはflex-shrink:0のため縮まず、wrapで2行に分かれるようにして解消)。プロファイル/Webパネル/ショートカット/QR中心マークの全ピッカーに一括で効く
 - **stub-internal-preload.jsをページ単位に拡張**: 従来は`shortcuts`/`layout`が1ページ分の固定値だったのをp1/p2の2ページ分(`shortcutsByPage`/`layoutByPage`)に対応させ、`addStartPage`も実際にページを追加するよう実装。既存の天気/ノート/カレンダー/ニュースのテストは全てp1で完結するため無改造で成功
 - **検証**: `scripts/test-newtab-widgets.js`にスワイプ(wheel/touch双方向、ページドットのactive確認)とアイコンピッカーのはみ出し(パネル右端を超えるボタンが無いこと)のテストを追加。全31件成功。`npm run build:css`でapp.css再生成、start:verifyでクラッシュ・コンソールエラー無し確認
+
+## 2026-07-18(3): スタート画面グリッドの幅をウィンドウ横幅の約40%基準に拡大(ユーザー指示「グリッド全体が横幅の40%を占めるイメージ」) → f889c82
+
+- **原因**: `applyGridMetrics()`の`availW`が`Math.min(window.innerWidth, 680) - 48`で、実質#newtabの箱幅(680px)に頭打ちだった。プローブで確認したところ、グリッド自体(`#quick-links`)は`align-items:center`で非stretchのため`#newtab`の箱幅に縛られず独立に伸縮・中央寄せされる(1920px幅ウィンドウで`--cell:200px`を強制してもクリップされず正しく中央表示された)。つまりCSS側の制約ではなくJS側の計算式が原因と判明
+- **修正**: `availW`を`window.innerWidth * 0.4`基準に変更(`GRID_WIDTH_RATIO`定数)。`MAX_CELL`も116→160に拡大(1920px前後の一般的な解像度でも40%比を維持できるように)。実測: 1280x800でcell 57→72px、1920x1080でグリッド幅が横幅の39.9%
+- **検証**: `test-newtab-widgets.js`にグリッド幅がウィンドウ幅の30〜45%に収まることを確認するテストを追加。全32件成功。start:verifyでエラー無し確認
