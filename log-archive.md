@@ -624,3 +624,17 @@
   - ドラッグ検索(選択テキストをタブバーへ): ドラッグ中はバー全体をアクセント色でハイライト(`#tab-bar.drag-search`)、ドロップ受理時に短いフラッシュ
 - **settings.htmlのCSP違反を解消**: インラインstyle6箇所をクラス化(`.note-tight`、`#accounts`/`#extensions-list`/`#passwords-list`のマージン。`#extension-id`のは`.account-add .search`で既カバーのため削除のみ)
 - コミットを2つに分割: 前セッション未コミットの「拡張機能パズルボタン」(WIP、#ext-menuのCSS未整備)→ 9c3c8ce、今回分 → 4b4b574
+
+## 2026-07-17(6): パスワードマネージャーとオートフィルをChrome並みに拡充(ユーザー指示) → 8621ce1
+
+- **新規 `src/main/autofill.js`**: 住所・個人情報(姓名/フリガナ/組織/郵便番号/都道府県/市区町村/番地/建物/電話/メール)とクレジットカードのストア。カード番号はsafeStorage暗号化+表示用に下4桁とブランド(Visa/MC/Amex/JCB/Discover/Diners)を平文保持、CVCは保存しない。プロファイル単位(`autofill.json`)、共有トグル対応(profiles.jsのSHARABLE_KEYSに`autofill`追加)
+- **`passwords.js` 拡張**: ストア形式を`{items, neverSave}`に移行(旧配列から自動移行)。`usernamesForOrigin`(ドロップダウン用・最近使った順)/`credential`(選択時のみ復号+lastUsedAt更新)/`update`(編集。重複ユーザー名は失敗)/`exportAll`/除外リスト(`addNeverSave`等)
+- **`password-preload.js` → `autofill-preload.js` に改名・全面拡張**:
+  - フィールド分類: autocomplete属性優先+日本語ヒューリスティック(姓/名/セイ/メイ/郵便分割zip1・zip2/都道府県/市区町村/番地/建物/電話/メール/会社、cc-number等)。ラベル・placeholder・td隣接セルも判定材料
+  - 候補ドロップダウン: closedなshadow DOM+position:fixed(ページのCSS/JSから隔離)。フォーカスで表示、↑↓Enter/Esc対応、mousedownで選択(blurより先)。ライト/ダーク対応
+  - 選択時のみ `passwords:credential`/`autofill:card-fill` で復号値を取得(一覧表示はユーザー名・マスク済みカードのみ)
+  - パスワード生成(新規登録フォームで「強力なパスワードを生成」16文字)。選択直後の再表示抑制は「同じ欄のみ」(グローバル抑制だと選択→即別欄クリックで出ないバグをE2Eで検出して修正)
+  - select対応: 都道府県(テキスト一致)、月/年('07'と'7'、'2026'と'26'の揺れ吸収)。tel は数字のみに整形
+- **ipc.js**: オリジンをページの申告でなく `e.senderFrame.url` から導出(`frameOrigin`)。`autofill:page-data`/`passwords:credential`/`passwords:update`/`passwords:never-save`/`passwords:excluded*`/`passwords:export`/`passwords:import`(RFC4180ミニパーサー`parseCsv`、Chrome/Edge/Firefox形式対応)/`autofill:*` CRUD追加
+- **UI**: 確認バーに「このサイトでは保存しない」。設定画面: パスワード検索・編集・エクスポート/インポート・除外リスト解除、「自動入力」セクション(住所・カードのCRUDモーダル`.af-modal-*`、ON/OFFトグル=`autofillAddresses`/`autofillCards`設定)
+- **検証スクリプト(再利用可)**: `scripts/test-autofill-main.js`(ロジック27件)、`scripts/test-autofill-preload.js`(sendInputEventの信頼済みイベントでクリック→ドロップダウン選択→入力まで27件)、`scripts/test-autofill-page.html`+`serve-test-page.js`(手動確認用: node scripts/serve-test-page.js → localhost:8931)。全件成功
