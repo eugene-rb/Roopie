@@ -647,3 +647,14 @@
 - **CSS(newtab.css)**: #quick-linksをCSS Grid化(84pxセル、auto-fill、dense)。ウィジェットはspan 2x2(ニュースは3x2)のすりガラスカード。`.grid-popup`(追加/ウィジェットメニュー)
 - **バグ修正**: コンテナに付く`widget-notepad`(widget-<type>)クラスがテキストエリアのクラスと衝突→`.notepad-textarea`に改名(E2Eの自動保存テスト失敗で検出。querySelectorがコンテナを拾い、textarea用CSSがコンテナにも当たっていた)
 - **検証**: `scripts/test-newtab-widgets.js` + `stub-internal-preload.js`(roopieInternalをスタブして実DOM描画、追加メニュー→天気設定→ノート保存→カレンダー→ニュース→削除まで18件)。全件成功
+
+## 2026-07-17(8): プロファイル切り替えをEdge挙動に(ユーザー指示) → 324e356
+
+- **アーキテクチャ変更**: 「アクティブプロファイル1つ(切替時に全ウィンドウのストアを差し替え)」→「ウィンドウ単位のプロファイル」。複数プロファイルのウィンドウを同時に開ける
+- browser.js: `bundleFor(profileId)` がプロファイルごとのデータ束(history/bookmarks/readlist/downloads/settings/gestures/theme/passwords/autofill/widgets)を生成・キャッシュ。インスタンスはプロファイルにつき1つ維持し、共有トグル変更は `applyProfileStores` で setStore 差し替え(TabManagerの参照は生きたまま)。Storeは実ファイルパスでキャッシュ共有。`browser.bookmarks` 等は互換ゲッター(アクティブ束)として残置
+- `switchProfile(id)` = そのプロファイルの新ウィンドウを開く(既存はそのまま)。ウィンドウが無いプロファイルは前回のタブ構成を復元(最後のウィンドウの close で session-tabs に保存)。`removeProfile` はウィンドウも閉じる。`applyActiveProfile` は廃止
+- 配信は `sendXFor(profileId)` + `broadcastProfile`。`profiles:state` の activeId は送信先ウィンドウのプロファイル(ピル・設定画面の「使用中」がウィンドウごとに正しく出る)
+- ipc.js: 全ハンドラを `bundleOf(e)`(送信元ウィンドウのプロファイル)基準に移行。設定変更のapply(adblock/downloadPath/tabBarPosition/sidePanelPosition/searchEngine/mediaDocked)もプロファイル単位。Ctrl+N・シークレット・タブ切り離し・右クリック「新しいウィンドウで開く」は呼び出し元のプロファイルを引き継ぐ。Googleログインは別プロファイルなら新ウィンドウで
+- context-menu.js / toolbar-context-menu.js / menu.js / tab-context-menu.js も ctx.profileId 基準に
+- **adblock.js の潜在バグ修正**: ghosteryの `enableBlockingInSession` はグローバルな ipcMain.handle を毎回登録するため、2セッション目で二重登録エラー(シークレット併用でも起きていた)。有効化前に removeHandler、無効化後は残セッションのコンテキストでハンドラ復旧
+- **検証**: `scripts/test-multi-profile.js` 新設(一時userDataで本物のbrowser.jsを起動し22件: 切替=新ウィンドウ/既存維持/データ・設定・ブックマーク分離/共有トグルのストア共有と解除/削除時のウィンドウクローズ/閉じ時のタブ保存)。既存スイート(autofill 27+27、widgets 18)も全て成功。start:verify クリーン
