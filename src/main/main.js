@@ -5,6 +5,7 @@ const browser = require('./browser');
 const { registerIpc } = require('./ipc');
 const { setupMenu } = require('./menu');
 const { setupVerifyLog } = require('./verify-log');
+const { setupAutoUpdater } = require('./updater');
 
 // 二重起動を防ぐ(2つ目のインスタンスはプロファイルのキャッシュ等を壊すため)。
 // 既に起動中なら、そのインスタンスのウィンドウを前面に出して終了する。
@@ -34,6 +35,7 @@ app.whenReady().then(() => {
     browser.sendKeybindings();
   };
   browser.createWindow();
+  setupAutoUpdater();
 });
 
 app.on('window-all-closed', () => {

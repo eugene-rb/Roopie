@@ -20,6 +20,7 @@
   - (2026-07-17) Webパネルの「管理画面」は持たない(ユーザー指示で廃止)。追加=「+」またはレール右クリック、編集・削除=ピン留めアイコンの右クリックメニューのみ
   - (2026-07-17) アイコン設定UIは全箇所で共通の `icon-picker.js` を使う(プロファイル/Webパネル/スタートのショートカット)。Webパネル・ショートカットのアイコン既定はリンク先のfavicon。新たにアイコンを持つ要素を作るときも必ずこの共通ピッカーとfavicon既定に合わせる
   - (2026-07-17) 依頼済みの3機能(パスワード/オートフィル拡充・スタート画面ウィジェット・プロファイルのEdge挙動)は対応済み。プロファイルは「ウィンドウ単位」がアーキテクチャの前提になった: メインの各機能は browser.bundleFor(ctx.profileId) でデータを引く(browser.bookmarks等のグローバルはアクティブ束を指す互換ゲッター)。新機能も必ずこの前提で書く
+  - (2026-07-18) 配布と自動アップデート: electron-builder(NSIS形式。MSIはelectron-updater非対応のため使わない)+ GitHub Releases + electron-updater(`src/main/updater.js`、パッケージ版のみ動作)。リリース手順=package.jsonのversionを上げて `npm run release`(要GH_TOKEN)or `npm run dist`+`gh release create v<version> <exe> <blockmap> dist/latest.yml`(latest.yml必須)。アイコンは build/icon.ico(仮ロゴ。`npx electron scripts/gen-icon.js` で再生成、正式ロゴは差し替えるだけ)
 
 ---
 

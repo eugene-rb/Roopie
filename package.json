@@ -8,15 +8,47 @@
     "start:debug": "electron . --remote-debugging-port=9222",
     "start:verify": "set ROOPIE_LOG_CONSOLE=1&& electron .",
     "build:css": "tailwindcss -i src/renderer/tailwind.css -o src/renderer/pages/app.css --minify",
-    "watch:css": "tailwindcss -i src/renderer/tailwind.css -o src/renderer/pages/app.css --watch"
+    "watch:css": "tailwindcss -i src/renderer/tailwind.css -o src/renderer/pages/app.css --watch",
+    "dist": "electron-builder --win",
+    "release": "electron-builder --win --publish always"
   },
   "keywords": [],
-  "author": "",
+  "author": "eugene-rb",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/eugene-rb/Roopie.git"
+  },
+  "build": {
+    "appId": "com.eugene-rb.roopie",
+    "productName": "Roopie",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "eugene-rb",
+      "repo": "Roopie"
+    }
+  },
   "type": "commonjs",
   "devDependencies": {
     "@tailwindcss/cli": "^4.3.2",
     "electron": "^43.1.0",
+    "electron-builder": "^26.15.3",
     "preline": "^4.2.0",
     "tailwindcss": "^4.3.2"
   },
@@ -24,6 +56,7 @@
     "@ghostery/adblocker-electron": "^2.18.1",
     "electron-chrome-extensions": "^4.9.0",
     "electron-chrome-web-store": "^0.13.0",
+    "electron-updater": "^6.8.9",
     "qrcode-generator": "^2.0.4"
   }
 }
