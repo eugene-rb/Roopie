@@ -88,7 +88,15 @@ function renderTabs() {
     tabsEl.appendChild(tabEl);
   }
 
+  // ドラッグ中に再描画が走った場合(読み込み状態の変化など)でも、畳み表示と挿入プレビューを維持する
+  if (draggingId !== null) {
+    tabsEl.querySelector(`[data-id="${draggingId}"]`)?.classList.add('dragging', 'drag-collapsed');
+    if (dropSlot._index !== null) showDropSlot(dropSlot._index);
+  }
+
   for (const el of tabsEl.children) {
+    // ドロップ直後のタブはスロットのあった位置にそのまま現れる(FLIPで滑らせない)
+    if (el.dataset.id === justDroppedId) continue;
     const prev = prevRects.get(el.dataset.id);
     if (!prev) continue;
     const rect = el.getBoundingClientRect();
@@ -101,111 +109,140 @@ function renderTabs() {
       });
     }
   }
+  justDroppedId = null;
 }
 
-// ---- タブのドラッグ並べ替え ----
-// ドラッグ中は挿入位置のタブに .drop-before / .drop-after を付けて目印にする
+// ---- タブのドラッグ(並べ替え & ドロップ挿入検索の共通UX) ----
+// 並べ替えでも、ページから選択テキストをドラッグしてきた検索でも、同じ「挿入スロット」を出す。
+// スロットは実体のある隙間で、ドラッグ中はカーソル位置にリアルタイムで追従し、タブの間に差し込める。
 let draggingId = null;
+let justDroppedId = null; // ドロップ直後、確定位置へFLIPで滑らせないタブID(スロット位置にそのまま出す)
 const DETACH_THRESHOLD = 40; // タブバーの下端からこれだけ離れたら切り離しと判定
 
-// 縦タブ時はタブが縦に並ぶので、挿入位置の判定も縦(Y座標)で行う
-function isDropAfter(tabEl, e) {
-  const rect = tabEl.getBoundingClientRect();
-  return document.body.classList.contains('vertical-tabs')
-    ? e.clientY > rect.top + rect.height / 2
-    : e.clientX > rect.left + rect.width / 2;
+const tabBarEl = $('tab-bar');
+
+// 挿入位置プレビュー用のスロット(隙間)。要素は1つを使い回す
+const dropSlot = document.createElement('div');
+dropSlot.className = 'tab-drop-slot';
+dropSlot._index = null; // スロットが差し込まれているタブインデックス(null=非表示)
+
+function isVerticalTabs() {
+  return document.body.classList.contains('vertical-tabs');
+}
+
+// スロットの基準となるタブ列。並べ替え中はつまみ上げた自分を除く
+// (= このインデックスがそのまま moveTab の挿入先になる)
+function slotTargets() {
+  return [...tabsEl.querySelectorAll('.tab')].filter((el) => el.dataset.id !== String(draggingId));
+}
+
+// カーソル位置から挿入先インデックス(0..件数)を求める。縦タブ時はY座標で判定
+function computeSlotIndex(e) {
+  const vertical = isVerticalTabs();
+  const pos = vertical ? e.clientY : e.clientX;
+  const tabs = slotTargets();
+  for (let i = 0; i < tabs.length; i++) {
+    const r = tabs[i].getBoundingClientRect();
+    const mid = vertical ? r.top + r.height / 2 : r.left + r.width / 2;
+    if (pos < mid) return i;
+  }
+  return tabs.length;
+}
+
+function showDropSlot(index) {
+  if (dropSlot._index === index && dropSlot.isConnected) return;
+  dropSlot._index = index;
+  tabsEl.insertBefore(dropSlot, slotTargets()[index] || null);
+  // 挿入直後に .open を付けてwidth/heightのtransitionで隙間を開く
+  requestAnimationFrame(() => dropSlot.classList.add('open'));
+}
+
+function hideDropSlot() {
+  dropSlot._index = null;
+  dropSlot.classList.remove('open');
+  dropSlot.remove();
+}
+
+function cleanupDrag() {
+  hideDropSlot();
+  tabBarEl.classList.remove('drag-search');
+  for (const el of tabsEl.querySelectorAll('.tab.dragging, .tab.drag-collapsed')) {
+    el.classList.remove('dragging', 'drag-collapsed');
+  }
+  draggingId = null;
 }
 
 function attachTabDrag(tabEl, tab) {
   tabEl.addEventListener('dragstart', (e) => {
     draggingId = tab.id;
-    tabEl.classList.add('dragging');
     e.dataTransfer.effectAllowed = 'move';
     // FirefoxやChromiumでdragを成立させるにはデータが必要。
     // ページ領域のドロップゾーン(オーバーレイ)はこのIDを読んで分割対象を決める
     e.dataTransfer.setData('text/plain', String(tab.id));
+    // つまみ上げたタブは畳んで隙間を消す。ドラッグ画像を撮り終える次フレームで畳む
+    requestAnimationFrame(() => tabEl.classList.add('dragging', 'drag-collapsed'));
     // ページ領域にドロップゾーンを出す(分割 or 切り離しの受け皿)
     window.roopie.tabDragStart(tab.id);
   });
 
   tabEl.addEventListener('dragend', (e) => {
-    const reordered = e.dataTransfer.dropEffect === 'move';
-    draggingId = null;
-    clearDropMarkers();
-    tabEl.classList.remove('dragging');
-
     // 分割 or 切り離しの確定はメイン側が行う(ページ領域のドロップゾーンからの分割と競合しないよう、
     // メインで少し遅延させて判定する)。ここでは切り離し候補かどうかの目安だけ渡す
+    const reordered = e.dataTransfer.dropEffect === 'move';
     const barBottom = tabsEl.getBoundingClientRect().bottom;
     const belowBar = !reordered && e.clientY > barBottom + DETACH_THRESHOLD;
+    cleanupDrag();
     window.roopie.tabDragEnd(tab.id, { belowBar, screenX: e.screenX, screenY: e.screenY });
   });
-
-  tabEl.addEventListener('dragover', (e) => {
-    if (draggingId === null || draggingId === tab.id) return;
-    // タブ並べ替えのドラッグは、親(#tab-bar)のドラッグ検索ハンドラへ伝播させない
-    e.stopPropagation();
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    clearDropMarkers();
-    // タブの手前半分なら手前、後ろ半分なら後ろへ挿入
-    tabEl.classList.add(isDropAfter(tabEl, e) ? 'drop-after' : 'drop-before');
-  });
-
-  tabEl.addEventListener('drop', (e) => {
-    if (draggingId === null || draggingId === tab.id) return;
-    // タブ並べ替えのドロップは、親(#tab-bar)のドラッグ検索ハンドラへ伝播させない
-    // (先に draggingId を null にするため、伝播すると検索ハンドラの draggingId ガードをすり抜ける)
-    e.stopPropagation();
-    e.preventDefault();
-    const after = isDropAfter(tabEl, e);
-
-    const from = tabState.tabs.findIndex((t) => t.id === draggingId);
-    let to = tabState.tabs.findIndex((t) => t.id === tab.id);
-    if (after) to += 1;
-    // 前方から後方へ動かす場合、抜けた分だけ位置が1つ詰まる
-    if (from < to) to -= 1;
-
-    clearDropMarkers();
-    window.roopie.moveTab(draggingId, to);
-    draggingId = null;
-  });
 }
 
-function clearDropMarkers() {
-  for (const el of tabsEl.querySelectorAll('.drop-before, .drop-after')) {
-    el.classList.remove('drop-before', 'drop-after');
-  }
+// タブバー全体でドラッグを受ける。並べ替え(自タブ)=move、ページからの選択テキスト=copy。
+// どちらも同じスロットで挿入先をプレビューし、既存タブの間に差し込める
+function dragMode(e) {
+  if (draggingId !== null) return 'reorder';
+  if ([...e.dataTransfer.types].includes('text/plain')) return 'search';
+  return null;
 }
 
-// ---- 選択テキストをタブバーへドラッグして検索(Edgeオマージュ) ----
-// ページ(別のWebContentsView)から選択テキストをドラッグしてきた場合のみ反応する。
-// 自分のタブの並べ替えドラッグは draggingId が立つので、その間は何もしない
-const tabBarEl = $('tab-bar');
 tabBarEl.addEventListener('dragover', (e) => {
-  if (draggingId !== null) return;
+  const mode = dragMode(e);
+  if (!mode) return;
   e.preventDefault();
-  e.dataTransfer.dropEffect = 'copy';
-  // 「ここにドロップで検索できる」と分かるように、ドラッグ中はバー全体をハイライトする
-  tabBarEl.classList.add('drag-search');
+  e.dataTransfer.dropEffect = mode === 'reorder' ? 'move' : 'copy';
+  // 検索ドロップのときはバー全体もハイライトして「ここに落とせる」と分かるようにする
+  tabBarEl.classList.toggle('drag-search', mode === 'search');
+  showDropSlot(computeSlotIndex(e));
 });
+
 tabBarEl.addEventListener('dragleave', (e) => {
-  // 子要素間の移動でも発火するため、バーの外へ出た時だけ解除する
+  // 子要素間の移動でも発火するため、バーの外へ出た時だけ片付ける
   if (e.relatedTarget && tabBarEl.contains(e.relatedTarget)) return;
+  hideDropSlot();
   tabBarEl.classList.remove('drag-search');
 });
+
 tabBarEl.addEventListener('drop', (e) => {
-  if (draggingId !== null) return;
+  const mode = dragMode(e);
+  if (!mode) return;
   e.preventDefault();
-  tabBarEl.classList.remove('drag-search');
-  const text = e.dataTransfer.getData('text/plain');
-  if (text.trim()) {
-    window.roopie.searchInNewTab(text);
-    // ドロップが受理されたと分かる短いフラッシュ
-    tabBarEl.animate(
-      [{ boxShadow: 'inset 0 0 0 2px var(--accent)' }, { boxShadow: 'inset 0 0 0 2px transparent' }],
-      { duration: 350, easing: 'ease-out' }
-    );
+  const index = dropSlot._index ?? computeSlotIndex(e);
+  if (mode === 'reorder') {
+    // 残りの後始末(dragging解除・draggingId=null)は直後の dragend が行う
+    justDroppedId = String(draggingId);
+    window.roopie.moveTab(draggingId, index);
+    hideDropSlot();
+    tabBarEl.classList.remove('drag-search');
+  } else {
+    const text = e.dataTransfer.getData('text/plain');
+    if (text.trim()) {
+      window.roopie.searchInNewTab(text, index);
+      // ドロップが受理されたと分かる短いフラッシュ
+      tabBarEl.animate(
+        [{ boxShadow: 'inset 0 0 0 2px var(--accent)' }, { boxShadow: 'inset 0 0 0 2px transparent' }],
+        { duration: 350, easing: 'ease-out' }
+      );
+    }
+    cleanupDrag();
   }
 });
 

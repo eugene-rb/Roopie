@@ -113,10 +113,13 @@ function registerIpc() {
   // ---- タブ ----
   ipcMain.on('tabs:new', (e, url) => tabsOf(e)?.createTab(url || undefined));
   // タブバーへのドラッグ&ドロップ検索(Edgeオマージュ): 選択テキストは常に検索する
-  ipcMain.on('tabs:search-new-tab', (e, text) => {
+  ipcMain.on('tabs:search-new-tab', (e, text, index) => {
     const query = String(text ?? '').trim();
     if (!query) return;
-    tabsOf(e)?.createTab(searchUrl(bundleOf(e)?.settings.data.searchEngine, query));
+    const tabs = tabsOf(e);
+    const tab = tabs?.createTab(searchUrl(bundleOf(e)?.settings.data.searchEngine, query));
+    // ドロップ位置(タブの間)に差し込む。未指定なら末尾のまま
+    if (tab && Number.isInteger(index)) tabs.moveTab(tab.id, index);
   });
   ipcMain.on('tabs:close', (e, id) => tabsOf(e)?.closeTab(id));
   ipcMain.on('tabs:switch', (e, id) => tabsOf(e)?.switchTab(id));

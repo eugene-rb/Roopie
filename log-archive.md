@@ -4,6 +4,15 @@
 
 ## 進捗記録
 
+### 2026-07-19: タブバーのドラッグD&Dを共通スロットUXに刷新
+
+- タブの並べ替えと「ドラッグ検索(ページの選択テキストをタブバーへドロップ)」を、同じ挿入プレビューUXに統一。既存タブの間に差し込めるようにした(従来は検索ドロップが末尾に新タブを開くだけだった)。
+- 実体のある「挿入スロット(隙間)」を1要素使い回しで実装。ドラッグ中はカーソル位置(縦タブ時はY座標)から挿入インデックスを算出し、`showDropSlot` でスロットをその位置へ差し込む。スロットはタブ幅まで `transition` で開く。並べ替え時はつまみ上げたタブに `drag-collapsed` を付けて幅0(縦タブは高さ0)に畳み、スロットが隙間を担うので総幅が変わらずカーソル判定が安定する。
+- ハンドラを `#tab-bar` の1系統に集約(旧: 各タブの `dragover/drop` + バーの検索ハンドラ + `.drop-before/.drop-after` マーカー)。`dragMode(e)` が `draggingId!==null`→'reorder' / `dataTransfer.types` に text/plain→'search' を判定。旧 `isDropAfter`/`clearDropMarkers` と `.tab.drop-before/.drop-after` CSS は撤去。
+- 並べ替えのドロップは `moveTab(id, スロットindex)`(スロットindexは自タブ除外列基準=moveTabの挿入先そのもの)。検索ドロップは preload `searchInNewTab(text, index)` → ipc `tabs:search-new-tab` が createTab 後に `moveTab` で差し込み。
+- ドロップ直後は `justDroppedId` でそのタブのFLIPを抑止し、スロット位置にそのまま出す。ドラッグ中に再描画(favicon/読み込み変化)が走っても畳み表示とスロットを維持。
+- 変更: `src/renderer/renderer.js`, `src/renderer/tailwind.css`(→`npm run build:css`), `src/preload/preload.js`, `src/main/ipc.js`。
+
 ### 2026-07-14: Phase 1 完了(最小構成ブラウザ)
 
 - git初期化、Electron 43.1.0 でプロジェクトをセットアップ(`npm start` で起動)

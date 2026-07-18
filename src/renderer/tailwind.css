@@ -299,61 +299,61 @@ body {
   display: none;
 }
 
-/* ドラッグ並べ替え: つまみ上げた感が出るように少し縮小して薄くする */
+/* ドラッグ並べ替え: つまみ上げたタブは畳んで隙間を消し、代わりに挿入スロットを出す */
 .tab.dragging {
   opacity: 0.4;
-  transform: scale(0.94);
 }
 
-.tab.drop-before,
-.tab.drop-after {
-  position: relative;
+/* つまみ上げたタブ本体は幅0(縦タブでは高さ0)に畳む。実体の隙間はスロットが担う */
+.tab.drag-collapsed {
+  width: 0 !important;
+  min-width: 0 !important;
+  padding-left: 0;
+  padding-right: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition: width 0.16s ease, height 0.16s ease, min-width 0.16s ease, padding 0.16s ease, opacity 0.12s ease;
 }
 
-.tab.drop-before::before,
-.tab.drop-after::after {
-  content: "";
-  position: absolute;
-  top: 4px;
-  bottom: 4px;
-  width: 2px;
-  border-radius: 1px;
-  background: var(--accent);
-  animation: drop-marker-in 0.12s ease-out;
+.chrome-body.vertical-tabs .tab.drag-collapsed {
+  width: 100%;
+  height: 0 !important;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
-@keyframes drop-marker-in {
-  from {
-    opacity: 0;
-    transform: scale(0.4);
-  }
+/* 挿入位置プレビュー(隙間)。閉じた状態は幅0で、.open でタブ幅まで開く */
+.tab-drop-slot {
+  flex: 0 1 auto;
+  width: 0;
+  min-width: 0;
+  height: 30px;
+  border-radius: 8px;
+  opacity: 0;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
+  pointer-events: none;
+  transition: width 0.16s ease, min-width 0.16s ease, height 0.16s ease, opacity 0.16s ease;
 }
 
-.tab.drop-before::before {
-  left: -3px;
+.tab-drop-slot.open {
+  width: 200px;
+  min-width: 60px;
+  flex-shrink: 1;
+  opacity: 1;
 }
 
-.tab.drop-after::after {
-  right: -3px;
+/* 縦タブ時は上下方向の隙間にする */
+.chrome-body.vertical-tabs .tab-drop-slot {
+  width: 100%;
+  height: 0;
 }
 
-/* 縦タブ時はタブが縦に並ぶので、挿入位置の目印も上下の横線にする */
-.chrome-body.vertical-tabs .tab.drop-before::before,
-.chrome-body.vertical-tabs .tab.drop-after::after {
-  left: 4px;
-  right: 4px;
-  width: auto;
-  height: 2px;
-}
-
-.chrome-body.vertical-tabs .tab.drop-before::before {
-  top: -3px;
-  bottom: auto;
-}
-
-.chrome-body.vertical-tabs .tab.drop-after::after {
-  top: auto;
-  bottom: -3px;
+.chrome-body.vertical-tabs .tab-drop-slot.open {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
 }
 
 /* 画面分割中の2タブに付ける、ペアだと分かる強調表示 */
