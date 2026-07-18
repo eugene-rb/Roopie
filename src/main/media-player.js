@@ -1,4 +1,4 @@
-const { WebContentsView } = require('electron');
+const { WebContentsView, Menu } = require('electron');
 const path = require('path');
 
 const PLAYER_URL = 'roopie://mediaplayer';
@@ -25,6 +25,8 @@ class MediaPlayer {
     this.state = null; // 現在の再生状態(nullなら非表示)
     this.lastArea = null;
     this.docked = false; // trueならフローティング表示せず、サイドパネル側にのみ状態を送る
+    this.tempHidden = false; // 右クリック「一時的に非表示」中(同じタブの再生が続く間だけ有効)
+    this.tempHiddenTabId = null;
   }
 
   ensureView() {
@@ -42,7 +44,18 @@ class MediaPlayer {
     this.view.setBackgroundColor('#00000000');
     this.window.contentView.addChildView(this.view);
     this.view.webContents.loadURL(PLAYER_URL);
+    this.view.webContents.on('context-menu', () => {
+      Menu.buildFromTemplate([
+        { label: '一時的に非表示', click: () => this.hideTemporarily() },
+      ]).popup({ window: this.window });
+    });
     this.tabManager.raiseOverlay();
+  }
+
+  hideTemporarily() {
+    this.tempHidden = true;
+    this.tempHiddenTabId = this.state?.tabId ?? null;
+    this.tabManager.layout();
   }
 
   setDocked(docked) {
@@ -51,6 +64,11 @@ class MediaPlayer {
   }
 
   setState(state) {
+    // 再生が終わった・別タブの再生に変わったら「一時的に非表示」を解除する
+    if (this.tempHidden && (!state || state.tabId !== this.tempHiddenTabId)) {
+      this.tempHidden = false;
+      this.tempHiddenTabId = null;
+    }
     this.state = state;
     if (state && !this.docked) this.ensureView();
     this.sendToPlayer('media:state', state);
@@ -67,7 +85,11 @@ class MediaPlayer {
   layout(area, radius, panelInset = { left: 0, right: 0 }) {
     this.lastArea = area;
     if (!this.view) return;
-    const visible = !!this.state && !this.docked;
+    // 再生中のタブが画面に見えている間(アクティブ or 分割相手)はページ内で操作できるため出さない
+    const onPlayingTab =
+      !!this.state &&
+      (this.state.tabId === this.tabManager.activeTabId || this.state.tabId === this.tabManager.splitTabId);
+    const visible = !!this.state && !this.docked && !this.tempHidden && !onPlayingTab;
     this.view.setVisible(visible);
     if (!visible) return;
 
