@@ -21,6 +21,15 @@ const updater = require('./updater');
 
 // ページのタイトルをHTMLの<title>から取得する(ショートカット追加時の名前自動設定用)。
 // 本文全体は読まず、</title>が見つかるまで先頭256KBだけ読む
+// 天気の既定の場所。レンダラーから来る値なので座標の範囲まで検査する(null = 未設定)
+function normalizeWeatherLocation(value) {
+  if (!value || typeof value !== 'object') return null;
+  const { name, lat, lon } = value;
+  if (!Number.isFinite(lat) || lat < -90 || lat > 90) return null;
+  if (!Number.isFinite(lon) || lon < -180 || lon > 180) return null;
+  return { name: typeof name === 'string' ? name.slice(0, 80) : '', lat, lon };
+}
+
 function decodeHtmlEntities(s) {
   const named = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
   return s.replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (all, ent) => {
@@ -755,6 +764,8 @@ function registerIpc() {
       settings.data[key] = normalizeToolbarItems(value);
     } else if (key === 'pinnedExtensions') {
       settings.data[key] = Array.isArray(value) ? value.filter((id) => typeof id === 'string').slice(0, 200) : [];
+    } else if (key === 'weatherLocation') {
+      settings.data[key] = normalizeWeatherLocation(value);
     } else if (key === 'startIconSize') {
       const [min, max] = browser.START_ICON_SIZE_RANGE;
       const n = Math.round(Number(value));

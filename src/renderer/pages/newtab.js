@@ -209,6 +209,8 @@ function shortcutTileEl(shortcut) {
 // グリッド(ショートカット+ウィジェットをスマホのホーム画面風に配置)
 // 並び順は widgets:layout(ページ単位)が持ち、ショートカットの実体はbookmarksのまま
 // =========================================================
+// 天気の既定の場所({ name, lat, lon })。イントロか設定画面で決める。null = 未設定
+let defaultWeatherLocation = null;
 let gridItems = []; // [{type:'shortcut', shortcut, x, y} | {type:'widget', id, widgetType, config, x, y, w, h}]
 let gridElToItem = new Map();
 
@@ -366,7 +368,9 @@ function widgetItemEl(item) {
   const title = document.createElement('span');
   title.className = 'widget-title';
   title.textContent =
-    item.widgetType === 'weather' && item.config.name ? item.config.name : WIDGET_META[item.widgetType].name;
+    item.widgetType === 'weather'
+      ? item.config.name || defaultWeatherLocation?.name || WIDGET_META.weather.name
+      : WIDGET_META[item.widgetType].name;
   const menuBtn = document.createElement('button');
   menuBtn.className = 'widget-menu-btn';
   menuBtn.textContent = '⋮';
@@ -823,8 +827,10 @@ function weatherEmoji(code) {
 }
 
 async function renderWeather(body, item) {
-  const cfg = item.config ?? {};
-  if (!Number.isFinite(cfg.lat)) {
+  // ウィジェット個別の設定 → 設定画面/イントロで決めた既定の場所 の順に使う。
+  // どちらも無ければ場所を選ぶUIを出す(固定の初期値は持たない)
+  const cfg = Number.isFinite(item.config?.lat) ? item.config : defaultWeatherLocation;
+  if (!Number.isFinite(cfg?.lat)) {
     renderWeatherSetup(body, item);
     return;
   }
@@ -873,7 +879,8 @@ function renderWeatherSetup(body, item) {
   const input = document.createElement('input');
   input.className = 'widget-input';
   input.type = 'text';
-  input.placeholder = '都市名(例: 東京)';
+  // 検索API(Open-Meteo)は日本語の地名にヒットしないため、ローマ字での入力を促す
+  input.placeholder = '都市名をローマ字で(例: Tokyo)';
   const results = document.createElement('div');
   results.className = 'widget-setup-results';
 
@@ -884,7 +891,9 @@ function renderWeatherSetup(body, item) {
     const places = await window.roopieInternal.geocodeCity(query);
     results.textContent = '';
     if (!places.length) {
-      results.textContent = '見つかりませんでした';
+      results.textContent = /[^\x00-\x7F]/.test(query)
+        ? '見つかりませんでした。ローマ字で入力してください(例: Tokyo)'
+        : '見つかりませんでした';
       return;
     }
     for (const place of places) {
@@ -1576,7 +1585,11 @@ loadLocalServers();
 // ---- 設定(アイコンの最大サイズ。設定画面での変更をライブ反映) ----
 function applySettings(settings) {
   iconSize = settings.startIconSize || 96;
+  const before = defaultWeatherLocation;
+  defaultWeatherLocation = settings.weatherLocation ?? null;
   applyGridMetrics();
+  // 場所が決まった/変わったら、既定の場所を使っている天気ウィジェットを描き直す
+  if (JSON.stringify(before) !== JSON.stringify(defaultWeatherLocation)) renderGrid();
 }
 window.roopieInternal.onSettings(applySettings);
 window.roopieInternal.getSettings().then(applySettings);

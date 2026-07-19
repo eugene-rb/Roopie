@@ -61,8 +61,32 @@
         </div>
       </section>
 
-      <!-- 5: 完了 -->
+      <!-- 5: 天気の場所 -->
       <section class="ob-step" data-step="4">
+        <h1 class="ob-title">お住まいの場所</h1>
+        <p class="ob-lead">
+          スタート画面の天気ウィジェットで使います。<br />
+          あとで変更できますし、飛ばしても構いません。
+        </p>
+        <div class="ob-field">
+          <div class="ob-field-label">都市をローマ字で検索(例: Tokyo, Osaka)</div>
+          <div class="ob-search-row">
+            <input
+              id="city-input"
+              class="ob-input"
+              type="text"
+              placeholder="Tokyo"
+              spellcheck="false"
+              autocomplete="off"
+            />
+            <button id="city-search" class="ob-btn">検索</button>
+          </div>
+          <div id="city-results" class="ob-results"></div>
+        </div>
+      </section>
+
+      <!-- 6: 完了 -->
+      <section class="ob-step" data-step="5">
         <div class="ob-logo">R</div>
         <h1 class="ob-title">準備ができました</h1>
         <p class="ob-lead">

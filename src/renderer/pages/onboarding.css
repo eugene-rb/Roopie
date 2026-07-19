@@ -251,6 +251,58 @@ body.onboarding {
   line-height: 1.6;
 }
 
+/* 都市検索(天気の場所) */
+.ob-search-row {
+  display: flex;
+  gap: 8px;
+}
+.ob-input {
+  flex: 1;
+  min-width: 0;
+  padding: 11px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--ob-border);
+  background: var(--ob-card);
+  color: var(--ob-text);
+  font-size: 14px;
+  font-family: inherit;
+}
+.ob-input:focus {
+  outline: none;
+  border-color: var(--accent, #6c8cff);
+}
+.ob-results {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.ob-result {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--ob-border);
+  background: var(--ob-card);
+  color: var(--ob-text);
+  font-size: 13px;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ob-result:hover {
+  border-color: color-mix(in srgb, var(--accent, #6c8cff) 60%, transparent);
+}
+.ob-result.selected {
+  border-color: var(--accent, #6c8cff);
+  background: color-mix(in srgb, var(--accent, #6c8cff) 16%, transparent);
+}
+.ob-hint {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--ob-dim);
+}
+
 /* フッター(ボタン+進捗ドット) */
 .ob-actions {
   display: flex;

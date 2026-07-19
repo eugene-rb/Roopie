@@ -99,6 +99,8 @@ function finish() {
 
 // 左右キーでも進める
 document.addEventListener('keydown', (e) => {
+  // 入力欄では矢印もEnterも入力側の操作(ステップ送りに使わない)
+  if (e.target instanceof HTMLInputElement) return;
   // ボタンにフォーカスがあるときのEnterは既定のクリックに任せる(二重発火を防ぐ)
   if (e.key === 'Enter' && e.target instanceof HTMLButtonElement) return;
   if (e.key === 'ArrowRight' || e.key === 'Enter') nextBtn.click();
@@ -149,6 +151,50 @@ function renderAccents(current) {
   }
 }
 
+// ---- 天気の場所(スタート画面の天気ウィジェットが既定で使う) ----
+
+const cityInput = document.getElementById('city-input');
+const cityResults = document.getElementById('city-results');
+
+async function searchCity() {
+  const query = cityInput.value.trim();
+  if (!query) return;
+  cityResults.textContent = '';
+  const hint = document.createElement('div');
+  hint.className = 'ob-hint';
+  hint.textContent = '検索中…';
+  cityResults.appendChild(hint);
+
+  const places = await api.geocodeCity(query);
+  cityResults.textContent = '';
+  if (!places.length) {
+    // 検索API(Open-Meteo)は日本語の地名にヒットしない
+    hint.textContent = /[^\x00-\x7F]/.test(query)
+      ? '見つかりませんでした。ローマ字で入力してください(例: Tokyo)'
+      : '見つかりませんでした。別の書き方で試してください';
+    cityResults.appendChild(hint);
+    return;
+  }
+  for (const place of places) {
+    const btn = document.createElement('button');
+    btn.className = 'ob-result';
+    btn.textContent = [place.name, place.admin, place.country].filter(Boolean).join(' / ');
+    btn.addEventListener('click', () => {
+      for (const other of cityResults.children) other.classList.remove('selected');
+      btn.classList.add('selected');
+      api.setSetting('weatherLocation', { name: place.name, lat: place.lat, lon: place.lon });
+    });
+    cityResults.appendChild(btn);
+  }
+}
+
+document.getElementById('city-search').addEventListener('click', searchCity);
+cityInput.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  e.stopPropagation(); // ステップ送りのEnterと二重に反応させない
+  searchCity();
+});
+
 document.getElementById('features').appendChild(window.roopieObCards(FEATURES));
 
 api.getAppInfo().then((info) => {
@@ -166,6 +212,14 @@ Promise.all([api.getSettings(), api.getTheme()]).then(([settings, theme]) => {
   choiceGroup(document.getElementById('adblock'), ADBLOCK, settings.adblock !== false, (v) =>
     api.setSetting('adblock', v)
   );
+  // 設定済みならそれを見せる(イントロを見直したときのため)
+  if (settings.weatherLocation?.name) {
+    cityInput.value = settings.weatherLocation.name;
+    const hint = document.createElement('div');
+    hint.className = 'ob-hint';
+    hint.textContent = `現在の設定: ${settings.weatherLocation.name}`;
+    cityResults.appendChild(hint);
+  }
 });
 
 render();

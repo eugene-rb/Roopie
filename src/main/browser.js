@@ -43,6 +43,9 @@ const DEFAULT_SETTINGS = {
   // 自動入力(住所・個人情報/お支払い方法)のON/OFF
   autofillAddresses: true,
   autofillCards: true,
+  // 天気ウィジェットの既定の場所({ name, lat, lon })。null = 未設定(イントロか各ウィジェットで設定する)。
+  // 固定の初期値は持たない(勝手に他の都市の天気を出さないため)
+  weatherLocation: null,
   // スタート画面のアイコン最大サイズ(px)。列数・行数はこれとウィンドウ幅・高さから自動計算する
   // (ウィンドウをリサイズしてもアイコン自体の大きさは変わらず、表示できる列数・行数だけが変わる)
   startIconSize: 96,

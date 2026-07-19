@@ -87,7 +87,7 @@ app.whenReady().then(async () => {
     const wc = pageWc(ctx);
     check('イントロが開いた', await waitFor(wc, `!!document.querySelector('.ob-step.active')`), true);
     check('機能カードが並ぶ', await js(wc, `document.querySelectorAll('#features .ob-card').length`), 6);
-    check('進捗ドットはステップ数と同じ', await js(wc, `document.querySelectorAll('.ob-dot').length`), 5);
+    check('進捗ドットはステップ数と同じ', await js(wc, `document.querySelectorAll('.ob-dot').length`), 6);
     check(
       'バージョンが表示される',
       await js(wc, `/^バージョン \\d/.test(document.getElementById('version-badge').textContent)`),
@@ -129,11 +129,43 @@ app.whenReady().then(async () => {
     check('広告ブロックのOFFが即反映される', browser.settings.data.adblock, false);
     await shot(wc, 'onboarding-3-search.png');
 
+    // 天気の場所(既定値は持たず、ここで設定を促す)
+    await js(wc, `document.getElementById('next').click()`);
+    await sleep(300);
+    check('5ステップ目(天気の場所)', await js(wc, `document.querySelector('.ob-step.active').dataset.step`), '4');
+    check('都市検索のUIがある', await js(wc, `!!document.getElementById('city-input') && !!document.getElementById('city-search')`), true);
+    check('天気の場所は初期状態では未設定', browser.settings.data.weatherLocation, null);
+
+    // 実際に検索して選ぶ(Open-Meteoの検索APIを使うのでネットワークが必要)。
+    // このAPIは日本語の地名にヒットしないため、ローマ字で引けることを確認する
+    await js(wc, `(() => { document.getElementById('city-input').value = 'Tokyo'; document.getElementById('city-search').click(); })()`);
+    await sleep(2500);
+    const hits = await js(wc, `document.querySelectorAll('#city-results .ob-result').length`);
+    check('ローマ字の都市名で候補が出る', hits > 0, true);
+    if (hits > 0) {
+      await js(wc, `document.querySelector('#city-results .ob-result').click()`);
+      await sleep(400);
+      const saved = browser.settings.data.weatherLocation;
+      check('候補を選ぶと場所が保存される', Number.isFinite(saved?.lat) && Number.isFinite(saved?.lon), true);
+      console.log(`   選ばれた場所: ${saved?.name} (${saved?.lat}, ${saved?.lon})`);
+    }
+
+    // 検索結果のクリックと同じ経路(通信せずにIPCの正規化だけを見る)
+    await js(wc, `window.roopieInternal.setSetting('weatherLocation', { name: '検証市', lat: 35.6, lon: 139.7 })`);
+    await sleep(300);
+    check('選んだ場所が保存される', browser.settings.data.weatherLocation, { name: '検証市', lat: 35.6, lon: 139.7 });
+    await js(wc, `window.roopieInternal.setSetting('weatherLocation', { name: 'x', lat: 999, lon: 0 })`);
+    await sleep(300);
+    check('おかしな座標は弾く', browser.settings.data.weatherLocation, null);
+    await js(wc, `window.roopieInternal.setSetting('weatherLocation', { name: '検証市', lat: 35.6, lon: 139.7 })`);
+    await sleep(200);
+    await shot(wc, 'onboarding-4-weather.png');
+
     // 完了 → 新しいタブへ
     await js(wc, `document.getElementById('next').click()`);
     await sleep(300);
-    check('最終ステップ', await js(wc, `document.querySelector('.ob-step.active').dataset.step`), '4');
-    await shot(wc, 'onboarding-4-done.png');
+    check('最終ステップ', await js(wc, `document.querySelector('.ob-step.active').dataset.step`), '5');
+    await shot(wc, 'onboarding-5-done.png');
     await js(wc, `document.getElementById('next').click()`);
     await sleep(1200);
     check('イントロを抜けると新しいタブ', pageWc(ctx).getURL().startsWith('roopie://newtab'), true);
