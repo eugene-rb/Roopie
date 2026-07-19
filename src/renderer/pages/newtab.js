@@ -879,8 +879,9 @@ function renderWeatherSetup(body, item) {
   const input = document.createElement('input');
   input.className = 'widget-input';
   input.type = 'text';
-  // 検索API(Open-Meteo)は日本語の地名にヒットしないため、ローマ字での入力を促す
-  input.placeholder = '都市名をローマ字で(例: Tokyo)';
+  // 検索API(Open-Meteo)は日本語の地名でも当たるものと当たらないものがある
+  // (「名古屋」「東京都」は当たるが「東京」「大阪」「札幌」は0件)。ローマ字なら確実に当たる
+  input.placeholder = '都市名(例: Tokyo / 名古屋)';
   const results = document.createElement('div');
   results.className = 'widget-setup-results';
 
@@ -892,7 +893,7 @@ function renderWeatherSetup(body, item) {
     results.textContent = '';
     if (!places.length) {
       results.textContent = /[^\x00-\x7F]/.test(query)
-        ? '見つかりませんでした。ローマ字で入力してください(例: Tokyo)'
+        ? '見つかりませんでした。ローマ字でも試してみてください(例: Tokyo)'
         : '見つかりませんでした';
       return;
     }

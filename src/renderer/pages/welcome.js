@@ -168,9 +168,9 @@ async function searchCity() {
   const places = await api.geocodeCity(query);
   cityResults.textContent = '';
   if (!places.length) {
-    // 検索API(Open-Meteo)は日本語の地名にヒットしない
+    // 検索API(Open-Meteo)は日本語の地名でも当たり外れがある(ローマ字なら確実)
     hint.textContent = /[^\x00-\x7F]/.test(query)
-      ? '見つかりませんでした。ローマ字で入力してください(例: Tokyo)'
+      ? '見つかりませんでした。ローマ字でも試してみてください(例: Tokyo)'
       : '見つかりませんでした。別の書き方で試してください';
     cityResults.appendChild(hint);
     return;
