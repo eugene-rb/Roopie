@@ -44,7 +44,29 @@ class Tor extends EventEmitter {
   }
 
   state() {
-    return { status: this.status, socksPort: this.socksPort, error: this.error };
+    return {
+      status: this.status,
+      socksPort: this.socksPort,
+      error: this.error,
+      version: this.bundledVersion(),
+    };
+  }
+
+  // 同梱しているtorのバージョン(scripts/fetch-tor.js が置く VERSION ファイルの2行目)。
+  // リリースのたびにCIが最新版を取り直すので、設定画面に出して確認できるようにしている
+  bundledVersion() {
+    if (this._version !== undefined) return this._version;
+    this._version = null;
+    const exe = this.findTorExecutable();
+    if (exe) {
+      try {
+        const lines = fs.readFileSync(path.join(path.dirname(exe), 'VERSION'), 'utf8').split('\n');
+        this._version = lines[1]?.trim() || null;
+      } catch {
+        // ユーザーが自分で置いたtor.exeにはVERSIONが無い(表示しないだけ)
+      }
+    }
+    return this._version;
   }
 
   // 少なくとも1つのプロファイルがTorを有効にしたときに呼ぶ。準備できたらproxyRulesが使える
@@ -77,6 +99,7 @@ class Tor extends EventEmitter {
     // 2. tor.exe を探して起動する
     const torExe = this.findTorExecutable();
     if (!torExe) {
+      // 通常はRoopieに同梱しているのでここには来ない(同梱に失敗したビルドか、非対応プラットフォーム)
       throw new Error(
         'Torが見つかりません。Tor Browserを起動しておくか、tor.exeを %APPDATA%/Roopie/tor/ に配置してください'
       );
@@ -88,10 +111,17 @@ class Tor extends EventEmitter {
     return OWN_SOCKS_PORT;
   }
 
-  // tor.exe の在りかを順に探す
+  // tor.exe の在りかを順に探す。
+  // 1. ユーザーが置いたもの(上書き用。自分でビルドしたtorを使いたい人向け)
+  // 2. Roopieに同梱したもの(scripts/fetch-tor.js が vendor/tor へ配置 → extraResourcesで同梱)
+  // 3. インストール済みのTor Browser
   findTorExecutable() {
+    const exeName = process.platform === 'win32' ? 'tor.exe' : 'tor';
     const candidates = [
-      path.join(app.getPath('userData'), 'tor', process.platform === 'win32' ? 'tor.exe' : 'tor'),
+      path.join(app.getPath('userData'), 'tor', exeName),
+      app.isPackaged
+        ? path.join(process.resourcesPath, 'tor', exeName)
+        : path.join(__dirname, '..', '..', 'vendor', 'tor', exeName),
     ];
     if (process.platform === 'win32') {
       const pf = process.env['ProgramFiles'] || 'C:\\Program Files';

@@ -34,6 +34,7 @@ npm run dist           # インストーラーをローカルにビルド(dist/)
 | `test-trackers-panel.js` | トラッキング分析 |
 | `test-autofill-main.js` / `test-autofill-preload.js` | パスワード・自動入力 |
 | `test-media-player.js` | メディアプレイヤー |
+| `test-tor.js` | 同梱Torの起動〜Torネットワーク接続(30〜90秒) |
 
 構成の詳細は [CLAUDE.md](CLAUDE.md)、現在の状態は [log.md](log.md) を参照してください。
 
@@ -43,10 +44,22 @@ npm run dist           # インストーラーをローカルにビルド(dist/)
 バージョンは `0.1.<Actionsの実行番号>`。メジャー/マイナーを上げるときは `.github/workflows/release.yml` の `VERSION_BASE` を変更し、
 あわせて `src/renderer/pages/release-notes.json` に変更点を1件追加します(次回起動時に全ユーザーへ1度だけ表示されます)。
 
+## 同梱している Tor について
+
+プロファイルごとの「Torで接続」を追加インストール無しで使えるよう、Tor Project 公式の
+[Tor Expert Bundle](https://www.torproject.org/download/tor/)(Windows x86_64)から `tor.exe` を同梱しています。
+
+- 取得は `npm run fetch:tor`(`scripts/fetch-tor.js`)。公開されている SHA256 と照合し、起動確認まで行います
+- **リリースのたびにCIが最新の安定版を取り直す**ので、Roopieを更新すると同梱のTorも新しくなります。同梱バージョンは設定画面のTorの状態表示で確認できます
+- ブリッジ用の pluggable transports(obfs4/snowflake)と geoip は同梱していません(サイズ削減。検閲環境向けのブリッジ接続は未対応です)
+- 既に Tor Browser や素の Tor が動いている場合はそちらを優先して使います。`%APPDATA%\Roopie\tor\tor.exe` を置けば自分でビルドしたものに差し替えられます
+- tor 本体のライセンスは同梱の `resources/tor/docs/` を参照してください。Roopie は tor を別プロセスとして SOCKS5 経由で利用するだけで、リンクはしていません
+
 ## 既知の制約
 
 - uBlock Origin などのブロッキング型拡張は動きません(Electronの制約。内蔵の広告ブロックで代替しています)
 - シークレットウィンドウでは拡張機能が動きません(Electronの制約)
+- 検閲された回線からのブリッジ接続には未対応です(pluggable transports 非同梱)
 
 ## ライセンス
 

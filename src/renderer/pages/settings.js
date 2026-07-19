@@ -124,7 +124,7 @@ function buildTorRow(profile) {
 
   const row = createToggleRow({
     name: 'Torで接続',
-    desc: 'このプロファイルの通信をTorネットワーク経由にします(接続が遅くなります)',
+    desc: 'このプロファイルの通信をTorネットワーク経由にします。Roopieに同梱したTorを使うので追加のインストールは不要です(接続は遅くなります)',
     checked: !!profile.tor,
     onChange: (checked) => window.roopieInternal.setProfileTor(profile.id, checked),
   });
@@ -146,7 +146,7 @@ function torStatusText(state) {
     case 'starting':
       return 'Torに接続しています…';
     case 'ready':
-      return `Torに接続済み(ポート ${state.socksPort})`;
+      return `Torに接続済み(ポート ${state.socksPort}${state.version ? ` / Tor ${state.version}` : ''})`;
     case 'error':
       return `Torに接続できません: ${state.error ?? '不明なエラー'}`;
     default:

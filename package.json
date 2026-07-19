@@ -11,8 +11,9 @@
     "watch:css": "tailwindcss -i src/renderer/tailwind.css -o src/renderer/pages/app.css --watch",
     "gen:icon": "electron scripts/gen-icon.js",
     "gen:installer-art": "electron scripts/gen-installer-art.js",
-    "dist": "electron-builder --win",
-    "release": "electron-builder --win --publish always"
+    "fetch:tor": "node scripts/fetch-tor.js --latest",
+    "dist": "node scripts/fetch-tor.js --ensure && electron-builder --win",
+    "release": "node scripts/fetch-tor.js --ensure && electron-builder --win --publish always"
   },
   "keywords": [],
   "author": "eugene-rb",
@@ -31,6 +32,12 @@
     "files": [
       "src/**/*",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "vendor/tor",
+        "to": "tor"
+      }
     ],
     "win": {
       "target": "nsis",

@@ -45,6 +45,11 @@ jobs:
       - name: CSSをビルド(tailwind.css → pages/app.css)
         run: npm run build:css
 
+      # 同梱するTor本体を毎回最新の安定版で取り直す(=Roopieを更新するとTorも新しくなる)。
+      # Tor Projectのサーバーに繋がらないときはスクリプト側が固定バージョンに落ちる
+      - name: Tor本体を取得(最新の安定版)
+        run: npm run fetch:tor
+
       - name: バージョンを決めてタグを作る
         shell: bash
         run: |
