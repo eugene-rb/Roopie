@@ -41,7 +41,8 @@
     "publish": {
       "provider": "github",
       "owner": "eugene-rb",
-      "repo": "Roopie"
+      "repo": "Roopie",
+      "releaseType": "release"
     }
   },
   "type": "commonjs",

@@ -1,0 +1,86 @@
+# masterへのpushごとにインストーラーをビルドしてGitHub Releasesへ公開する。
+# インストール済みのRoopieはReleasesを見て自動アップデートするため、これで変更が自動で行き渡る。
+#
+# バージョンはワークフローの実行番号から 0.1.<run_number> を組み立てて使う。
+# package.json は書き換えずビルド時にだけ差し替えるので、CIがmasterへpushし返すことがなく、
+# 「バージョン更新のコミット → それがまたCIを起動」という無限ループが起きない。
+# メジャー/マイナーを上げたいときは下の VERSION_BASE を変える。
+name: Release
+
+on:
+  push:
+    branches: [master]
+    # ドキュメントだけの変更ではビルドしない(1回あたり約100MBの成果物が増えるため)
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+  workflow_dispatch: # 手動実行も可能
+
+permissions:
+  contents: write # Releasesの作成に必要
+
+# 同時に複数のリリースが走るとバージョンの前後が入れ替わるので直列化する
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  VERSION_BASE: '0.1'
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: 依存をインストール
+        run: npm ci
+
+      - name: CSSをビルド(tailwind.css → pages/app.css)
+        run: npm run build:css
+
+      - name: バージョンを決める
+        shell: bash
+        run: |
+          VERSION="${VERSION_BASE}.${{ github.run_number }}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          # package.json はコミットせずビルド用に書き換えるだけ
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          echo "このビルドのバージョン: $VERSION"
+
+      - name: インストーラーをビルドしてReleasesへ公開
+        run: npm run release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 公開結果を確認(exe と latest.yml が付いているか)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          assets=$(gh release view "v$VERSION" --json assets --jq '.assets[].name')
+          echo "$assets"
+          # latest.yml が無いと electron-updater が更新を検知できない
+          echo "$assets" | grep -q '^latest.yml$' || { echo '::error::latest.yml がありません'; exit 1; }
+          echo "$assets" | grep -q '\.exe$' || { echo '::error::インストーラー(.exe)がありません'; exit 1; }
+
+      # 1回あたり約100MBあるので、古いリリースは消して直近だけ残す
+      - name: 古いリリースを整理(直近10件を残す)
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release list --limit 100 --json tagName,createdAt \
+            --jq 'sort_by(.createdAt) | reverse | .[10:] | .[].tagName' \
+            | while read -r tag; do
+                [ -n "$tag" ] || continue
+                echo "削除: $tag"
+                gh release delete "$tag" --yes --cleanup-tag
+              done

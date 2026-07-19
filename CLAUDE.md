@@ -20,7 +20,12 @@
   - (2026-07-17) Webパネルの「管理画面」は持たない(ユーザー指示で廃止)。追加=「+」またはレール右クリック、編集・削除=ピン留めアイコンの右クリックメニューのみ
   - (2026-07-17) アイコン設定UIは全箇所で共通の `icon-picker.js` を使う(プロファイル/Webパネル/スタートのショートカット)。Webパネル・ショートカットのアイコン既定はリンク先のfavicon。新たにアイコンを持つ要素を作るときも必ずこの共通ピッカーとfavicon既定に合わせる
   - (2026-07-17) 依頼済みの3機能(パスワード/オートフィル拡充・スタート画面ウィジェット・プロファイルのEdge挙動)は対応済み。プロファイルは「ウィンドウ単位」がアーキテクチャの前提になった: メインの各機能は browser.bundleFor(ctx.profileId) でデータを引く(browser.bookmarks等のグローバルはアクティブ束を指す互換ゲッター)。新機能も必ずこの前提で書く
-  - (2026-07-18) 配布と自動アップデート: electron-builder(NSIS形式。MSIはelectron-updater非対応のため使わない)+ GitHub Releases + electron-updater(`src/main/updater.js`、パッケージ版のみ動作)。リリース手順=package.jsonのversionを上げて `npm run release`(要GH_TOKEN)or `npm run dist`+`gh release create v<version> <exe> <blockmap> dist/latest.yml`(latest.yml必須)。アイコンは build/icon.ico(仮ロゴ。`npx electron scripts/gen-icon.js` で再生成、正式ロゴは差し替えるだけ)
+  - (2026-07-18) 配布と自動アップデート: electron-builder(NSIS形式。MSIはelectron-updater非対応のため使わない)+ GitHub Releases + electron-updater(`src/main/updater.js`、パッケージ版のみ動作)。アイコンは build/icon.ico(仮ロゴ。`npx electron scripts/gen-icon.js` で再生成、正式ロゴは差し替えるだけ)
+  - (2026-07-19) リリースは自動化済み。**masterへpushするだけ**でGitHub Actions(`.github/workflows/release.yml`)がビルドしてReleasesへ公開し、インストール済みのRoopieが自動更新する(起動時+15分ごとに確認)。手動で `npm run release` を叩く必要はない
+    - バージョンは `0.1.<GitHub Actionsの実行番号>` を**ビルド時にだけ**適用する(package.jsonは0.1.0のまま=CIがpushし返さないので無限ループしない)。メジャー/マイナーを上げるときはワークフローの `VERSION_BASE` を変える
+    - `publish.releaseType: "release"` は必須。既定の `draft` だとelectron-updaterから見えず自動更新が動かない
+    - 成果物は1回約100MBなので、ワークフローが古いリリースを消して直近10件だけ残す。`**.md` だけの変更ではビルドしない
+    - ローカルで確認したいときだけ `npm run dist`(dist/ に出力、公開はしない)
 
 ---
 
