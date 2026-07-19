@@ -812,6 +812,26 @@ function widgetNote(body, text) {
   return note;
 }
 
+// ウィジェット内の設定UIの一時メッセージ(空文字で消す)。操作が無視された理由をその場で伝える
+let widgetSetupErrorTimer = null;
+function widgetSetupError(wrap, message) {
+  clearTimeout(widgetSetupErrorTimer);
+  let el = wrap.querySelector('.widget-setup-error');
+  if (!message) {
+    el?.remove();
+    return;
+  }
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'widget-setup-error';
+    const list = wrap.querySelector('.widget-setup-results');
+    if (list) wrap.insertBefore(el, list);
+    else wrap.appendChild(el);
+  }
+  el.textContent = message;
+  widgetSetupErrorTimer = setTimeout(() => el.remove(), 4000);
+}
+
 // ---- 天気(Open-Meteo。メイン経由で取得) ----
 function weatherEmoji(code) {
   if (code === 0) return '☀️';
@@ -1066,6 +1086,19 @@ async function renderNews(body, item) {
   body.appendChild(list);
 }
 
+// URLを人が読める名前にする(定番フィードならそのラベル、それ以外はホスト名)
+function feedLabel(url) {
+  const preset = NEWS_PRESETS.find((p) => p.url === url);
+  if (preset) return preset.label;
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+}
+
+// ウィジェットは小さい(既定3x2セル)ので、縦を食うプリセットのボタン列はプルダウン1行にまとめ、
+// 空いた高さは「追加済みフィードの一覧」に全部渡す(追加した結果がその場で見えるのが最優先)
 function renderNewsSetup(body, item) {
   body.textContent = '';
   const wrap = document.createElement('div');
@@ -1081,24 +1114,33 @@ function renderNewsSetup(body, item) {
   }
   function renderList() {
     listEl.textContent = '';
+    if (!feeds.length) {
+      const empty = document.createElement('div');
+      empty.className = 'widget-note';
+      empty.textContent = 'フィードを追加してください';
+      listEl.appendChild(empty);
+    }
     for (const [index, url] of feeds.entries()) {
       const row = document.createElement('div');
       row.className = 'widget-feed-row';
       const label = document.createElement('span');
-      label.textContent = url;
+      label.textContent = feedLabel(url);
+      label.title = url;
       const remove = document.createElement('button');
       remove.className = 'widget-btn';
       remove.textContent = '✕';
+      remove.title = '削除';
       remove.addEventListener('click', () => {
         feeds.splice(index, 1);
         save();
         renderList();
+        renderPresets();
+        syncDone();
       });
       row.append(label, remove);
       listEl.appendChild(row);
     }
   }
-  renderList();
 
   const input = document.createElement('input');
   input.className = 'widget-input';
@@ -1107,13 +1149,25 @@ function renderNewsSetup(body, item) {
   const addBtn = document.createElement('button');
   addBtn.className = 'widget-btn';
   addBtn.textContent = '追加';
+  // 追加できなかった理由(URL形式・重複)を黙って捨てず、その場で伝える
   function addFeed(url) {
     const clean = String(url ?? '').trim();
-    if (!/^https?:\/\//i.test(clean) || feeds.includes(clean)) return;
+    if (!clean) return;
+    if (!/^https?:\/\//i.test(clean)) {
+      widgetSetupError(wrap, 'http:// または https:// で始まるURLを入力してください');
+      return;
+    }
+    if (feeds.includes(clean)) {
+      widgetSetupError(wrap, 'そのフィードは追加済みです');
+      return;
+    }
     feeds.push(clean);
     save();
     renderList();
+    renderPresets();
+    syncDone();
     input.value = '';
+    widgetSetupError(wrap, '');
   }
   addBtn.addEventListener('click', () => addFeed(input.value));
   input.addEventListener('keydown', (e) => {
@@ -1124,22 +1178,45 @@ function renderNewsSetup(body, item) {
   row.className = 'widget-setup-row';
   row.append(input, addBtn);
 
-  const presets = document.createElement('div');
-  presets.className = 'widget-setup-row';
-  for (const preset of NEWS_PRESETS) {
-    const btn = document.createElement('button');
-    btn.className = 'widget-btn';
-    btn.textContent = `+ ${preset.label}`;
-    btn.addEventListener('click', () => addFeed(preset.url));
-    presets.appendChild(btn);
+  // 定番フィードのプルダウン(追加済みのものは選択肢から消える=押した手応えになる)
+  const presetRow = document.createElement('div');
+  presetRow.className = 'widget-setup-row';
+  const select = document.createElement('select');
+  select.className = 'widget-select';
+  function renderPresets() {
+    select.textContent = '';
+    const rest = NEWS_PRESETS.filter((p) => !feeds.includes(p.url));
+    const head = document.createElement('option');
+    head.value = '';
+    head.textContent = rest.length ? '定番のニュースから追加…' : '定番はすべて追加済み';
+    select.appendChild(head);
+    for (const preset of rest) {
+      const opt = document.createElement('option');
+      opt.value = preset.url;
+      opt.textContent = preset.label;
+      select.appendChild(opt);
+    }
+    select.disabled = !rest.length;
   }
+  select.addEventListener('change', () => {
+    if (select.value) addFeed(select.value);
+    select.value = '';
+  });
+  renderPresets();
+  presetRow.append(select);
 
   const done = document.createElement('button');
   done.className = 'widget-btn widget-btn-primary';
-  done.textContent = '表示する';
   done.addEventListener('click', () => renderNews(body, item));
+  // フィードが無いまま「表示する」を押すとこの画面に戻るだけで壊れて見えるので、その間は押せなくする
+  function syncDone() {
+    done.disabled = !feeds.length;
+    done.textContent = feeds.length ? `表示する(${feeds.length}件)` : '表示する';
+  }
+  renderList();
+  syncDone();
 
-  wrap.append(row, presets, listEl, done);
+  wrap.append(row, presetRow, listEl, done);
   body.appendChild(wrap);
 }
 

@@ -849,12 +849,14 @@ body[data-bg="plain"] .cal-day.sat {
 }
 
 /* ---- ウィジェット内の設定UI(天気の場所検索/ニュースのフィード管理) ---- */
+/* 本体の高さいっぱいを使い、余った高さは中の一覧(.widget-setup-results)に渡す。
+   ここでflex:1を与えないと一覧だけがflex-shrinkで数pxに潰れ、追加したフィードが見えなくなる */
 .widget-setup {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  flex: 1;
   min-height: 0;
-  overflow-y: auto;
   font-size: 12px;
 }
 
@@ -895,6 +897,16 @@ body[data-bg="plain"] .widget-input {
   background: rgba(255, 255, 255, 0.25);
 }
 
+.widget-btn:disabled,
+.widget-select:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.widget-btn:disabled:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
 .widget-btn-primary {
   background: var(--accent);
   color: #fff;
@@ -904,7 +916,26 @@ body[data-bg="plain"] .widget-input {
   display: flex;
   flex-direction: column;
   gap: 3px;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
+}
+
+/* 定番フィードのプルダウン(ボタンを8個並べると縦を食い尽くすため1行にまとめている) */
+.widget-select {
+  border: none;
+  border-radius: 8px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.15);
+  color: inherit;
+  cursor: pointer;
+  font-size: 11px;
+  flex: 1;
+  min-width: 0;
+}
+
+.widget-select option {
+  color: #111;
 }
 
 .widget-setup-result {
@@ -922,11 +953,27 @@ body[data-bg="plain"] .widget-input {
   background: rgba(255, 255, 255, 0.2);
 }
 
+.widget-setup-error {
+  flex-shrink: 0;
+  font-size: 10px;
+  line-height: 1.3;
+  color: #ffb4b4;
+}
+
 .widget-feed-row {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 10px;
+  flex-shrink: 0;
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 2px 4px 2px 8px;
+}
+
+.widget-feed-row .widget-btn {
+  padding: 1px 5px;
+  line-height: 1.4;
 }
 
 .widget-feed-row span {

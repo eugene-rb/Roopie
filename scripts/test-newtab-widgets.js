@@ -102,9 +102,53 @@ app.whenReady().then(async () => {
   await js(`[...document.querySelectorAll('.grid-popup-item')].find((b) => b.textContent.includes('ニュース')).click()`);
   await sleep(300);
   check('ニュース追加(設定UI)', await js(`!!document.querySelector('.widget-news .widget-setup')`), true);
-  await js(`[...document.querySelectorAll('.widget-news .widget-btn')].find((b) => b.textContent.includes('NHK')).click()`);
+  check('フィードが無いうちは「表示する」を押せない', await js(`[...document.querySelectorAll('.widget-news .widget-btn')].find((b) => b.textContent.startsWith('表示する')).disabled`), true);
+
+  // 定番フィードはプルダウンから追加する(ボタンを8個並べると縦を食い尽くし一覧が潰れるため)
+  const pickPreset = (label) =>
+    js(`(() => {
+      const s = document.querySelector('.widget-news .widget-select');
+      const opt = [...s.options].find((o) => o.textContent.includes(${JSON.stringify(label)}));
+      s.value = opt.value;
+      s.dispatchEvent(new Event('change', { bubbles: true }));
+    })()`);
+  await pickPreset('NHK');
   await sleep(100);
-  await js(`[...document.querySelectorAll('.widget-news .widget-btn')].find((b) => b.textContent === '表示する').click()`);
+  check('追加したフィードが一覧に出る', await js(`document.querySelectorAll('.widget-news .widget-feed-row').length`), 1);
+  check('一覧はURLでなく名前で表示される', await js(`document.querySelector('.widget-news .widget-feed-row span').textContent`), 'NHKニュース');
+  check('追加済みの定番はプルダウンから消える', await js(`[...document.querySelector('.widget-news .widget-select').options].some((o) => o.textContent.includes('NHK'))`), false);
+
+  // 一覧が潰れずに見えていること(以前は他の要素にflex-shrinkで押し潰され高さ数pxだった)
+  const listVisible = await js(`(() => {
+    const body = document.querySelector('.widget-news .widget-body').getBoundingClientRect();
+    const list = document.querySelector('.widget-news .widget-setup-results').getBoundingClientRect();
+    const row = document.querySelector('.widget-news .widget-feed-row').getBoundingClientRect();
+    return { listH: list.height, rowH: row.height, rowInside: row.bottom <= body.bottom + 0.5 && row.top >= body.top - 0.5 };
+  })()`);
+  check('フィード一覧が1行以上の高さを持つ', listVisible.listH >= listVisible.rowH, true);
+  check('追加した行がウィジェット内に収まって見える', listVisible.rowInside && listVisible.rowH > 8, true);
+
+  // 重複・不正URLは黙って無視せず理由を出す
+  const typeAndAdd = (value) =>
+    js(`(() => { const w = document.querySelector('.widget-news'); w.querySelector('.widget-input').value = ${JSON.stringify(value)}; [...w.querySelectorAll('.widget-btn')].find((b) => b.textContent === '追加').click(); })()`);
+  await typeAndAdd('nhk.or.jp/rss');
+  await sleep(80);
+  check('URL形式が不正なときはエラーを表示', await js(`!!document.querySelector('.widget-news .widget-setup-error')`), true);
+  await typeAndAdd('https://www.nhk.or.jp/rss/news/cat0.xml');
+  await sleep(80);
+  check('重複追加は増やさない', await js(`document.querySelectorAll('.widget-news .widget-feed-row').length`), 1);
+  check('重複追加のときもエラーを表示', await js(`document.querySelector('.widget-news .widget-setup-error')?.textContent`), 'そのフィードは追加済みです');
+
+  // ✕で削除するとプルダウンに戻る
+  await pickPreset('CNN');
+  await sleep(80);
+  check('2件目を追加できる', await js(`document.querySelectorAll('.widget-news .widget-feed-row').length`), 2);
+  await js(`[...document.querySelectorAll('.widget-news .widget-feed-row')].at(-1).querySelector('.widget-btn').click()`);
+  await sleep(80);
+  check('✕でフィードを削除できる', await js(`document.querySelectorAll('.widget-news .widget-feed-row').length`), 1);
+  check('削除した定番はプルダウンに戻る', await js(`[...document.querySelector('.widget-news .widget-select').options].some((o) => o.textContent.includes('CNN'))`), true);
+
+  await js(`[...document.querySelectorAll('.widget-news .widget-btn')].find((b) => b.textContent.startsWith('表示する')).click()`);
   await sleep(300);
   check('記事が表示される', await js(`document.querySelectorAll('.widget-news .news-item').length`), 2);
   check('新しい記事が先頭', await js(`document.querySelector('.widget-news .news-item')?.textContent`), '記事2のタイトル');
