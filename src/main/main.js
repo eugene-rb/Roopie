@@ -36,8 +36,9 @@ app.whenReady().then(() => {
     setupMenu();
     browser.sendKeybindings();
   };
-  // 初回起動ならイントロ、アップデート直後なら変更点を最初のタブに開く(通常は新しいタブ)
-  browser.createWindow({ url: appState.takeStartupUrl() });
+  // 初回起動ならイントロ、アップデート直後なら変更点を最初のタブに開く(通常は新しいタブ)。
+  // 設定で「起動時に前回のタブを復元」がONなら、前回終了時のウィンドウ・タブを開き直す
+  browser.openStartupWindows({ url: appState.takeStartupUrl() });
   setupAutoUpdater();
 });
 
@@ -46,6 +47,9 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  // 終了時のタブ構成を保存する(「起動時に前回のタブを復元」で使う)。
+  // ウィンドウが閉じられる前に呼ぶ必要があるため、flushAllより先に行う
+  browser.saveAllSessions();
   browser.flushAll();
   appState.flush();
   browser.tor.stop();

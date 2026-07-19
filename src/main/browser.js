@@ -49,6 +49,8 @@ const DEFAULT_SETTINGS = {
   // スタート画面のアイコン最大サイズ(px)。列数・行数はこれとウィンドウ幅・高さから自動計算する
   // (ウィンドウをリサイズしてもアイコン自体の大きさは変わらず、表示できる列数・行数だけが変わる)
   startIconSize: 96,
+  // 起動時に前回終了時のタブを復元するか。既定はOFF(これまでの挙動=新しいタブで開始)
+  restoreTabsOnStart: false,
 };
 const START_ICON_SIZE_RANGE = [48, 160];
 const DEFAULT_THEME = {
@@ -271,10 +273,12 @@ function createIncognitoSession() {
   return electronSession.fromPartition(`incognito-${++browser.incognitoCount}`);
 }
 
-// シークレットでは履歴を残さない(Historyと同じインターフェースの空実装)
+// シークレットでは履歴を残さない(Historyと同じインターフェースの空実装)。
+// Historyにメソッドを足したらここにも足すこと(足し忘れるとシークレットで落ちる)
 const NULL_HISTORY = {
   add() {},
   update() {},
+  has: () => false, // 「前にも来たページ」の判定。シークレットでは常に初回扱い
   list: () => [],
   remove() {},
   clear() {},
@@ -401,8 +405,13 @@ browser.createWindow = ({ incognito = false, url, x, y, profileId, restoreTabs }
   window.webContents.once('did-finish-load', () => {
     window.webContents.send('ui:window', { incognito });
     browser.sendAllTo(ctx);
-    if (restoreTabs?.length) tabManager.restoreTabs(restoreTabs);
-    else tabManager.createTab(url || undefined);
+    if (restoreTabs?.length) {
+      tabManager.restoreTabs(restoreTabs);
+      // 復元と同時に開きたいページ(初回イントロ/更新後の変更点)は復元後に前面で開く
+      if (url) tabManager.createTab(url);
+    } else {
+      tabManager.createTab(url || undefined);
+    }
   });
 
   // マウスの戻る/進むボタン
@@ -709,6 +718,46 @@ browser.switchProfile = (id, { url } = {}) => {
   const ctx = browser.createWindow({ profileId: id, url, restoreTabs: saved?.length ? saved : null });
   browser.sendProfiles();
   return ctx;
+};
+
+// ---- 起動時のセッション復元 ----
+
+// 終了時に、開いている全ウィンドウのタブ構成をプロファイルごとに保存する。
+// ウィンドウを1枚ずつ閉じるときの保存(window.on('close'))は「最後の1枚」しか残せないため、
+// 複数ウィンドウを開いたまま終了したときのためにここでまとめて上書きする
+browser.saveAllSessions = () => {
+  const byProfile = new Map();
+  for (const ctx of windows.normal()) {
+    if (ctx.incognito) continue; // シークレットは残さない
+    if (!byProfile.has(ctx.profileId)) byProfile.set(ctx.profileId, []);
+    byProfile.get(ctx.profileId).push(ctx.tabManager.snapshotTabs());
+  }
+  for (const [profileId, snapshots] of byProfile) {
+    const profile = browser.profiles?.list().find((p) => p.id === profileId);
+    if (!profile || !snapshots.length) continue;
+    const s = store(profile, 'session-tabs', []);
+    s.data = snapshots;
+    s.flush();
+  }
+};
+
+// 起動時のウィンドウを開く。設定(restoreTabsOnStart)がONなら前回のタブを復元する。
+// url は初回イントロ/更新後の変更点。復元する場合でも最初のウィンドウで開く
+browser.openStartupWindows = ({ url } = {}) => {
+  const profile = browser.profiles.active();
+  const restore = browser.bundleFor(profile?.id)?.settings.data.restoreTabsOnStart === true;
+  const saved = restore ? store(profile, 'session-tabs', []).data : null;
+  const windowsToRestore = Array.isArray(saved) ? saved.filter((w) => w?.tabs?.length) : [];
+
+  if (!windowsToRestore.length) {
+    browser.createWindow({ url });
+    return 0;
+  }
+  // 1枚目に url(イントロ等)を載せる。2枚目以降はそのまま復元する
+  windowsToRestore.forEach((snapshot, index) => {
+    browser.createWindow({ restoreTabs: snapshot.tabs, url: index === 0 ? url : undefined });
+  });
+  return windowsToRestore.length;
 };
 
 // プロファイルの削除: そのプロファイルのウィンドウも閉じる(Edgeと同じ)。

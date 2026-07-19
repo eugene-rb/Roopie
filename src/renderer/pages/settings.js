@@ -518,6 +518,12 @@ bookmarkBarToggle.addEventListener('change', () =>
   window.roopieInternal.setSetting('showBookmarkBar', bookmarkBarToggle.checked)
 );
 
+// 起動時に前回のタブを復元するか
+const restoreTabsToggle = document.getElementById('restore-tabs-on-start');
+restoreTabsToggle.addEventListener('change', () =>
+  window.roopieInternal.setSetting('restoreTabsOnStart', restoreTabsToggle.checked)
+);
+
 const adblockToggle = document.getElementById('adblock-toggle');
 adblockToggle.addEventListener('change', () =>
   window.roopieInternal.setSetting('adblock', adblockToggle.checked)
@@ -1712,6 +1718,7 @@ window.roopieInternal.onSettings((settings) => {
   searchEngineSelect.value = settings.searchEngine || 'google';
   bookmarkBarToggle.checked = !!settings.showBookmarkBar;
   adblockToggle.checked = settings.adblock !== false;
+  restoreTabsToggle.checked = settings.restoreTabsOnStart === true;
   savePasswordsToggle.checked = settings.savePasswords !== false;
   autofillAddressesToggle.checked = settings.autofillAddresses !== false;
   autofillCardsToggle.checked = settings.autofillCards !== false;
@@ -1743,6 +1750,7 @@ document.addEventListener('visibilitychange', () => {
   searchEngineSelect.value = settings.searchEngine || 'google';
   bookmarkBarToggle.checked = !!settings.showBookmarkBar;
   adblockToggle.checked = settings.adblock !== false;
+  restoreTabsToggle.checked = settings.restoreTabsOnStart === true;
   savePasswordsToggle.checked = settings.savePasswords !== false;
   autofillAddressesToggle.checked = settings.autofillAddresses !== false;
   autofillCardsToggle.checked = settings.autofillCards !== false;
