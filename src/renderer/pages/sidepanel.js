@@ -23,6 +23,7 @@ const SECTION_LABELS = {
   history: '履歴',
   notes: 'メモ',
   readlist: 'リーディングリスト',
+  trackers: 'トラッキング',
   web: 'ウェブパネル',
   'now-playing': '再生中',
 };
@@ -943,6 +944,226 @@ window.roopieInternal.onSettings((settings) => {
   if (mediaState) renderNowPlaying();
 });
 
+// ---- トラッキング分析 ----
+// メイン側(trackers.js)がCookieを既知トラッカー定義に照らして企業単位にまとめた結果を表示する。
+// 「どの企業が自分に固有IDを付けているか」「それがサイトをまたいで使えるか」を出すのが目的
+const trackersBodyEl = $('trackers-body');
+let trackersLoading = false;
+
+function formatExpires(ms) {
+  if (!ms) return null;
+  const days = Math.round((ms - Date.now()) / 86_400_000);
+  if (days <= 0) return null;
+  if (days >= 365) return `約${(days / 365).toFixed(1)}年後まで`;
+  if (days >= 31) return `約${Math.round(days / 30)}か月後まで`;
+  return `約${days}日後まで`;
+}
+
+function trackerSummary(data) {
+  const box = document.createElement('div');
+  box.className = 'tr-summary';
+
+  const headline = document.createElement('div');
+  headline.className = 'tr-headline';
+  headline.textContent =
+    data.identifiedBy > 0
+      ? `${data.identifiedBy}社があなたに固有のIDを付けています`
+      : 'あなたに固有IDを付けているトラッカーはありません';
+  box.appendChild(headline);
+
+  const stats = document.createElement('div');
+  stats.className = 'tr-stats';
+  for (const [label, value] of [
+    ['トラッカーのCookie', `${data.trackerCookies}件`],
+    ['サイトをまたぐ', `${data.crossSiteCookies}件`],
+    ['Cookie全体', `${data.totalCookies}件`],
+  ]) {
+    const cell = document.createElement('div');
+    cell.className = 'tr-stat';
+    const v = document.createElement('span');
+    v.className = 'tr-stat-value';
+    v.textContent = value;
+    const l = document.createElement('span');
+    l.className = 'tr-stat-label';
+    l.textContent = label;
+    cell.append(v, l);
+    stats.appendChild(cell);
+  }
+  box.appendChild(stats);
+
+  const expires = formatExpires(data.longestExpires);
+  if (expires) {
+    const note = document.createElement('div');
+    note.className = 'tr-note';
+    note.textContent = `最も長いものは${expires}あなたを識別できます`;
+    box.appendChild(note);
+  }
+
+  const shield = document.createElement('div');
+  shield.className = 'tr-shield' + (data.adblockEnabled ? ' on' : ' off');
+  shield.textContent = data.adblockEnabled
+    ? '広告ブロックが有効です。多くのトラッカーは読み込み前に遮断されています'
+    : '広告ブロックが無効です。設定から有効にすると大半のトラッカーを遮断できます';
+  box.appendChild(shield);
+  return box;
+}
+
+// 履歴からローカルに推定した興味カテゴリ。トラッカーが何を推定しうるかの目安
+function trackerInterests(data) {
+  const box = document.createElement('div');
+  box.className = 'tr-block';
+  const title = document.createElement('div');
+  title.className = 'tr-block-title';
+  title.textContent = '推定されうる興味';
+  box.appendChild(title);
+
+  const desc = document.createElement('div');
+  desc.className = 'tr-note';
+  desc.textContent = `あなたの閲覧履歴(${data.visitedSites}サイト)から、この端末の中だけで推定した分類です`;
+  box.appendChild(desc);
+
+  const tags = document.createElement('div');
+  tags.className = 'tr-tags';
+  for (const interest of data.interests) {
+    const tag = document.createElement('span');
+    tag.className = 'tr-tag';
+    tag.textContent = `${interest.label} (${interest.sites})`;
+    tags.appendChild(tag);
+  }
+  box.appendChild(tags);
+  return box;
+}
+
+function trackerCompanyItem(company) {
+  const wrap = document.createElement('div');
+  wrap.className = 'tr-company';
+
+  const head = document.createElement('button');
+  head.className = 'tr-company-head';
+  head.setAttribute('aria-expanded', 'false');
+
+  const name = document.createElement('span');
+  name.className = 'tr-company-name';
+  name.textContent = company.name;
+
+  const cat = document.createElement('span');
+  cat.className = 'tr-company-cat';
+  cat.textContent = company.category;
+
+  const count = document.createElement('span');
+  count.className = 'tr-company-count';
+  count.textContent = company.identifiers > 0 ? `ID ${company.identifiers}` : `${company.cookies.length}件`;
+
+  head.append(name, cat, count);
+  wrap.appendChild(head);
+
+  const detail = document.createElement('div');
+  detail.className = 'tr-detail hidden';
+
+  const note = document.createElement('div');
+  note.className = 'tr-note';
+  note.textContent = company.note;
+  detail.appendChild(note);
+
+  const expires = formatExpires(company.longestExpires);
+  if (expires) {
+    const exp = document.createElement('div');
+    exp.className = 'tr-note';
+    exp.textContent = `保持期限: ${expires}`;
+    detail.appendChild(exp);
+  }
+
+  // 訪問済みサイトの一次Cookieとして入っていた場合だけ、そのサイト名を出す。
+  // (このCookieの存在から「そのサイトがこの企業に閲覧を渡した」と確実に言えるのはこのケースだけ)
+  if (company.onSites.length) {
+    const sites = document.createElement('div');
+    sites.className = 'tr-note';
+    sites.textContent = `あなたが訪れた ${company.onSites.join(', ')} 上に置かれています`;
+    detail.appendChild(sites);
+  }
+
+  for (const cookie of company.cookies) {
+    const row = document.createElement('div');
+    row.className = 'tr-cookie';
+
+    const cname = document.createElement('span');
+    cname.className = 'tr-cookie-name';
+    cname.textContent = cookie.name;
+
+    const meta = document.createElement('span');
+    meta.className = 'tr-cookie-meta';
+    meta.textContent = `${cookie.domain}${cookie.crossSite ? ' · 横断可' : ''}${cookie.session ? ' · 一時的' : ''}`;
+
+    row.append(cname, meta);
+    if (cookie.identifier) {
+      const badge = document.createElement('span');
+      badge.className = 'tr-badge';
+      badge.textContent = '識別子';
+      badge.title = cookie.preview;
+      row.appendChild(badge);
+    }
+    detail.appendChild(row);
+  }
+
+  const forget = document.createElement('button');
+  forget.className = 'item-btn tr-forget';
+  forget.textContent = 'この企業のCookieを削除';
+  forget.addEventListener('click', async () => {
+    forget.disabled = true;
+    await window.roopieInternal.forgetTracker(company.name);
+    refreshTrackers();
+  });
+  detail.appendChild(forget);
+
+  wrap.appendChild(detail);
+  head.addEventListener('click', () => {
+    const open = detail.classList.toggle('hidden');
+    head.setAttribute('aria-expanded', String(!open));
+  });
+  return wrap;
+}
+
+function renderTrackers(data) {
+  trackersBodyEl.textContent = '';
+  if (!data) {
+    trackersBodyEl.appendChild(emptyNote('分析できませんでした', 'shield'));
+    return;
+  }
+
+  trackersBodyEl.appendChild(trackerSummary(data));
+  if (data.interests.length) trackersBodyEl.appendChild(trackerInterests(data));
+
+  if (!data.companies.length) {
+    trackersBodyEl.appendChild(emptyNote('既知のトラッカーCookieは見つかりませんでした', 'shield'));
+    return;
+  }
+
+  const block = document.createElement('div');
+  block.className = 'tr-block';
+  const title = document.createElement('div');
+  title.className = 'tr-block-title';
+  title.textContent = `あなたを追跡している企業 (${data.companies.length})`;
+  block.appendChild(title);
+  for (const company of data.companies) block.appendChild(trackerCompanyItem(company));
+  trackersBodyEl.appendChild(block);
+}
+
+async function refreshTrackers() {
+  if (trackersLoading) return;
+  trackersLoading = true;
+  try {
+    renderTrackers(await window.roopieInternal.analyzeTrackers());
+  } finally {
+    trackersLoading = false;
+  }
+}
+
+$('trackers-refresh-btn').addEventListener('click', () => refreshTrackers());
+$('trackers-forget-all-btn').addEventListener('click', async () => {
+  await window.roopieInternal.forgetAllTrackers();
+  refreshTrackers();
+});
+
 // パネルが左右どちら側に開くかで、コンテンツとアイコンレールの左右を入れ替える
 // (レールは常に「外側の端」= ウィンドウの縁に接する側に来るようにする。Vivaldi等と同様)
 function applySidePanelSide(position) {
@@ -969,6 +1190,7 @@ function render() {
   if (state.activeSection === 'history') refreshHistory();
   if (state.activeSection === 'bookmarks') refreshBookmarks();
   if (state.activeSection === 'downloads') refreshDownloads();
+  if (state.activeSection === 'trackers') refreshTrackers();
 
   renderPinnedWebPanels();
   // 入力中のメモは上書きしない

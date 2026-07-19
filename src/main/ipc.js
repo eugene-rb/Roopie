@@ -15,6 +15,7 @@ const {
 const { searchUrl } = require('./search-engines');
 const { normalizeToolbarItems } = require('./toolbar-items');
 const { geocode, weather, fetchRss } = require('./widgets');
+const trackers = require('./trackers');
 
 // ページのタイトルをHTMLの<title>から取得する(ショートカット追加時の名前自動設定用)。
 // 本文全体は読まず、</title>が見つかるまで先頭256KBだけ読む
@@ -430,6 +431,27 @@ function registerIpc() {
   ipcMain.on('readlist:remove', (e, id) => bundleOf(e)?.readlist.remove(id));
   ipcMain.on('readlist:set-read', (e, id, read) => bundleOf(e)?.readlist.setRead(id, read));
   ipcMain.on('readlist:clear-read', (e) => bundleOf(e)?.readlist.clearRead());
+
+  // ---- トラッキング分析(サイドパネル「トラッキング」) ----
+  // セッションは送信元ウィンドウのもの(プロファイルごとにCookieストアが別)
+  ipcMain.handle('trackers:analyze', (e) => {
+    const ctx = ctxOf(e);
+    const bundle = bundleOf(e);
+    if (!ctx?.session || !bundle) return null;
+    return trackers.analyze(ctx.session, {
+      history: bundle.history.list(),
+      adblockEnabled: bundle.settings.data.adblock !== false,
+    });
+  });
+  ipcMain.handle('trackers:forget', (e, companyName) => {
+    const ctx = ctxOf(e);
+    if (!ctx?.session || typeof companyName !== 'string') return 0;
+    return trackers.forgetCompany(ctx.session, companyName);
+  });
+  ipcMain.handle('trackers:forget-all', (e) => {
+    const ctx = ctxOf(e);
+    return ctx?.session ? trackers.forgetAll(ctx.session) : 0;
+  });
 
   // ---- ローカルサーバー検知(スタートページのサジェスト) ----
   ipcMain.handle('local-servers:list', () => browser.localServers?.detect() ?? []);

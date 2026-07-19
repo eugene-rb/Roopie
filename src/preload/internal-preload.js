@@ -76,6 +76,11 @@ if (location.protocol === 'roopie:') {
     setSetting: (key, value) => ipcRenderer.send('settings:set', key, value),
     pickDownloadFolder: () => ipcRenderer.invoke('fs:pick-folder'),
 
+    // トラッキング分析(サイドパネル)
+    analyzeTrackers: () => ipcRenderer.invoke('trackers:analyze'),
+    forgetTracker: (companyName) => ipcRenderer.invoke('trackers:forget', companyName),
+    forgetAllTrackers: () => ipcRenderer.invoke('trackers:forget-all'),
+
     // ローカルサーバー検知(スタートページのサジェスト)
     listLocalServers: () => ipcRenderer.invoke('local-servers:list'),
     dismissLocalServer: (port) => ipcRenderer.send('local-servers:dismiss', port),

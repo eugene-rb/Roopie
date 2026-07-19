@@ -989,9 +989,17 @@ function renderCalendar(body, item, offset = 0) {
 }
 
 // ---- ニュース(RSS。メイン経由で取得し、DOMParserでパース) ----
+// 「+ ラベル」ボタンで1クリック追加できる定番フィード。
+// URLは実際に取得できることを確認済み(CNNはhttpsを提供していないためhttpのみ)
 const NEWS_PRESETS = [
   { label: 'NHKニュース', url: 'https://www.nhk.or.jp/rss/news/cat0.xml' },
   { label: 'Yahoo!ニュース', url: 'https://news.yahoo.co.jp/rss/topics/top-picks.xml' },
+  { label: 'テレビ朝日(ANN)', url: 'https://news.yahoo.co.jp/rss/media/ann/all.xml' },
+  { label: 'BBC News Japan', url: 'https://feeds.bbci.co.uk/japanese/rss.xml' },
+  { label: 'BBC News', url: 'https://feeds.bbci.co.uk/news/rss.xml' },
+  { label: 'CNN', url: 'http://rss.cnn.com/rss/cnn_topstories.rss' },
+  { label: 'WSJ', url: 'https://feeds.a.dj.com/rss/RSSWorldNews.xml' },
+  { label: 'NYタイムズ', url: 'https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml' },
 ];
 
 function parseFeed(xml) {
