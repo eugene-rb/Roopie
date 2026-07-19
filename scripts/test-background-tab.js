@@ -71,6 +71,12 @@ app.whenReady().then(async () => {
     return;
   }
   check('裏で開いたタブは非表示', opened.view.getVisible(), false);
+  // 大きさが 0x0 のままだと、幅0のビューポートで読み込まれてレイアウトが崩れる
+  const openedBounds = opened.view.getBounds();
+  check('裏で開いたタブにもページと同じ大きさが与えられる', openedBounds.width > 100 && openedBounds.height > 100, true);
+  // 注: 非表示のViewへ executeJavaScript を投げると返ってこないことがあるため、
+  // ここではビューポートをページ側に問い合わせず、Viewの大きさだけを確認する
+  // (この性質があるので probeMedia の問い合わせにはタイムアウトが必須)
   check('裏で開いたタブもURLを読み込む', opened.view.webContents.getURL().endsWith('/other'), true);
 
   // 通常の左クリック+target=_blank相当(スクリプトのwindow.open)→ 手前で開く
@@ -80,9 +86,15 @@ app.whenReady().then(async () => {
 
   // 裏のタブへは手動で切り替えられる
   tabManager.switchTab(opened.id);
-  await sleep(200);
+  await sleep(600);
   check('裏のタブへ切り替えられる', tabManager.activeTabId, opened.id);
   check('切り替えたタブが表示される', opened.view.getVisible(), true);
+  // 表に出したらページ側のビューポートも正しい大きさになっている
+  const viewport = await Promise.race([
+    opened.view.webContents.executeJavaScript('[window.innerWidth, window.innerHeight]', true),
+    sleep(4000).then(() => [0, 0]),
+  ]);
+  check('表に出したタブのビューポートが0でない', viewport[0] > 100 && viewport[1] > 100, true);
 
   server.close();
   console.log(failed ? `\n${failed}件失敗` : '\n全テスト成功');

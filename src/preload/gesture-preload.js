@@ -94,10 +94,15 @@ function initGestures() {
     const action = config.mappings[pattern];
     if (!action) return;
     // スクロール系はページ内で完結するのでレンダラー側で実行する
+    // (メイン側はページのスクロール位置もビューポートの高さも持たない)
     if (action === 'scrollTop') {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else if (action === 'scrollBottom') {
       window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+    } else if (action === 'scrollPageUp') {
+      window.scrollBy({ top: -window.innerHeight * 0.9, behavior: 'smooth' });
+    } else if (action === 'scrollPageDown') {
+      window.scrollBy({ top: window.innerHeight * 0.9, behavior: 'smooth' });
     } else {
       ipcRenderer.send('gestures:perform', action);
     }

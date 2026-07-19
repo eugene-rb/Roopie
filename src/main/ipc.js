@@ -767,16 +767,19 @@ function registerIpc() {
         if (tab) tabManager.toggleMute(tab.id);
         break;
       case 'detachTab':
-        // 最後の1枚は切り離せない(元のウィンドウが空になるため)
+        // 最後の1枚は切り離せない(元のウィンドウが空になるため)。
+        // シークレットのタブは必ずシークレットのまま切り離す(通常ウィンドウへ移すと
+        // Cookieも履歴も残ってしまう)
         if (tab && tabManager.tabs.length > 1) {
           const url = wc.getURL();
           tabManager.closeTab(tab.id);
-          browser.createWindow({ url, profileId: ctx.profileId });
+          browser.createWindow({ url, profileId: ctx.profileId, incognito: ctx.incognito });
         }
         break;
 
       case 'newWindow':
-        browser.createWindow({ profileId: ctx.profileId });
+        // シークレットから開いた「新しいウィンドウ」はシークレットのままにする(Chrome準拠)
+        browser.createWindow({ profileId: ctx.profileId, incognito: ctx.incognito });
         break;
       case 'incognitoWindow':
         browser.createWindow({ incognito: true, profileId: ctx.profileId });

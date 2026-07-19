@@ -89,9 +89,26 @@ app.whenReady().then(async () => {
   check('ページの位置も元に戻る', bounds().y, normal.y);
   TabManager.FULLSCREEN_ALLOWLIST.pop();
 
-  // 3) ホスト名の判定(偽装ドメインを弾く)
+  // 3) 全画面中にタブを切り替えたら全画面を抜ける
+  //    (抜けないと、UIが消えたまま別のタブが全画面で表示され戻る手段が無くなる)
+  TabManager.FULLSCREEN_ALLOWLIST.push('127.0.0.1');
+  const other = tabManager.createTab(`http://127.0.0.1:${PORT}/`);
+  await Promise.race([new Promise((r) => other.view.webContents.once('did-finish-load', r)), sleep(6000)]);
+  tabManager.switchTab(tab.id);
+  await sleep(400);
+  await withTimeout(wc.executeJavaScript(`window.goFullscreen()`, true), 3000, '(応答なし)');
+  await sleep(1500);
+  check('(前提)全画面に入っている', tabManager.htmlFullscreenTabId, tab.id);
+  tabManager.switchTab(other.id);
+  await sleep(1200);
+  check('タブを切り替えると全画面を抜ける', tabManager.htmlFullscreenTabId, null);
+  check('切り替え先のタブはツールバーの下に置かれる', other.view.getBounds().y > 0, true);
+  tabManager.closeTab(other.id);
+  await sleep(300);
+  TabManager.FULLSCREEN_ALLOWLIST.pop();
+
+  // 4) ホスト名の判定(偽装ドメインを弾く)
   const { isFullscreenAllowed } = require('../src/main/tab-manager');
-  // 3) ホスト名の判定
   check('youtube.comは許可', isFullscreenAllowed('https://www.youtube.com/watch?v=1'), true);
   check('サブドメインも許可', isFullscreenAllowed('https://music.youtube.com/'), true);
   check('似せた別ドメインは拒否', isFullscreenAllowed('https://evil-youtube.com/'), false);

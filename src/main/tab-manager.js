@@ -28,13 +28,16 @@ const MAX_SPLIT_RATIO = 0.85;
 // preloadを使わないのは、preloadがメインフレームでしか走らず、ニュースサイトのように
 // プレイヤーをiframeの中に置くサイトを取りこぼすため。shadow DOMの中も潜って探す。
 const MEDIA_PROBE = `(() => {
-  const found = [];
-  const walk = (root, depth) => {
-    if (!root || depth > 8) return;
-    for (const el of root.querySelectorAll('video, audio')) found.push(el);
-    for (const el of root.querySelectorAll('*')) if (el.shadowRoot) walk(el.shadowRoot, depth + 1);
-  };
-  walk(document, 0);
+  // まず素直に探す。ここで見つかれば、重い全要素走査(shadow DOM探し)はしない
+  let found = [...document.querySelectorAll('video, audio')];
+  if (!found.length) {
+    const walk = (root, depth) => {
+      if (!root || depth > 8) return;
+      for (const el of root.querySelectorAll('video, audio')) found.push(el);
+      for (const el of root.querySelectorAll('*')) if (el.shadowRoot) walk(el.shadowRoot, depth + 1);
+    };
+    walk(document, 0);
+  }
   const playing = found.filter((el) => !el.paused && !el.ended && el.readyState > 0);
   const el = playing[playing.length - 1] || found.filter((e) => e.currentTime > 0).pop() || null;
   if (!el) return null;
@@ -152,6 +155,25 @@ function applyFullscreenPolicy(session) {
   });
 }
 
+// Googleのログイン状態が共有されるドメイン。ここを訪れたらログイン中アカウントを見に行く
+const GOOGLE_DOMAINS = [
+  'google.com',
+  'google.co.jp',
+  'youtube.com',
+  'gmail.com',
+  'googlemail.com',
+  'googleusercontent.com',
+];
+
+function isGoogleDomain(url) {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return GOOGLE_DOMAINS.some((domain) => host === domain || host.endsWith(`.${domain}`));
+  } catch {
+    return false; // 不正なURLは無視
+  }
+}
+
 let nextTabId = 1;
 
 /**
@@ -200,7 +222,16 @@ class TabManager {
     });
 
     // hasInternalPreload はタブ生成時に固定される(preloadは後から変えられない)
-    const tab = { id, view, isInternal, hasInternalPreload: isInternal, favicon: null };
+    const tab = {
+      id,
+      view,
+      isInternal,
+      hasInternalPreload: isInternal,
+      favicon: null,
+      bookmarkHint: false, // 「Ctrl+Dでブックマーク」の案内を出しているか
+      bookmarkHintListener: null, // 案内を出している間だけ張る input-event のリスナ
+      mediaTimer: null, // 再生中に全フレームを見に行くタイマー
+    };
     this.tabs.push(tab);
     this.window.contentView.addChildView(view);
 
@@ -307,36 +338,26 @@ class TabManager {
     wc.on('did-navigate', (_e, url) => {
       tab.favicon = null;
       tab.isInternal = isInternalUrl(url);
+      // ページを離れたら、前のページのメディアを「再生中」と言い続けない
+      // (旧方式ではpreloadがnullを送っていた経路。今はメイン側で明示的に消す)
+      this.stopMediaWatch(tab);
+      this.onMediaReport?.(tab.id, null, null);
       // ブックマークの案内は「また来たのにまだ入れていないページ」にだけ出す。
       // 履歴へ足す前に判定する(足した後だと必ず1件見つかってしまう)
-      tab.bookmarkHint = !tab.isInternal && this.history.has(url) && !this.bookmarks.find(url);
+      this.setBookmarkHint(tab, !tab.isInternal && this.history.has(url) && !this.bookmarks.find(url));
       if (!tab.isInternal) this.history.add(url, wc.getTitle());
       this.sendState();
 
-      // Googleにログインした可能性があるタイミングでアカウント一覧を確認する
-      try {
-        if (/(^|\.)google\.com$/.test(new URL(url).hostname)) {
-          this.onGoogleDomainVisit?.(this.session);
-        }
-      } catch {
-        // 不正なURLは無視
-      }
+      // Googleにログインした可能性があるタイミングでアカウント一覧を確認する。
+      // google.com だけでなく、ログインが共有される他のGoogleサービスも見る
+      // (YouTubeやGmailからログインする人を取りこぼさないため)
+      if (isGoogleDomain(url)) this.onGoogleDomainVisit?.(this.session);
     });
 
     // Chromiumが再生の開始/停止を教えてくれる(iframeの中でもshadow DOMの中でも飛ぶ)。
     // これをきっかけに全フレームを見に行く
     wc.on('media-started-playing', () => this.startMediaWatch(tab));
     wc.on('media-paused', () => this.probeMedia(tab));
-
-    // ブックマークの案内はページを触ったら引っ込める(読み始めた人の邪魔をしない)。
-    // 通常のページにはpreloadを渡していないので、メイン側でページの入力イベントを見る
-    wc.on('input-event', (_e, input) => {
-      if (!tab.bookmarkHint) return;
-      if (input.type === 'mouseDown' || input.type === 'mouseWheel' || input.type === 'keyDown') {
-        tab.bookmarkHint = false;
-        this.sendState();
-      }
-    });
 
     wc.on('page-favicon-updated', (_e, favicons) => {
       tab.favicon = favicons[favicons.length - 1] || null;
@@ -412,6 +433,7 @@ class TabManager {
 
     const [tab] = this.tabs.splice(index, 1);
     this.rememberClosedTab(tab, index);
+    this.setBookmarkHint(tab, false); // 入力イベントの見張りを外す
     this.stopMediaWatch(tab);
     if (this.htmlFullscreenTabId === tab.id) this.setHtmlFullscreen(tab.id, false);
     this.window.contentView.removeChildView(tab.view);
@@ -448,6 +470,15 @@ class TabManager {
   switchTab(id) {
     const tab = this.getTab(id);
     if (!tab) return;
+    // ページ全画面(YouTube等)のまま別のタブへ移ると、UIが消えたまま別ページが
+    // 全画面表示になり戻る手段が無くなる。切り替える前に全画面を抜ける
+    if (this.htmlFullscreenTabId != null && this.htmlFullscreenTabId !== id) {
+      const fullscreenTab = this.getTab(this.htmlFullscreenTabId);
+      fullscreenTab?.view.webContents
+        .executeJavaScript('document.exitFullscreen && document.exitFullscreen()', true)
+        .catch(() => {});
+      this.setHtmlFullscreen(this.htmlFullscreenTabId, false);
+    }
     // 分割相手のタブをそのままアクティブにした場合は、同じ内容が重複するので分割を解除する
     if (id === this.splitTabId) this.splitTabId = null;
     this.activeTabId = id;
@@ -458,9 +489,33 @@ class TabManager {
     this.sendState();
   }
 
+  // ブックマークの案内の出し入れ。案内を出している間だけページの入力を見張る
+  // (常時リスナを張ると、案内が出ていないほとんどの時間もマウス移動のたびに
+  //  レンダラーからメインへイベントが飛び続ける)
+  setBookmarkHint(tab, on) {
+    if (!!tab.bookmarkHint === !!on) return;
+    tab.bookmarkHint = !!on;
+    const wc = tab.view.webContents;
+    if (on) {
+      tab.bookmarkHintListener = (_e, input) => {
+        if (input.type === 'mouseDown' || input.type === 'mouseWheel' || input.type === 'keyDown') {
+          this.setBookmarkHint(tab, false);
+          this.sendState();
+        }
+      };
+      wc.on('input-event', tab.bookmarkHintListener);
+    } else if (tab.bookmarkHintListener) {
+      if (!wc.isDestroyed()) wc.off('input-event', tab.bookmarkHintListener);
+      tab.bookmarkHintListener = null;
+    }
+  }
+
   // ---- 閉じたタブを開き直す(Chromeの Ctrl+Shift+T 相当) ----
 
   rememberClosedTab(tab, index) {
+    // プロファイル切り替えで閉じたタブは覚えない。覚えると、切り替えた先のプロファイルで
+    // 「閉じたタブを再度開く」を実行したときに前のプロファイルのURLが開いてしまう
+    if (this.isSwitchingProfile) return;
     const wc = tab.view.webContents;
     const url = wc.isDestroyed() ? '' : wc.getURL();
     // 新しいタブページや空のタブを覚えても意味がない
@@ -574,12 +629,15 @@ class TabManager {
     this.htmlFullscreenTabId = next;
     this.window.setFullScreen(!!on);
     this.window.webContents.send('ui:html-fullscreen', !!on);
+    this.updateVisibility(); // 分割相手の表示/非表示を切り替える
     this.layout();
   }
 
   updateVisibility() {
+    // 全画面中は分割相手を隠す(layout側でも分割をたたんでいる)
+    const fs = this.htmlFullscreenTabId != null;
     for (const t of this.tabs) {
-      t.view.setVisible(t.id === this.activeTabId || t.id === this.splitTabId);
+      t.view.setVisible(t.id === this.activeTabId || (!fs && t.id === this.splitTabId));
     }
   }
 
@@ -753,6 +811,8 @@ class TabManager {
     const url = wc.getURL();
     if (!url) return;
     this.bookmarks.toggle(url, wc.getTitle() || url, tab.favicon);
+    // ブックマークしたらもう案内は要らない(見張りも外す)
+    if (this.bookmarks.find(url)) this.setBookmarkHint(tab, false);
   }
 
   // プロファイル切り替え: セッションが変わるので全タブを作り直す
@@ -766,6 +826,7 @@ class TabManager {
     for (const id of this.tabs.map((t) => t.id)) {
       this.closeTab(id);
     }
+    this.closedTabs = []; // 前のプロファイルのURLを持ち越さない
     this.isSwitchingProfile = false;
   }
 
@@ -847,8 +908,18 @@ class TabManager {
     const panelX = panelOnLeft ? areaX : areaX + areaWidth - panelWidth;
 
     const activeView = this.getTab(this.activeTabId)?.view;
-    const splitView = this.splitTabId ? this.getTab(this.splitTabId)?.view : null;
+    // 全画面中は分割を一時的にたたむ(たたまないと動画が画面の半分にしか広がらず、
+    // 隣に無関係なタブと仕切り線が残ったままになる)。全画面を抜ければ元の分割に戻る
+    const splitView = this.splitTabId && !fs ? this.getTab(this.splitTabId)?.view : null;
     let dividerBounds = null; // 仕切りを置く位置(分割中のみ)
+
+    // 表示していないタブにもページ領域と同じ大きさを与えておく。
+    // 大きさが 0x0 のままだと、裏で開いたタブ(ホイールクリック等)が幅0のビューポートで
+    // 読み込まれ、読み込み時に一度だけ寸法を測るサイトがモバイル表示や崩れたままになる
+    for (const tab of this.tabs) {
+      if (tab.view === activeView || tab.view === splitView) continue;
+      tab.view.setBounds({ x: pageX, y: areaY, width: pageAreaWidth, height: areaHeight });
+    }
 
     if (activeView) {
       if (splitView) {

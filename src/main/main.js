@@ -39,6 +39,8 @@ app.whenReady().then(() => {
   // 初回起動ならイントロ、アップデート直後なら変更点を最初のタブに開く(通常は新しいタブ)。
   // 設定で「起動時に前回のタブを復元」がONなら、前回終了時のウィンドウ・タブを開き直す
   browser.openStartupWindows({ url: appState.takeStartupUrl() });
+  // ログイン中のGoogleアカウントを起動時にも検出する(設定画面にすぐ出るように)
+  browser.detectGoogleAccountsOnStartup();
   setupAutoUpdater();
 });
 

@@ -106,11 +106,28 @@ app.whenReady().then(async () => {
   tabManager.toggleMute(a.id);
   check('ミュートを解除できる', a.view.webContents.isAudioMuted(), false);
 
+  // ---- プロファイル切り替えで閉じたタブは持ち越さない ----
+  // (持ち越すと、切り替えた先で「閉じたタブを再度開く」を実行したときに
+  //  前のプロファイルのURLが別セッションで開いてしまう)
+  const keep = await openAndWait('/profile-a');
+  tabManager.switchSession(session.defaultSession);
+  await sleep(600);
+  check('プロファイル切り替えで全タブが閉じる', tabManager.tabs.length, 0);
+  check('切り替えで閉じたタブは開き直せない', tabManager.reopenClosedTab(), null);
+  void keep;
+
+  const after = await openAndWait('/after-switch');
+  check('切り替え後もタブは開ける', tabManager.tabs.length, 1);
+  void after;
+
   // ---- 他のタブを閉じる ----
-  tabManager.closeOtherTabs(c.id);
+  const x = await openAndWait('/x1');
+  await openAndWait('/x2');
+  await openAndWait('/x3');
+  tabManager.closeOtherTabs(x.id);
   await sleep(600);
   check('他のタブを閉じると1つだけ残る', tabManager.tabs.length, 1);
-  check('残るのは指定したタブ', tabManager.tabs[0].id, c.id);
+  check('残るのは指定したタブ', tabManager.tabs[0].id, x.id);
 
   server.close();
   console.log(failed ? `\n${failed}件失敗` : '\n全テスト成功');

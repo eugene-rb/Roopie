@@ -1,5 +1,4 @@
 const crypto = require('crypto');
-const { net } = require('electron');
 
 // Chromiumが使うのと同じエンドポイント。セッションのCookieからログイン中のアカウントを取得する
 const LIST_ACCOUNTS_URL =
@@ -69,8 +68,12 @@ class GoogleAccounts {
  * 先頭がGoogleの言う「既定のアカウント(authuser=0)」。
  */
 async function fetchSignedIn(session) {
+  if (!session?.fetch) return [];
   try {
-    const response = await net.fetch(LIST_ACCOUNTS_URL, { session });
+    // **必ず session.fetch を使うこと**。net.fetch(url, { session }) はセッション指定を無視して
+    // 常に defaultSession で送るため、プロファイルのCookieが乗らず未ログイン扱い(HTTP 400)になる。
+    // Roopieの閲覧は全て persist:profile-<id> パーティションなので、これだと絶対に検出できない
+    const response = await session.fetch(LIST_ACCOUNTS_URL);
     if (!response.ok) return [];
     const data = JSON.parse(await response.text());
     // ["gaia.l.a.r", [["gaia.l.a", index, name, email, ...], ...]]

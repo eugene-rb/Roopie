@@ -102,6 +102,7 @@ const threeBody = (() => {
   const FOCAL = 2.2; // 透視投影の焦点距離(大きいほど遠近が弱い)
 
   let bodies = [];
+  let rafId = null; // 予約中のrequestAnimationFrame(止めるときにキャンセルする)
   let running = false;
   let active = false;
   let frame = 0;
@@ -260,21 +261,26 @@ const threeBody = (() => {
     draw();
   }
 
+  // rAFのidを必ず持っておき、止めるときはキャンセルする。
+  // running フラグだけで止めると、タブが裏に回った時点で「予約済みで未実行の
+  // コールバック」が1本残り、表に戻すたびにループが1本ずつ増えていく
   function loop() {
     if (!running) return;
     tick();
-    requestAnimationFrame(loop);
+    rafId = requestAnimationFrame(loop);
   }
 
   function start() {
     if (running || !active || document.hidden) return;
     running = true;
     resize();
-    requestAnimationFrame(loop);
+    rafId = requestAnimationFrame(loop);
   }
 
   function stop() {
     running = false;
+    if (rafId !== null) cancelAnimationFrame(rafId);
+    rafId = null;
   }
 
   window.addEventListener('resize', () => {

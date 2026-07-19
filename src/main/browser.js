@@ -616,6 +616,16 @@ browser.autoRegisterGoogleAccounts = async (profile) => {
   if (changed) browser.sendProfiles();
 };
 
+// 起動時にも一度だけ見に行く。Googleのページを開かない人でも、既にログインしていれば
+// アカウントが設定画面に出るようにする(検出のきっかけがナビゲーションだけだと取りこぼす)
+browser.detectGoogleAccountsOnStartup = () => {
+  const profile = browser.profiles?.active();
+  if (!profile) return;
+  browser
+    .autoRegisterGoogleAccounts(profile)
+    .catch((err) => console.error('Googleアカウントの自動検出に失敗:', err));
+};
+
 // タブがgoogle.com系ドメインへナビゲートしたときの自動検出(5秒スロットル)
 browser.checkGoogleAutoRegister = (session) => {
   const profile = browser.profiles?.list().find((p) => browser.profiles.sessionFor(p) === session);
