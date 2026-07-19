@@ -104,29 +104,38 @@ app.whenReady().then(async () => {
   check('ニュース追加(設定UI)', await js(`!!document.querySelector('.widget-news .widget-setup')`), true);
   check('フィードが無いうちは「表示する」を押せない', await js(`[...document.querySelectorAll('.widget-news .widget-btn')].find((b) => b.textContent.startsWith('表示する')).disabled`), true);
 
-  // 定番フィードはプルダウンから追加する(ボタンを8個並べると縦を食い尽くし一覧が潰れるため)
   const pickPreset = (label) =>
-    js(`(() => {
-      const s = document.querySelector('.widget-news .widget-select');
-      const opt = [...s.options].find((o) => o.textContent.includes(${JSON.stringify(label)}));
-      s.value = opt.value;
-      s.dispatchEvent(new Event('change', { bubbles: true }));
-    })()`);
+    js(`[...document.querySelectorAll('.widget-news .widget-btn')].find((b) => b.textContent.includes(${JSON.stringify(label)})).click()`);
   await pickPreset('NHK');
   await sleep(100);
   check('追加したフィードが一覧に出る', await js(`document.querySelectorAll('.widget-news .widget-feed-row').length`), 1);
   check('一覧はURLでなく名前で表示される', await js(`document.querySelector('.widget-news .widget-feed-row span').textContent`), 'NHKニュース');
-  check('追加済みの定番はプルダウンから消える', await js(`[...document.querySelector('.widget-news .widget-select').options].some((o) => o.textContent.includes('NHK'))`), false);
+  check(
+    '追加済みの定番ボタンは押せなくなる(✓表示)',
+    await js(`(() => { const b = [...document.querySelectorAll('.widget-news .widget-btn')].find((b) => b.textContent.includes('NHK')); return b.disabled && b.textContent.startsWith('✓'); })()`),
+    true
+  );
 
   // 一覧が潰れずに見えていること(以前は他の要素にflex-shrinkで押し潰され高さ数pxだった)
   const listVisible = await js(`(() => {
-    const body = document.querySelector('.widget-news .widget-body').getBoundingClientRect();
     const list = document.querySelector('.widget-news .widget-setup-results').getBoundingClientRect();
     const row = document.querySelector('.widget-news .widget-feed-row').getBoundingClientRect();
-    return { listH: list.height, rowH: row.height, rowInside: row.bottom <= body.bottom + 0.5 && row.top >= body.top - 0.5 };
+    return { listH: list.height, rowH: row.height };
   })()`);
-  check('フィード一覧が1行以上の高さを持つ', listVisible.listH >= listVisible.rowH, true);
-  check('追加した行がウィジェット内に収まって見える', listVisible.rowInside && listVisible.rowH > 8, true);
+  check('フィード一覧が行の高さぶん確保される', listVisible.listH >= listVisible.rowH && listVisible.rowH > 8, true);
+
+  // 入りきらない中身は .widget-setup ごとスクロールして全部見られる
+  const scrollInfo = await js(`(() => {
+    const setup = document.querySelector('.widget-news .widget-setup');
+    setup.scrollTop = setup.scrollHeight;
+    const done = [...setup.querySelectorAll('.widget-btn')].find((b) => b.textContent.startsWith('表示する'));
+    const sr = setup.getBoundingClientRect();
+    const dr = done.getBoundingClientRect();
+    return { scrollable: setup.scrollHeight > setup.clientHeight, scrolled: setup.scrollTop > 0, doneInside: dr.bottom <= sr.bottom + 0.5 && dr.top >= sr.top - 0.5 };
+  })()`);
+  check('設定UIがスクロールできる', scrollInfo.scrollable && scrollInfo.scrolled, true);
+  check('最後までスクロールすると「表示する」が見える', scrollInfo.doneInside, true);
+  await js(`document.querySelector('.widget-news .widget-setup').scrollTop = 0`);
 
   // 重複・不正URLは黙って無視せず理由を出す
   const typeAndAdd = (value) =>
@@ -146,7 +155,11 @@ app.whenReady().then(async () => {
   await js(`[...document.querySelectorAll('.widget-news .widget-feed-row')].at(-1).querySelector('.widget-btn').click()`);
   await sleep(80);
   check('✕でフィードを削除できる', await js(`document.querySelectorAll('.widget-news .widget-feed-row').length`), 1);
-  check('削除した定番はプルダウンに戻る', await js(`[...document.querySelector('.widget-news .widget-select').options].some((o) => o.textContent.includes('CNN'))`), true);
+  check(
+    '削除した定番のボタンはまた押せるようになる',
+    await js(`[...document.querySelectorAll('.widget-news .widget-btn')].find((b) => b.textContent.includes('CNN')).disabled`),
+    false
+  );
 
   await js(`[...document.querySelectorAll('.widget-news .widget-btn')].find((b) => b.textContent.startsWith('表示する')).click()`);
   await sleep(300);

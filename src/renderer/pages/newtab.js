@@ -1097,8 +1097,8 @@ function feedLabel(url) {
   }
 }
 
-// ウィジェットは小さい(既定3x2セル)ので、縦を食うプリセットのボタン列はプルダウン1行にまとめ、
-// 空いた高さは「追加済みフィードの一覧」に全部渡す(追加した結果がその場で見えるのが最優先)
+// ウィジェットは小さい(既定3x2セル)ため中身が入りきらない。縦に潰すのではなく
+// .widget-setup ごとスクロールさせる(CSS側で子をflex-shrink:0にしてある)
 function renderNewsSetup(body, item) {
   body.textContent = '';
   const wrap = document.createElement('div');
@@ -1178,32 +1178,25 @@ function renderNewsSetup(body, item) {
   row.className = 'widget-setup-row';
   row.append(input, addBtn);
 
-  // 定番フィードのプルダウン(追加済みのものは選択肢から消える=押した手応えになる)
+  // 定番フィードのボタン列。追加済みのものは押せなくする(押した手応えになる)
   const presetRow = document.createElement('div');
   presetRow.className = 'widget-setup-row';
-  const select = document.createElement('select');
-  select.className = 'widget-select';
-  function renderPresets() {
-    select.textContent = '';
-    const rest = NEWS_PRESETS.filter((p) => !feeds.includes(p.url));
-    const head = document.createElement('option');
-    head.value = '';
-    head.textContent = rest.length ? '定番のニュースから追加…' : '定番はすべて追加済み';
-    select.appendChild(head);
-    for (const preset of rest) {
-      const opt = document.createElement('option');
-      opt.value = preset.url;
-      opt.textContent = preset.label;
-      select.appendChild(opt);
-    }
-    select.disabled = !rest.length;
-  }
-  select.addEventListener('change', () => {
-    if (select.value) addFeed(select.value);
-    select.value = '';
+  const presetBtns = NEWS_PRESETS.map((preset) => {
+    const btn = document.createElement('button');
+    btn.className = 'widget-btn';
+    btn.textContent = `+ ${preset.label}`;
+    btn.addEventListener('click', () => addFeed(preset.url));
+    presetRow.appendChild(btn);
+    return { preset, btn };
   });
+  function renderPresets() {
+    for (const { preset, btn } of presetBtns) {
+      const added = feeds.includes(preset.url);
+      btn.disabled = added;
+      btn.textContent = `${added ? '✓' : '+'} ${preset.label}`;
+    }
+  }
   renderPresets();
-  presetRow.append(select);
 
   const done = document.createElement('button');
   done.className = 'widget-btn widget-btn-primary';

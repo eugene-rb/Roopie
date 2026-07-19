@@ -849,14 +849,16 @@ body[data-bg="plain"] .cal-day.sat {
 }
 
 /* ---- ウィジェット内の設定UI(天気の場所検索/ニュースのフィード管理) ---- */
-/* 本体の高さいっぱいを使い、余った高さは中の一覧(.widget-setup-results)に渡す。
-   ここでflex:1を与えないと一覧だけがflex-shrinkで数pxに潰れ、追加したフィードが見えなくなる */
+/* 本体の高さいっぱいを使い、入りきらない分はここごとスクロールさせる。
+   中の要素は flex-shrink: 0(潰れると高さが縮んでスクロールが発生せず、
+   以前は一覧だけが数pxに潰れて追加したフィードが見えなくなっていた) */
 .widget-setup {
   display: flex;
   flex-direction: column;
   gap: 6px;
   flex: 1;
   min-height: 0;
+  overflow-y: auto;
   font-size: 12px;
 }
 
@@ -897,8 +899,7 @@ body[data-bg="plain"] .widget-input {
   background: rgba(255, 255, 255, 0.25);
 }
 
-.widget-btn:disabled,
-.widget-select:disabled {
+.widget-btn:disabled {
   opacity: 0.45;
   cursor: default;
 }
@@ -916,26 +917,12 @@ body[data-bg="plain"] .widget-input {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
+  flex-shrink: 0;
 }
 
-/* 定番フィードのプルダウン(ボタンを8個並べると縦を食い尽くすため1行にまとめている) */
-.widget-select {
-  border: none;
-  border-radius: 8px;
-  padding: 4px 8px;
-  background: rgba(255, 255, 255, 0.15);
-  color: inherit;
-  cursor: pointer;
-  font-size: 11px;
-  flex: 1;
-  min-width: 0;
-}
-
-.widget-select option {
-  color: #111;
+/* 直下の要素は縮ませない(縮むとスクロールにならず、中身が読めなくなる) */
+.widget-setup > * {
+  flex-shrink: 0;
 }
 
 .widget-setup-result {
