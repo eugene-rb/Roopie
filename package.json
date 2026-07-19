@@ -51,6 +51,7 @@
       "installerSidebar": "build/installerSidebar.bmp",
       "uninstallerSidebar": "build/uninstallerSidebar.bmp",
       "uninstallDisplayName": "Roopie",
+      "include": "build/installer.nsh",
       "deleteAppDataOnUninstall": false
     },
     "publish": {
