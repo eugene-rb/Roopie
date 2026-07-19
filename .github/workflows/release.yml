@@ -63,6 +63,22 @@ jobs:
           fi
           echo "このビルドのバージョン: $VERSION"
 
+      # electron-builderは成果物(exe/blockmap/latest.yml)を並列にアップロードし、
+      # そのとき「リリースが無ければ作る」を各アップロードが行うため、同じタグのリリースが
+      # 二重にできて成果物が分裂することがある。先に空のリリースを作っておくとレースが起きない
+      - name: リリースの入れ物を先に作る
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            echo "リリース v$VERSION は既にあります(再実行とみなす)"
+          else
+            gh release create "v$VERSION" \
+              --title "$VERSION" \
+              --notes "${{ github.event.head_commit.message || 'master への push による自動リリース' }}"
+          fi
+
       - name: インストーラーをビルドしてReleasesへ公開
         run: npm run release
         env:
@@ -73,11 +89,18 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # 同じタグのリリースが複数あると成果物が分裂している(過去に並列アップロードで発生)
+          count=$(gh api "repos/${{ github.repository }}/releases" --paginate \
+            --jq "[.[] | select(.tag_name == \"v$VERSION\")] | length")
+          [ "$count" = "1" ] || { echo "::error::タグ v$VERSION のリリースが $count 個あります"; exit 1; }
+
           assets=$(gh release view "v$VERSION" --json assets --jq '.assets[].name')
           echo "$assets"
           # latest.yml が無いと electron-updater が更新を検知できない
           echo "$assets" | grep -q '^latest.yml$' || { echo '::error::latest.yml がありません'; exit 1; }
           echo "$assets" | grep -q '\.exe$' || { echo '::error::インストーラー(.exe)がありません'; exit 1; }
+          # blockmapは差分ダウンロード用。無くても更新は動くので警告に留める
+          echo "$assets" | grep -q '\.blockmap$' || echo '::warning::blockmapがありません(差分更新は効きません)'
 
       # 1回あたり約100MBあるので、古いリリースは消して直近だけ残す
       - name: 古いリリースを整理(直近10件を残す)
