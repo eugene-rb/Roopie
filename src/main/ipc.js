@@ -16,6 +16,8 @@ const { searchUrl } = require('./search-engines');
 const { normalizeToolbarItems } = require('./toolbar-items');
 const { geocode, weather, fetchRss } = require('./widgets');
 const trackers = require('./trackers');
+const appState = require('./app-state');
+const updater = require('./updater');
 
 // ページのタイトルをHTMLの<title>から取得する(ショートカット追加時の名前自動設定用)。
 // 本文全体は読まず、</title>が見つかるまで先頭256KBだけ読む
@@ -857,6 +859,19 @@ function registerIpc() {
   ipcMain.on('media:drag-start', (e) => ctxOf(e)?.mediaPlayer.dragStart());
   ipcMain.on('media:drag', (e, dx, dy) => ctxOf(e)?.mediaPlayer.dragBy(dx, dy));
   ipcMain.on('media:drag-end', (e) => ctxOf(e)?.mediaPlayer.dragEnd());
+
+  // ---- イントロ / 変更点 / アプリ情報 ----
+
+  ipcMain.handle('app:info', () => appState.info());
+  ipcMain.on('app:intro-done', () => appState.markIntroDone());
+  ipcMain.on('app:notes-seen', () => appState.markNotesSeen());
+  ipcMain.handle('app:update-status', () => updater.updateStatus());
+  ipcMain.handle('app:check-updates', () => updater.checkForUpdatesNow());
+  ipcMain.on('app:quit-and-install', () => updater.quitAndInstall());
+  ipcMain.on('app:open-external', (_e, url) => {
+    // 内部ページからの外部リンク(リポジトリ等)。http(s)だけ通す
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+  });
 }
 
 module.exports = { registerIpc };

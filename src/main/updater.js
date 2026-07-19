@@ -11,14 +11,32 @@ const { app, dialog } = require('electron');
 const FIRST_CHECK_DELAY = 10 * 1000; // 起動直後は描画を優先して少し待つ
 const CHECK_INTERVAL = 15 * 60 * 1000;
 
+let updater = null; // electron-updater の autoUpdater(パッケージ版のみ)
+let status = { state: 'idle' }; // 設定画面へ返す最新の状態
+
+function setStatus(next) {
+  status = next;
+}
+
 function setupAutoUpdater() {
-  if (!app.isPackaged) return;
+  if (!app.isPackaged) {
+    setStatus({ state: 'dev' });
+    return;
+  }
   const { autoUpdater } = require('electron-updater');
+  updater = autoUpdater;
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
 
   let prompted = false;
+  autoUpdater.on('checking-for-update', () => setStatus({ state: 'checking' }));
+  autoUpdater.on('update-not-available', () => setStatus({ state: 'latest', version: app.getVersion() }));
+  autoUpdater.on('update-available', (info) => setStatus({ state: 'downloading', version: info.version }));
+  autoUpdater.on('download-progress', (p) =>
+    setStatus({ state: 'downloading', version: status.version, percent: Math.round(p.percent) })
+  );
   autoUpdater.on('update-downloaded', async (info) => {
+    setStatus({ state: 'downloaded', version: info.version });
     if (prompted) return;
     prompted = true;
     const { response } = await dialog.showMessageBox({
@@ -32,11 +50,34 @@ function setupAutoUpdater() {
     });
     if (response === 0) autoUpdater.quitAndInstall();
   });
-  autoUpdater.on('error', (err) => console.error('自動アップデートの確認に失敗:', err.message));
+  autoUpdater.on('error', (err) => {
+    setStatus({ state: 'error', message: err.message });
+    console.error('自動アップデートの確認に失敗:', err.message);
+  });
 
   const check = () => autoUpdater.checkForUpdates().catch(() => {});
   setTimeout(check, FIRST_CHECK_DELAY);
   setInterval(check, CHECK_INTERVAL);
 }
 
-module.exports = { setupAutoUpdater };
+// 設定画面の「更新を確認」ボタン用。現在の状態を返す(進行はイベントで status に入る)
+async function checkForUpdatesNow() {
+  if (!updater) return { state: 'dev', version: app.getVersion() };
+  if (status.state === 'downloaded') return status;
+  try {
+    await updater.checkForUpdates();
+  } catch (err) {
+    setStatus({ state: 'error', message: err.message });
+  }
+  return status;
+}
+
+function updateStatus() {
+  return { ...status, current: app.getVersion() };
+}
+
+function quitAndInstall() {
+  updater?.quitAndInstall();
+}
+
+module.exports = { setupAutoUpdater, checkForUpdatesNow, updateStatus, quitAndInstall };

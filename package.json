@@ -9,6 +9,8 @@
     "start:verify": "set ROOPIE_LOG_CONSOLE=1&& electron .",
     "build:css": "tailwindcss -i src/renderer/tailwind.css -o src/renderer/pages/app.css --minify",
     "watch:css": "tailwindcss -i src/renderer/tailwind.css -o src/renderer/pages/app.css --watch",
+    "gen:icon": "electron scripts/gen-icon.js",
+    "gen:installer-art": "electron scripts/gen-installer-art.js",
     "dist": "electron-builder --win",
     "release": "electron-builder --win --publish always"
   },
@@ -35,7 +37,20 @@
       "icon": "build/icon.ico"
     },
     "nsis": {
-      "oneClick": true,
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
+      "shortcutName": "Roopie",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "installerHeader": "build/installerHeader.bmp",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/uninstallerSidebar.bmp",
+      "uninstallDisplayName": "Roopie",
       "deleteAppDataOnUninstall": false
     },
     "publish": {

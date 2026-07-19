@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https: data:; style-src 'self'" />
+  <title>Roopieへようこそ</title>
+  <link rel="stylesheet" href="app.css" />
+  <link rel="stylesheet" href="onboarding.css" />
+</head>
+<body class="onboarding">
+  <div class="ob-glow one"></div>
+  <div class="ob-glow two"></div>
+
+  <button id="skip" class="ob-btn ghost ob-skip">スキップ</button>
+
+  <div class="ob-shell">
+    <div class="ob-stage">
+      <!-- 1: ようこそ -->
+      <section class="ob-step active" data-step="0">
+        <div class="ob-logo">R</div>
+        <span id="version-badge" class="ob-version"></span>
+        <h1 class="ob-title">Roopieへようこそ</h1>
+        <p class="ob-lead">
+          Chromiumベースの新しいブラウザです。<br />
+          いくつかの質問に答えるだけで、すぐに使いはじめられます(30秒ほど)。
+        </p>
+      </section>
+
+      <!-- 2: できること -->
+      <section class="ob-step" data-step="1">
+        <h1 class="ob-title">Roopieでできること</h1>
+        <p class="ob-lead">あとから設定画面(Ctrl+,)でいつでも変更できます。</p>
+        <div id="features" class="ob-cards"></div>
+      </section>
+
+      <!-- 3: 見た目 -->
+      <section class="ob-step" data-step="2">
+        <h1 class="ob-title">見た目を選ぶ</h1>
+        <p class="ob-lead">アクセントカラーとタブの並び方を決めましょう。</p>
+        <div class="ob-field">
+          <div class="ob-field-label">アクセントカラー</div>
+          <div id="accents" class="ob-swatches"></div>
+        </div>
+        <div class="ob-field">
+          <div class="ob-field-label">タブバーの位置</div>
+          <div id="tabbar" class="ob-choices"></div>
+        </div>
+      </section>
+
+      <!-- 4: 検索とプライバシー -->
+      <section class="ob-step" data-step="3">
+        <h1 class="ob-title">検索とプライバシー</h1>
+        <p class="ob-lead">既定の検索エンジンと、広告・トラッカーの遮断を設定します。</p>
+        <div class="ob-field">
+          <div class="ob-field-label">既定の検索エンジン</div>
+          <div id="engines" class="ob-choices"></div>
+        </div>
+        <div class="ob-field">
+          <div class="ob-field-label">広告ブロック</div>
+          <div id="adblock" class="ob-choices"></div>
+        </div>
+      </section>
+
+      <!-- 5: 完了 -->
+      <section class="ob-step" data-step="4">
+        <div class="ob-logo">R</div>
+        <h1 class="ob-title">準備ができました</h1>
+        <p class="ob-lead">
+          F4でサイドパネル、Ctrl+, で設定、右ドラッグでマウスジェスチャー。<br />
+          新しいバージョンは自動でダウンロードされ、再起動するだけで最新になります。
+        </p>
+      </section>
+
+      <div class="ob-actions">
+        <button id="back" class="ob-btn">戻る</button>
+        <button id="next" class="ob-btn primary">はじめる</button>
+      </div>
+      <div id="dots" class="ob-dots"></div>
+    </div>
+  </div>
+
+  <script src="theme.js"></script>
+  <script src="onboarding-icons.js"></script>
+  <script src="welcome.js"></script>
+</body>
+</html>

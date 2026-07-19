@@ -1642,3 +1642,61 @@ document.addEventListener('visibilitychange', () => {
   refreshPasswords();
   refreshAutofill();
 })();
+
+// ---- Roopieについて(バージョン・更新確認・変更履歴) ----
+
+const REPO_URL = 'https://github.com/eugene-rb/Roopie';
+const aboutVersionEl = document.getElementById('about-version');
+const aboutCheckBtn = document.getElementById('about-check');
+
+// updater.js の状態を日本語にする
+function updateStatusText(status, version) {
+  switch (status.state) {
+    case 'dev':
+      return `バージョン ${version}(開発中のため自動アップデートは動きません)`;
+    case 'checking':
+      return '更新を確認しています…';
+    case 'downloading':
+      return `新しいバージョン ${status.version} をダウンロード中${
+        status.percent != null ? ` (${status.percent}%)` : ''
+      }`;
+    case 'downloaded':
+      return `バージョン ${status.version} の準備ができました。再起動すると適用されます`;
+    case 'error':
+      return `バージョン ${version}(更新の確認に失敗しました: ${status.message})`;
+    case 'latest':
+      return `バージョン ${version}(最新です)`;
+    default:
+      return `バージョン ${version}`;
+  }
+}
+
+async function refreshAbout(status) {
+  const info = await window.roopieInternal.getAppInfo();
+  const s = status ?? (await window.roopieInternal.getUpdateStatus());
+  aboutVersionEl.textContent = updateStatusText(s, info.version);
+}
+
+aboutCheckBtn.addEventListener('click', async () => {
+  aboutCheckBtn.disabled = true;
+  aboutVersionEl.textContent = '更新を確認しています…';
+  const status = await window.roopieInternal.checkForUpdates();
+  await refreshAbout(status);
+  aboutCheckBtn.disabled = false;
+  if (status.state === 'downloaded') {
+    aboutCheckBtn.textContent = '再起動して更新';
+    aboutCheckBtn.onclick = () => window.roopieInternal.quitAndInstall();
+  }
+});
+
+document.getElementById('about-notes').addEventListener('click', () =>
+  window.roopieInternal.navigate('roopie://whatsnew?all')
+);
+document.getElementById('about-intro').addEventListener('click', () =>
+  window.roopieInternal.navigate('roopie://welcome')
+);
+document.getElementById('about-repo').addEventListener('click', () =>
+  window.roopieInternal.openExternal(REPO_URL)
+);
+
+refreshAbout();

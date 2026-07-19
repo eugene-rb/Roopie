@@ -26,6 +26,8 @@
     - `publish.releaseType: "release"` は必須。既定の `draft` だとelectron-updaterから見えず自動更新が動かない
     - 成果物は1回約100MBなので、ワークフローが古いリリースを消して直近10件だけ残す。`**.md` だけの変更ではビルドしない
     - ローカルで確認したいときだけ `npm run dist`(dist/ に出力、公開はしない)
+  - (2026-07-19) 初回起動のイントロ(`roopie://welcome`)とアップデート後の変更点(`roopie://whatsnew`)を追加。**出し分けはアプリのバージョンではなく `src/renderer/pages/release-notes.json` の先頭エントリの version で行う**(pushごとにビルド番号が上がるため、バージョン一致だと毎回ポップアップが出てしまう)。`VERSION_BASE` を上げるときは release-notes.json に1件追加する(それが全ユーザーへの「変更点」になる)。状態は `userData/app-state.json`。検証: `npx electron scripts/test-onboarding.js`
+  - (2026-07-19) インストーラーはNSISのアシスト形式(oneClick:false)。左側・ヘッダーの画像は `npx electron scripts/gen-installer-art.js` で生成(build/*.bmp。NSISは24bit BMPしか受け付けない)
 
 ---
 

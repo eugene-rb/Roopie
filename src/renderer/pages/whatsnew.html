@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https: data:; style-src 'self'" />
+  <title>Roopieの新機能</title>
+  <link rel="stylesheet" href="app.css" />
+  <link rel="stylesheet" href="onboarding.css" />
+</head>
+<body class="onboarding">
+  <div class="ob-glow one"></div>
+  <div class="ob-glow two"></div>
+
+  <div class="ob-shell">
+    <div class="ob-stage centered">
+      <div class="ob-logo">R</div>
+      <span id="version-badge" class="ob-version"></span>
+      <h1 id="title" class="ob-title">Roopieが新しくなりました</h1>
+      <p id="summary" class="ob-lead"></p>
+      <div id="notes"></div>
+      <div class="ob-actions sticky">
+        <button id="close" class="ob-btn primary">続ける</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="theme.js"></script>
+  <script src="onboarding-icons.js"></script>
+  <script src="whatsnew.js"></script>
+</body>
+</html>

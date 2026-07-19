@@ -203,6 +203,15 @@ if (location.protocol === 'roopie:') {
     onQrShow: (cb) => ipcRenderer.on('qr:show', (_e, payload) => cb(payload)),
     saveQr: (dataUrl, filename) => ipcRenderer.invoke('qr:save', dataUrl, filename),
 
+    // イントロ(初回起動)/ 変更点 / アプリ情報
+    getAppInfo: () => ipcRenderer.invoke('app:info'),
+    introDone: () => ipcRenderer.send('app:intro-done'),
+    notesSeen: () => ipcRenderer.send('app:notes-seen'),
+    getUpdateStatus: () => ipcRenderer.invoke('app:update-status'),
+    checkForUpdates: () => ipcRenderer.invoke('app:check-updates'),
+    quitAndInstall: () => ipcRenderer.send('app:quit-and-install'),
+    openExternal: (url) => ipcRenderer.send('app:open-external', url),
+
     onDownloadsState: (cb) =>
       ipcRenderer.on('downloads:state', (_e, state) => cb(state)),
     onBookmarksState: (cb) =>

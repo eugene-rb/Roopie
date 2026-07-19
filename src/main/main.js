@@ -6,6 +6,7 @@ const { registerIpc } = require('./ipc');
 const { setupMenu } = require('./menu');
 const { setupVerifyLog } = require('./verify-log');
 const { setupAutoUpdater } = require('./updater');
+const appState = require('./app-state');
 
 // 二重起動を防ぐ(2つ目のインスタンスはプロファイルのキャッシュ等を壊すため)。
 // 既に起動中なら、そのインスタンスのウィンドウを前面に出して終了する。
@@ -28,13 +29,15 @@ setupVerifyLog();
 
 app.whenReady().then(() => {
   browser.initData();
+  appState.init();
   setupMenu();
   // ショートカット割り当てが変わったらメニュー(アクセラレータ)を作り直し、設定画面へ配信する
   browser.onKeybindingsChanged = () => {
     setupMenu();
     browser.sendKeybindings();
   };
-  browser.createWindow();
+  // 初回起動ならイントロ、アップデート直後なら変更点を最初のタブに開く(通常は新しいタブ)
+  browser.createWindow({ url: appState.takeStartupUrl() });
   setupAutoUpdater();
 });
 
@@ -44,6 +47,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   browser.flushAll();
+  appState.flush();
   browser.tor.stop();
 });
 
