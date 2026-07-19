@@ -1,16 +1,50 @@
 // マウスジェスチャーの割り当て設定を管理する。
 // パターンは U/D/L/R の並び(例: "DR" = 下→右)で、アクションIDに対応付ける。
 
+// 割り当てられるアクション。categoryは設定画面のプルダウンの見出しに使う。
+// scroll系はページ内で完結するのでレンダラー(gesture-preload.js)が実行し、
+// それ以外はメイン(ipc.js の gestures:perform)が実行する
 const ACTIONS = [
-  { id: 'back', label: '戻る' },
-  { id: 'forward', label: '進む' },
-  { id: 'reload', label: '再読み込み' },
-  { id: 'closeTab', label: 'タブを閉じる' },
-  { id: 'newTab', label: '新しいタブ' },
-  { id: 'nextTab', label: '次のタブ' },
-  { id: 'prevTab', label: '前のタブ' },
-  { id: 'scrollTop', label: 'ページの先頭へ' },
-  { id: 'scrollBottom', label: 'ページの末尾へ' },
+  { id: 'back', label: '戻る', category: 'ページ移動' },
+  { id: 'forward', label: '進む', category: 'ページ移動' },
+  { id: 'reload', label: '再読み込み', category: 'ページ移動' },
+  { id: 'reloadHard', label: '再読み込み(キャッシュ無視)', category: 'ページ移動' },
+  { id: 'stop', label: '読み込みを中止', category: 'ページ移動' },
+  { id: 'home', label: 'スタートページを開く', category: 'ページ移動' },
+  { id: 'scrollTop', label: 'ページの先頭へ', category: 'ページ移動' },
+  { id: 'scrollBottom', label: 'ページの末尾へ', category: 'ページ移動' },
+  { id: 'scrollPageUp', label: '1画面戻る', category: 'ページ移動' },
+  { id: 'scrollPageDown', label: '1画面進む', category: 'ページ移動' },
+
+  { id: 'newTab', label: '新しいタブ', category: 'タブ' },
+  { id: 'closeTab', label: 'タブを閉じる', category: 'タブ' },
+  { id: 'reopenTab', label: '閉じたタブを再度開く', category: 'タブ' },
+  { id: 'duplicateTab', label: 'タブを複製', category: 'タブ' },
+  { id: 'closeOtherTabs', label: '他のタブを閉じる', category: 'タブ' },
+  { id: 'nextTab', label: '次のタブ', category: 'タブ' },
+  { id: 'prevTab', label: '前のタブ', category: 'タブ' },
+  { id: 'muteTab', label: 'タブのミュート切り替え', category: 'タブ' },
+  { id: 'detachTab', label: 'タブを新しいウィンドウへ', category: 'タブ' },
+
+  { id: 'newWindow', label: '新しいウィンドウ', category: 'ウィンドウ' },
+  { id: 'incognitoWindow', label: 'シークレットウィンドウ', category: 'ウィンドウ' },
+  { id: 'closeWindow', label: 'ウィンドウを閉じる', category: 'ウィンドウ' },
+  { id: 'minimizeWindow', label: 'ウィンドウを最小化', category: 'ウィンドウ' },
+  { id: 'toggleFullscreen', label: '全画面表示の切り替え', category: 'ウィンドウ' },
+
+  { id: 'bookmarkPage', label: 'このページをブックマーク', category: 'ページ操作' },
+  { id: 'copyUrl', label: 'URLをコピー', category: 'ページ操作' },
+  { id: 'findInPage', label: 'ページ内検索', category: 'ページ操作' },
+  { id: 'print', label: '印刷', category: 'ページ操作' },
+  { id: 'zoomIn', label: '拡大', category: 'ページ操作' },
+  { id: 'zoomOut', label: '縮小', category: 'ページ操作' },
+  { id: 'zoomReset', label: 'ズームを戻す', category: 'ページ操作' },
+
+  { id: 'toggleSidePanel', label: 'サイドパネルの表示切り替え', category: 'ブラウザ' },
+  { id: 'openHistory', label: '履歴を開く', category: 'ブラウザ' },
+  { id: 'openDownloads', label: 'ダウンロードを開く', category: 'ブラウザ' },
+  { id: 'openBookmarks', label: 'ブックマーク管理を開く', category: 'ブラウザ' },
+  { id: 'openSettings', label: '設定を開く', category: 'ブラウザ' },
 ];
 
 const ACTION_IDS = new Set(ACTIONS.map((a) => a.id));
@@ -84,3 +118,4 @@ function sanitizeMappings(mappings) {
 }
 
 module.exports = Gestures;
+module.exports.ACTIONS = ACTIONS; // 検証用(scripts/test-gesture-actions.js)

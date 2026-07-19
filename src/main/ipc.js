@@ -1,7 +1,8 @@
 const fs = require('fs');
-const { ipcMain, dialog, shell, net } = require('electron');
+const { ipcMain, dialog, shell, net, clipboard } = require('electron');
 const windows = require('./windows');
 const browser = require('./browser');
+const TabManager = require('./tab-manager');
 const GoogleAccounts = require('./google-accounts');
 const Passwords = require('./passwords');
 const Autofill = require('./autofill');
@@ -711,11 +712,16 @@ function registerIpc() {
     browser.sendGesturesFor(profileIdOf(e));
   });
 
-  // ジェスチャーpreloadからのアクション実行要求(送信元のタブに対して実行する)
+  // ジェスチャーpreloadからのアクション実行要求(送信元のタブに対して実行する)。
+  // 対応するアクションの一覧は gestures.js の ACTIONS
   ipcMain.on('gestures:perform', (e, action) => {
+    const ctx = ctxOf(e);
     const tabManager = tabsOf(e);
-    if (!bundleOf(e)?.gestures.data.enabled || !tabManager) return;
+    if (!bundleOf(e)?.gestures.data.enabled || !tabManager || !ctx) return;
     const wc = e.sender;
+    const tab = tabManager.tabs.find((t) => t.view.webContents === wc);
+    const open = (url) => tabManager.createTab(url);
+
     switch (action) {
       case 'back':
         if (wc.navigationHistory.canGoBack()) wc.navigationHistory.goBack();
@@ -726,19 +732,101 @@ function registerIpc() {
       case 'reload':
         wc.reload();
         break;
-      case 'closeTab': {
-        const tab = tabManager.tabs.find((t) => t.view.webContents === wc);
-        if (tab) tabManager.closeTab(tab.id);
+      case 'reloadHard':
+        wc.reloadIgnoringCache();
         break;
-      }
+      case 'stop':
+        wc.stop();
+        break;
+      case 'home':
+        open(TabManager.NEW_TAB_URL);
+        break;
+
       case 'newTab':
         tabManager.createTab();
+        break;
+      case 'closeTab':
+        if (tab) tabManager.closeTab(tab.id);
+        break;
+      case 'reopenTab':
+        tabManager.reopenClosedTab();
+        break;
+      case 'duplicateTab':
+        if (tab) tabManager.duplicateTab(tab.id);
+        break;
+      case 'closeOtherTabs':
+        if (tab) tabManager.closeOtherTabs(tab.id);
         break;
       case 'nextTab':
         tabManager.switchRelative(1);
         break;
       case 'prevTab':
         tabManager.switchRelative(-1);
+        break;
+      case 'muteTab':
+        if (tab) tabManager.toggleMute(tab.id);
+        break;
+      case 'detachTab':
+        // 最後の1枚は切り離せない(元のウィンドウが空になるため)
+        if (tab && tabManager.tabs.length > 1) {
+          const url = wc.getURL();
+          tabManager.closeTab(tab.id);
+          browser.createWindow({ url, profileId: ctx.profileId });
+        }
+        break;
+
+      case 'newWindow':
+        browser.createWindow({ profileId: ctx.profileId });
+        break;
+      case 'incognitoWindow':
+        browser.createWindow({ incognito: true, profileId: ctx.profileId });
+        break;
+      case 'closeWindow':
+        ctx.window.close();
+        break;
+      case 'minimizeWindow':
+        ctx.window.minimize();
+        break;
+      case 'toggleFullscreen':
+        ctx.window.setFullScreen(!ctx.window.isFullScreen());
+        break;
+
+      case 'bookmarkPage':
+        tabManager.toggleBookmarkForActiveTab();
+        break;
+      case 'copyUrl':
+        clipboard.writeText(wc.getURL());
+        break;
+      case 'findInPage':
+        ctx.window.webContents.send('ui:open-find');
+        break;
+      case 'print':
+        wc.print();
+        break;
+      case 'zoomIn':
+        tabManager.zoom(1);
+        break;
+      case 'zoomOut':
+        tabManager.zoom(-1);
+        break;
+      case 'zoomReset':
+        tabManager.zoom(0);
+        break;
+
+      case 'toggleSidePanel':
+        ctx.sidePanel.toggle();
+        break;
+      case 'openHistory':
+        open('roopie://history');
+        break;
+      case 'openDownloads':
+        open('roopie://downloads');
+        break;
+      case 'openBookmarks':
+        open('roopie://bookmarks');
+        break;
+      case 'openSettings':
+        open('roopie://settings');
         break;
     }
   });

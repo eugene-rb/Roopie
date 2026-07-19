@@ -56,6 +56,9 @@ const MEDIA_PROBE = `(() => {
 // 1フレームへの問い合わせに待つ上限。応答を返さないフレーム(広告等)があるため必須
 const PROBE_TIMEOUT = 800;
 
+// 「閉じたタブを再度開く」で遡れる数
+const MAX_CLOSED_TABS = 10;
+
 const MEDIA_HOOK = `(() => {
   const ms = navigator.mediaSession;
   if (!ms || window.__roopieMediaHooked) return;
@@ -174,6 +177,7 @@ class TabManager {
     this.searchEngine = DEFAULT_ENGINE; // アドレスバーでURLでない入力をしたときの検索エンジン
     this.overlay = null; // メニュー等を表示する、常にタブより手前のView
     this.htmlFullscreenTabId = null; // ページ側の全画面(YouTube等)にしているタブ
+    this.closedTabs = []; // 閉じたタブの履歴({ url, index })。新しいものが末尾
 
     for (const event of ['resize', 'maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen']) {
       window.on(event, () => this.layout());
@@ -407,6 +411,7 @@ class TabManager {
     if (id === this.splitTabId) this.splitTabId = null;
 
     const [tab] = this.tabs.splice(index, 1);
+    this.rememberClosedTab(tab, index);
     this.stopMediaWatch(tab);
     if (this.htmlFullscreenTabId === tab.id) this.setHtmlFullscreen(tab.id, false);
     this.window.contentView.removeChildView(tab.view);
@@ -450,6 +455,52 @@ class TabManager {
     this.layout();
     tab.view.webContents.focus();
     this.onTabSelected?.(tab);
+    this.sendState();
+  }
+
+  // ---- 閉じたタブを開き直す(Chromeの Ctrl+Shift+T 相当) ----
+
+  rememberClosedTab(tab, index) {
+    const wc = tab.view.webContents;
+    const url = wc.isDestroyed() ? '' : wc.getURL();
+    // 新しいタブページや空のタブを覚えても意味がない
+    if (!url || isNewTabUrl(url) || url === 'about:blank') return;
+    this.closedTabs.push({ url, index });
+    if (this.closedTabs.length > MAX_CLOSED_TABS) this.closedTabs.shift();
+  }
+
+  // 直近に閉じたタブから順に開き直す。元の位置に戻す
+  reopenClosedTab() {
+    const entry = this.closedTabs.pop();
+    if (!entry) return null;
+    const tab = this.createTab(entry.url);
+    const to = Math.min(Math.max(0, entry.index), this.tabs.length - 1);
+    const from = this.tabs.indexOf(tab);
+    if (from !== -1 && from !== to) {
+      this.tabs.splice(from, 1);
+      this.tabs.splice(to, 0, tab);
+      this.sendState();
+    }
+    return tab;
+  }
+
+  duplicateTab(id) {
+    const tab = this.getTab(id);
+    if (!tab) return null;
+    const url = tab.view.webContents.getURL();
+    return this.createTab(url || undefined);
+  }
+
+  closeOtherTabs(id) {
+    for (const other of [...this.tabs]) {
+      if (other.id !== id) this.closeTab(other.id);
+    }
+  }
+
+  toggleMute(id) {
+    const wc = this.getTab(id)?.view.webContents;
+    if (!wc || wc.isDestroyed()) return;
+    wc.setAudioMuted(!wc.isAudioMuted());
     this.sendState();
   }
 

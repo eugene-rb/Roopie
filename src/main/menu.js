@@ -42,6 +42,11 @@ function setupMenu() {
         { type: 'separator' },
         { label: 'タブを閉じる', accelerator: accel('closeTab'), click: () => tabs()?.closeActiveTab() },
         {
+          label: '閉じたタブを再度開く',
+          accelerator: accel('reopenTab'),
+          click: () => tabs()?.reopenClosedTab(),
+        },
+        {
           label: 'ウィンドウを閉じる',
           accelerator: accel('closeWindow'),
           click: () => windows.focused()?.window.close(),

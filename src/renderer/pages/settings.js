@@ -1549,18 +1549,34 @@ function saveGestures(mappings = gestureState.mappings) {
   window.roopieInternal.setGestures({ enabled: gestureEnabledEl.checked, mappings });
 }
 
+// アクションの選択肢をカテゴリ見出し付きで作る(数が多いのでそのまま並べると探せない)
+function fillActionOptions(select) {
+  select.textContent = '';
+  const groups = new Map();
+  for (const action of gestureState.actions) {
+    const key = action.category || 'その他';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(action);
+  }
+  for (const [category, actions] of groups) {
+    const group = document.createElement('optgroup');
+    group.label = category;
+    for (const action of actions) {
+      const option = document.createElement('option');
+      option.value = action.id;
+      option.textContent = action.label;
+      group.appendChild(option);
+    }
+    select.appendChild(group);
+  }
+}
+
 function renderGestures() {
   gestureEnabledEl.checked = !!gestureState.enabled;
 
   // アクションの選択肢(追加フォーム用)
   const selected = gestureActionEl.value;
-  gestureActionEl.textContent = '';
-  for (const action of gestureState.actions) {
-    const option = document.createElement('option');
-    option.value = action.id;
-    option.textContent = action.label;
-    gestureActionEl.appendChild(option);
-  }
+  fillActionOptions(gestureActionEl);
   if (gestureState.actions.some((a) => a.id === selected)) gestureActionEl.value = selected;
 
   // 割り当て一覧
@@ -1585,12 +1601,7 @@ function renderGestures() {
     // アクションはその場でプルダウン変更できる
     const select = document.createElement('select');
     select.className = 'gesture-select';
-    for (const action of gestureState.actions) {
-      const option = document.createElement('option');
-      option.value = action.id;
-      option.textContent = action.label;
-      select.appendChild(option);
-    }
+    fillActionOptions(select);
     select.value = gestureState.mappings[pattern];
     select.addEventListener('change', () => {
       saveGestures({ ...gestureState.mappings, [pattern]: select.value });

@@ -9,6 +9,7 @@ const COMMANDS = [
   { id: 'newWindow', label: '新しいウィンドウ', category: 'ファイル', default: 'CmdOrCtrl+N' },
   { id: 'newIncognito', label: '新しいシークレットウィンドウ', category: 'ファイル', default: 'CmdOrCtrl+Shift+N' },
   { id: 'closeTab', label: 'タブを閉じる', category: 'ファイル', default: 'CmdOrCtrl+W' },
+  { id: 'reopenTab', label: '閉じたタブを再度開く', category: 'ファイル', default: 'CmdOrCtrl+Shift+T' },
   { id: 'closeWindow', label: 'ウィンドウを閉じる', category: 'ファイル', default: 'CmdOrCtrl+Shift+W' },
   { id: 'print', label: '印刷', category: 'ファイル', default: 'CmdOrCtrl+P' },
   { id: 'find', label: 'ページ内を検索', category: '編集', default: 'CmdOrCtrl+F' },
