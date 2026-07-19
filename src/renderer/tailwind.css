@@ -667,6 +667,12 @@ body {
   background: var(--hover);
 }
 
+/* ページ側の全画面(YouTube等)の間はブラウザのUIを丸ごと隠す。
+   ページの領域はメイン側(tab-manager.js の layout)がウィンドウ一杯に広げる */
+body.html-fullscreen #chrome {
+  display: none;
+}
+
 /* ---- ブックマークバー ---- */
 #bookmark-bar {
   display: flex;

@@ -154,9 +154,13 @@ const pagePreloadSessions = new WeakSet();
 function registerPagePreloads(session) {
   if (pagePreloadSessions.has(session)) return;
   pagePreloadSessions.add(session);
-  for (const name of ['gesture-preload.js', 'autofill-preload.js', 'media-preload.js']) {
+  // メディアの検出はpreloadではなくメインプロセスから行う(tab-manager.jsのprobeMedia)。
+  // preloadはメインフレームでしか走らず、プレイヤーをiframeに置くサイトを取りこぼすため
+  for (const name of ['gesture-preload.js', 'autofill-preload.js']) {
     session.registerPreloadScript({ type: 'frame', filePath: path.join(PRELOAD_DIR, name) });
   }
+  // ページ側の全画面は有名サイトだけに許可する(広告や偽の警告画面に画面を占有させない)
+  TabManager.applyFullscreenPolicy(session);
 }
 
 // ---- データの初期化 ----
@@ -360,17 +364,23 @@ browser.createWindow = ({ incognito = false, url, x, y, profileId, restoreTabs }
     incognito,
     profileId: profile.id,
     media: null,
+    // フレーム(iframe含む)ごとの再生状態。動画がiframeの中にあるサイトでは、
+    // 動画を持たないメインフレームからもnullが届くため、1つの変数では上書きし合ってしまう
+    mediaFrames: new Map(),
+    mediaFrame: null, // 操作対象のWebFrameMain(再生/一時停止/シークの実行先)
   });
 
   // 新しいウィンドウにもテーマの不透明度を効かせる(既存ウィンドウと見た目を揃える)
   browser.applyWindowOpacity(ctx);
 
   // 再生中だったタブを閉じたら、フローティングプレイヤー/サイドパネルの表示も消す
-  tabManager.onTabClosed = (tab) => {
-    if (ctx.media?.tabId === tab.id) {
-      ctx.media = null;
-      browser.sendMedia(ctx);
-    }
+  tabManager.onTabClosed = (tab) => browser.forgetMediaForTab(ctx, tab.id);
+
+  // タブごとの再生状態(タブ側が全フレームを調べて報告する)
+  tabManager.onMediaReport = (tabId, state, frame) => {
+    if (state) ctx.mediaFrames.set(tabId, { state: { ...state, tabId }, frame, tabId });
+    else ctx.mediaFrames.delete(tabId);
+    browser.pickMedia(ctx);
   };
 
   // Googleにログインした可能性のあるタイミングでアカウントを自動検出する(シークレットでは行わない)
@@ -877,6 +887,36 @@ browser.sendMedia = (ctx) => {
   if (!ctx || ctx.window.isDestroyed()) return;
   sendToContext(ctx, 'media:state', ctx.media);
   ctx.mediaPlayer.setState(ctx.media);
+};
+
+// フレームごとの報告から「今かかっているもの」を1つ選ぶ。
+// 再生中のものを最優先、次に再生位置が進んでいるもの(一時停止中の続き)。
+// 消えたフレームの報告は捨てる(タブを閉じた/ページを離れた後に残ると誤表示になる)
+browser.pickMedia = (ctx) => {
+  if (!ctx) return;
+  for (const [key, entry] of ctx.mediaFrames) {
+    if (!entry.frame || entry.frame.isDestroyed?.() || !ctx.tabManager.getTab(entry.tabId)) {
+      ctx.mediaFrames.delete(key);
+    }
+  }
+  const entries = [...ctx.mediaFrames.values()];
+  const chosen =
+    entries.find((entry) => entry.state.playing) ??
+    entries.filter((entry) => entry.state.currentTime > 0).at(-1) ??
+    entries.at(-1) ??
+    null;
+  ctx.media = chosen?.state ?? null;
+  ctx.mediaFrame = chosen?.frame ?? null;
+  browser.sendMedia(ctx);
+};
+
+// タブを閉じたときに、そのタブのフレームの報告を捨てる
+browser.forgetMediaForTab = (ctx, tabId) => {
+  if (!ctx) return;
+  for (const [key, entry] of ctx.mediaFrames) {
+    if (entry.tabId === tabId) ctx.mediaFrames.delete(key);
+  }
+  browser.pickMedia(ctx);
 };
 
 // 「サイドパネルに格納」設定の変更を、そのプロファイルのウィンドウのプレイヤーへ反映する

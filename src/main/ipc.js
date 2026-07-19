@@ -798,60 +798,52 @@ function registerIpc() {
   });
 
   // ---- メディアプレイヤー ----
-  ipcMain.on('media:state', (e, payload) => {
-    const ctx = ctxOf(e);
-    const tab = ctx?.tabManager.tabs.find((t) => t.view.webContents === e.sender);
-    if (!ctx || !tab) return;
-
-    if (payload) {
-      ctx.media = { ...payload, tabId: tab.id };
-    } else if (ctx.media?.tabId === tab.id) {
-      // このタブの再生が終わった場合だけクリアする(他タブの再生中表示は消さない)
-      ctx.media = null;
-    } else {
-      return;
-    }
-    browser.sendMedia(ctx);
-  });
-
+  // 再生状態の収集はメインプロセス側(tab-manager.js の probeMedia → browser.pickMedia)。
+  // ここでは操作だけを受ける
   ipcMain.on('media:control', (e, action, value) => {
     const ctx = ctxOf(e);
     const media = ctx?.media;
     if (!media) return;
     const tab = ctx.tabManager.getTab(media.tabId);
     if (!tab) {
-      ctx.media = null;
-      browser.sendMedia(ctx);
+      browser.forgetMediaForTab(ctx, media.tabId);
       return;
     }
-    const wc = tab.view.webContents;
+    // 操作は「その動画があるフレーム」に対して行う。タブのメインフレームに送ると、
+    // 動画がiframeの中にあるサイト(ニュース系に多い)では要素が見つからず何も起きない
+    const frame = ctx.mediaFrame && !ctx.mediaFrame.isDestroyed?.() ? ctx.mediaFrame : null;
+    const run = (code) => {
+      const target = frame ?? tab.view.webContents;
+      target.executeJavaScript(code, true).catch(() => {});
+    };
+    // shadow DOM の中にプレイヤーを作るサイトがあるため、影も含めて探す
     const pick = `(() => {
-      const els = [...document.querySelectorAll('video, audio')];
-      return els.find((el) => !el.paused) || els[els.length - 1];
+      const found = [];
+      const walk = (root, depth) => {
+        if (!root || depth > 8) return;
+        for (const el of root.querySelectorAll('video, audio')) found.push(el);
+        for (const el of root.querySelectorAll('*')) if (el.shadowRoot) walk(el.shadowRoot, depth + 1);
+      };
+      walk(document, 0);
+      return found.find((el) => !el.paused) || found[found.length - 1];
     })()`;
 
     if (action === 'toggle') {
-      wc.executeJavaScript(`(() => { const el = ${pick}; if (el) el.paused ? el.play() : el.pause(); })()`, true).catch(() => {});
+      run(`(() => { const el = ${pick}; if (el) el.paused ? el.play() : el.pause(); })()`);
     } else if (action === 'seek' && typeof value === 'number') {
-      wc.executeJavaScript(`(() => { const el = ${pick}; if (el) el.currentTime = ${JSON.stringify(value)}; })()`, true).catch(() => {});
+      run(`(() => { const el = ${pick}; if (el) el.currentTime = ${JSON.stringify(value)}; })()`);
     } else if (action === 'pip') {
-      wc.executeJavaScript(
-        `(() => {
-          const el = [...document.querySelectorAll('video')].find((v) => !v.paused) || document.querySelector('video');
-          if (el && document.pictureInPictureEnabled) el.requestPictureInPicture().catch(() => {});
-        })()`,
-        true
-      ).catch(() => {});
+      run(`(() => {
+        const el = ${pick};
+        if (el && el.tagName === 'VIDEO' && document.pictureInPictureEnabled) el.requestPictureInPicture().catch(() => {});
+      })()`);
     } else if (action === 'next' || action === 'prev') {
       // main worldに退避したMediaSessionハンドラ(tab-manager.jsのMEDIA_HOOK)を呼ぶ
       const evt = action === 'next' ? 'nexttrack' : 'previoustrack';
-      wc.executeJavaScript(
-        `(() => {
-          const h = window.__roopieMediaActions && window.__roopieMediaActions['${evt}'];
-          if (typeof h === 'function') { h({ action: '${evt}' }); }
-        })()`,
-        true
-      ).catch(() => {});
+      run(`(() => {
+        const h = window.__roopieMediaActions && window.__roopieMediaActions['${evt}'];
+        if (typeof h === 'function') { h({ action: '${evt}' }); }
+      })()`);
     }
   });
 

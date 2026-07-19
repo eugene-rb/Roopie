@@ -565,6 +565,14 @@ window.roopie.onToggleCompact(() => {
   reportChromeHeight();
 });
 
+// ---- ページ側の全画面(YouTube等の全画面ボタン) ----
+// タブバー・ツールバー・ブックマークバーをまとめて隠す。ページの領域はメイン側
+// (tab-manager.js の layout)がウィンドウ一杯に広げる
+window.roopie.onHtmlFullscreen((on) => {
+  document.body.classList.toggle('html-fullscreen', !!on);
+  reportChromeHeight();
+});
+
 // ---- ウィンドウ種別(シークレットかどうか) ----
 let isIncognito = false;
 window.roopie.onWindowInfo(({ incognito }) => {

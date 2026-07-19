@@ -437,6 +437,8 @@ contextBridge.exposeInMainWorld('roopie', {
   newWindow: () => ipcRenderer.send('window:new'),
   newIncognitoWindow: () => ipcRenderer.send('window:new-incognito'),
   onWindowInfo: (cb) => ipcRenderer.on('ui:window', (_e, info) => cb(info)),
+  // ページ側の全画面(YouTube等)の出入り。ブラウザのUIを丸ごと隠す
+  onHtmlFullscreen: (cb) => ipcRenderer.on('ui:html-fullscreen', (_e, on) => cb(on)),
   navigate: (input) => ipcRenderer.send('tabs:navigate', input),
   goBack: () => ipcRenderer.send('tabs:back'),
   goForward: () => ipcRenderer.send('tabs:forward'),

@@ -23,7 +23,39 @@ const MAX_SPLIT_RATIO = 0.85;
 // メディアの next/prev 用。ページのmain worldに setActionHandler の wrapper を仕込み、
 // サイトが登録したハンドラを退避する(APIにハンドラ読み出しが無いため)。
 // 退避したハンドラは media:control の 'next'/'prev' で呼ぶ。登録されている種類は
-// <html data-roopie-media> に書き出し、isolated worldのmedia-preloadが可否を読む。
+// <html data-roopie-media> に書き出し、下のMEDIA_PROBEが可否を読む。
+// ページ内のプレイヤーを探して状態を返すスクリプト。各フレーム(iframe含む)で実行する。
+// preloadを使わないのは、preloadがメインフレームでしか走らず、ニュースサイトのように
+// プレイヤーをiframeの中に置くサイトを取りこぼすため。shadow DOMの中も潜って探す。
+const MEDIA_PROBE = `(() => {
+  const found = [];
+  const walk = (root, depth) => {
+    if (!root || depth > 8) return;
+    for (const el of root.querySelectorAll('video, audio')) found.push(el);
+    for (const el of root.querySelectorAll('*')) if (el.shadowRoot) walk(el.shadowRoot, depth + 1);
+  };
+  walk(document, 0);
+  const playing = found.filter((el) => !el.paused && !el.ended && el.readyState > 0);
+  const el = playing[playing.length - 1] || found.filter((e) => e.currentTime > 0).pop() || null;
+  if (!el) return null;
+  const ms = navigator.mediaSession && navigator.mediaSession.metadata;
+  const actions = (document.documentElement.dataset.roopieMedia || '').split(',');
+  return {
+    title: (ms && ms.title) || document.title || location.hostname,
+    artist: (ms && ms.artist) || location.hostname,
+    artwork: ms && ms.artwork && ms.artwork.length ? ms.artwork[ms.artwork.length - 1].src : null,
+    hasVideo: el.tagName === 'VIDEO',
+    playing: !el.paused && !el.ended,
+    currentTime: el.currentTime || 0,
+    duration: isFinite(el.duration) ? el.duration : 0,
+    canNext: actions.indexOf('nexttrack') >= 0,
+    canPrev: actions.indexOf('previoustrack') >= 0,
+  };
+})()`;
+
+// 1フレームへの問い合わせに待つ上限。応答を返さないフレーム(広告等)があるため必須
+const PROBE_TIMEOUT = 800;
+
 const MEDIA_HOOK = `(() => {
   const ms = navigator.mediaSession;
   if (!ms || window.__roopieMediaHooked) return;
@@ -43,6 +75,79 @@ const MEDIA_HOOK = `(() => {
   };
   sync();
 })()`;
+
+// ページ側の全画面(要素のrequestFullscreen)を許可するサイト。
+// どのページにも許可すると、広告や偽の警告画面がブラウザを乗っ取れてしまうため、
+// 全画面が本当に要る有名どころだけに絞る(末尾一致なのでサブドメインも含む)
+const FULLSCREEN_ALLOWLIST = [
+  // 動画・配信
+  'youtube.com',
+  'youtu.be',
+  'netflix.com',
+  'primevideo.com',
+  'amazon.co.jp',
+  'amazon.com',
+  'disneyplus.com',
+  'hulu.jp',
+  'hulu.com',
+  'abema.tv',
+  'tver.jp',
+  'nicovideo.jp',
+  'twitch.tv',
+  'vimeo.com',
+  'dailymotion.com',
+  'video.unext.jp',
+  'unext.jp',
+  'fod.fujitv.co.jp',
+  'wowow.co.jp',
+  'dmm.com',
+  'bilibili.com',
+  'spotify.com',
+  'soundcloud.com',
+  // ニュース・放送
+  'nhk.or.jp',
+  'news.yahoo.co.jp',
+  'yahoo.co.jp',
+  'bbc.com',
+  'cnn.com',
+  // 資料・会議・その他の定番
+  'docs.google.com',
+  'drive.google.com',
+  'meet.google.com',
+  'zoom.us',
+  'figma.com',
+  'x.com',
+  'twitter.com',
+  'instagram.com',
+  'facebook.com',
+  'tiktok.com',
+];
+
+// ホスト名が許可リストに一致するか(末尾一致。example.com の偽装 evilexample.com は弾く)
+function isFullscreenAllowed(url) {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return FULLSCREEN_ALLOWLIST.some((allowed) => host === allowed || host.endsWith(`.${allowed}`));
+  } catch {
+    return false;
+  }
+}
+
+// 全画面の許可はリクエストの時点で判定する。後から document.exitFullscreen() で戻すと、
+// 一瞬だけ全画面になるうえページ側の状態が残ることがあるため、そもそも許可しない。
+// 他の権限(通知・カメラ等)は従来どおり許可する
+const fullscreenPolicySessions = new WeakSet();
+function applyFullscreenPolicy(session) {
+  if (fullscreenPolicySessions.has(session)) return;
+  fullscreenPolicySessions.add(session);
+  session.setPermissionRequestHandler((wc, permission, callback, details) => {
+    if (permission === 'fullscreen') {
+      callback(isFullscreenAllowed(details?.requestingUrl || wc?.getURL?.() || ''));
+      return;
+    }
+    callback(true);
+  });
+}
 
 let nextTabId = 1;
 
@@ -68,6 +173,7 @@ class TabManager {
     this.sidePanelSide = 'right'; // サイドパネルを表示する側('left' | 'right')
     this.searchEngine = DEFAULT_ENGINE; // アドレスバーでURLでない入力をしたときの検索エンジン
     this.overlay = null; // メニュー等を表示する、常にタブより手前のView
+    this.htmlFullscreenTabId = null; // ページ側の全画面(YouTube等)にしているタブ
 
     for (const event of ['resize', 'maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen']) {
       window.on(event, () => this.layout());
@@ -213,6 +319,11 @@ class TabManager {
       }
     });
 
+    // Chromiumが再生の開始/停止を教えてくれる(iframeの中でもshadow DOMの中でも飛ぶ)。
+    // これをきっかけに全フレームを見に行く
+    wc.on('media-started-playing', () => this.startMediaWatch(tab));
+    wc.on('media-paused', () => this.probeMedia(tab));
+
     // ブックマークの案内はページを触ったら引っ込める(読み始めた人の邪魔をしない)。
     // 通常のページにはpreloadを渡していないので、メイン側でページの入力イベントを見る
     wc.on('input-event', (_e, input) => {
@@ -264,6 +375,20 @@ class TabManager {
       }
     });
 
+    // ページ側の全画面(YouTubeの全画面ボタン等)。許可した有名サイトだけを受け入れ、
+    // それ以外はすぐ解除する(広告や偽の警告画面に画面を占有されないようにする)
+    wc.on('enter-html-full-screen', () => {
+      if (!isFullscreenAllowed(wc.getURL())) {
+        // Electronはこの時点で既にウィンドウを全画面にしているので、ページ側とウィンドウ側の
+        // 両方を戻す(ページ側だけだとウィンドウが全画面のまま残る)
+        wc.executeJavaScript('document.exitFullscreen && document.exitFullscreen()', true).catch(() => {});
+        this.window.setFullScreen(false);
+        return;
+      }
+      this.setHtmlFullscreen(tab.id, true);
+    });
+    wc.on('leave-html-full-screen', () => this.setHtmlFullscreen(tab.id, false));
+
     // target="_blank" 等のリンクは新しいタブで開く。
     // ホイールクリック/Ctrl+クリックは disposition が background-tab で来るので、
     // Chrome同様にそのタブへは切り替えず裏で開く
@@ -282,6 +407,8 @@ class TabManager {
     if (id === this.splitTabId) this.splitTabId = null;
 
     const [tab] = this.tabs.splice(index, 1);
+    this.stopMediaWatch(tab);
+    if (this.htmlFullscreenTabId === tab.id) this.setHtmlFullscreen(tab.id, false);
     this.window.contentView.removeChildView(tab.view);
     tab.view.webContents.close();
     this.onTabClosed?.(tab);
@@ -324,6 +451,79 @@ class TabManager {
     tab.view.webContents.focus();
     this.onTabSelected?.(tab);
     this.sendState();
+  }
+
+  // ---- メディアの検出(ミニプレイヤー用) ----
+  // preloadは各フレームに配れない(メインフレームでしか走らない)ので、メインプロセスから
+  // 全フレームを見に行く。再生中だけ1秒おきに更新し、止まって少ししたら見るのをやめる
+
+  startMediaWatch(tab) {
+    // next/prev用のwrapperはメインフレームにしか入れていないので、iframeにも入れておく
+    for (const frame of tab.view.webContents.mainFrame?.framesInSubtree ?? []) {
+      frame.executeJavaScript(MEDIA_HOOK, true).catch(() => {});
+    }
+    this.probeMedia(tab);
+    if (tab.mediaTimer) return;
+    tab.mediaIdleTicks = 0;
+    tab.mediaTimer = setInterval(() => this.probeMedia(tab), 1000);
+  }
+
+  stopMediaWatch(tab) {
+    clearInterval(tab.mediaTimer);
+    tab.mediaTimer = null;
+  }
+
+  async probeMedia(tab) {
+    const wc = tab.view.webContents;
+    if (wc.isDestroyed()) {
+      this.stopMediaWatch(tab);
+      return;
+    }
+    // 応答が返ってこないフレームがある(広告のsrcdocフレーム等)。全フレームを同時に、
+    // かつ時間を区切って問い合わせる。直列かつ無制限に待つと、1つ詰まっただけで検出が止まる
+    const frames = (wc.mainFrame?.framesInSubtree ?? []).filter((frame) => !frame.isDestroyed?.());
+    const results = await Promise.all(
+      frames.map((frame) =>
+        Promise.race([
+          frame.executeJavaScript(MEDIA_PROBE, true).catch(() => null),
+          new Promise((resolve) => setTimeout(() => resolve(null), PROBE_TIMEOUT)),
+        ])
+      )
+    );
+
+    let best = null;
+    let bestFrame = null;
+    for (const [index, state] of results.entries()) {
+      const frame = frames[index];
+      if (!state) continue;
+      // 再生中のものを最優先。次に再生位置が進んでいるもの
+      if (!best || (state.playing && !best.playing) || (state.playing === best.playing && state.currentTime > best.currentTime)) {
+        best = state;
+        bestFrame = frame;
+      }
+    }
+
+    // 何も無い状態がしばらく続いたら監視を止める(音を止めただけの直後は残す)
+    if (!best) {
+      if (++tab.mediaIdleTicks >= 3) this.stopMediaWatch(tab);
+    } else {
+      tab.mediaIdleTicks = best.playing ? 0 : (tab.mediaIdleTicks ?? 0) + 1;
+      if (tab.mediaIdleTicks >= 60) this.stopMediaWatch(tab); // 一時停止のまま1分放置
+    }
+    this.onMediaReport?.(tab.id, best, bestFrame);
+  }
+
+  // ページ側の全画面(YouTube等)。ページをウィンドウ一杯に広げ、UIを隠し、
+  // ウィンドウ自体もOSの全画面にする。解除(Esc)で元に戻す
+  setHtmlFullscreen(tabId, on) {
+    const next = on ? tabId : null;
+    if (this.htmlFullscreenTabId === next) return;
+    // 全画面中のタブ以外からの解除通知は無視する(別タブの終了で抜けてしまわないように)
+    if (!on && this.htmlFullscreenTabId !== tabId) return;
+    this.htmlFullscreenTabId = next;
+    this.window.setFullScreen(!!on);
+    this.window.webContents.send('ui:html-fullscreen', !!on);
+    this.layout();
   }
 
   updateVisibility() {
@@ -572,16 +772,21 @@ class TabManager {
   layout() {
     if (this.window.isDestroyed()) return;
     const [width, height] = this.window.getContentSize();
-    const m = this.margin;
-    const radius = m ? CONTENT_RADIUS : 0;
+    // ページ側の全画面(YouTube等の全画面ボタン)の間は、ページだけをウィンドウ一杯に広げる。
+    // 余白・角丸・ツールバー・タブバー・サイドパネルの領域をすべて0にすれば同じ経路で描ける
+    const fs = this.htmlFullscreenTabId != null;
+    const m = fs ? 0 : this.margin;
+    const radius = fs ? 0 : m ? CONTENT_RADIUS : 0;
+    const chromeLeft = fs ? 0 : this.chromeLeft;
+    const chromeHeight = fs ? 0 : this.chromeHeight;
 
     // ページ・サイドパネルを載せる領域(周囲に余白を残す。縦タブ時は左側にも余白を空ける)
-    const areaX = m + this.chromeLeft;
-    const areaY = this.chromeHeight;
-    const areaWidth = Math.max(0, width - m * 2 - this.chromeLeft);
-    const areaHeight = Math.max(0, height - this.chromeHeight - m);
+    const areaX = m + chromeLeft;
+    const areaY = chromeHeight;
+    const areaWidth = Math.max(0, width - m * 2 - chromeLeft);
+    const areaHeight = Math.max(0, height - chromeHeight - m);
 
-    const panelWidth = this.sidePanel?.widthFor(areaWidth) ?? 0;
+    const panelWidth = fs ? 0 : this.sidePanel?.widthFor(areaWidth) ?? 0;
     // パネルがあるときは、ページとの間にも余白を入れて2枚のカードに見せる
     const gap = panelWidth ? m : 0;
     const pageAreaWidth = Math.max(0, areaWidth - panelWidth - gap);
@@ -749,3 +954,6 @@ function toUrl(input, engineId) {
 
 module.exports = TabManager;
 module.exports.NEW_TAB_URL = NEW_TAB_URL;
+module.exports.isFullscreenAllowed = isFullscreenAllowed;
+module.exports.applyFullscreenPolicy = applyFullscreenPolicy;
+module.exports.FULLSCREEN_ALLOWLIST = FULLSCREEN_ALLOWLIST;
