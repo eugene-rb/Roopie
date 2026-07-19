@@ -197,6 +197,9 @@ class TabManager {
     wc.on('did-navigate', (_e, url) => {
       tab.favicon = null;
       tab.isInternal = isInternalUrl(url);
+      // ブックマークの案内は「また来たのにまだ入れていないページ」にだけ出す。
+      // 履歴へ足す前に判定する(足した後だと必ず1件見つかってしまう)
+      tab.bookmarkHint = !tab.isInternal && this.history.has(url) && !this.bookmarks.find(url);
       if (!tab.isInternal) this.history.add(url, wc.getTitle());
       this.sendState();
 
@@ -207,6 +210,16 @@ class TabManager {
         }
       } catch {
         // 不正なURLは無視
+      }
+    });
+
+    // ブックマークの案内はページを触ったら引っ込める(読み始めた人の邪魔をしない)。
+    // 通常のページにはpreloadを渡していないので、メイン側でページの入力イベントを見る
+    wc.on('input-event', (_e, input) => {
+      if (!tab.bookmarkHint) return;
+      if (input.type === 'mouseDown' || input.type === 'mouseWheel' || input.type === 'keyDown') {
+        tab.bookmarkHint = false;
+        this.sendState();
       }
     });
 
@@ -692,6 +705,7 @@ class TabManager {
       tabs: this.tabs.map((t) => {
         const wc = t.view.webContents;
         const url = wc.getURL();
+        const isBookmarked = !t.isInternal && !!this.bookmarks.find(url);
         return {
           id: t.id,
           title: wc.getTitle() || '新しいタブ',
@@ -702,7 +716,9 @@ class TabManager {
           isLoading: wc.isLoading(),
           canGoBack: wc.navigationHistory.canGoBack(),
           canGoForward: wc.navigationHistory.canGoForward(),
-          isBookmarked: !t.isInternal && !!this.bookmarks.find(url),
+          isBookmarked,
+          // ブックマークすれば当然消える(did-navigateを待たずにここで打ち消す)
+          bookmarkHint: !!t.bookmarkHint && !isBookmarked,
           zoomLevel: wc.getZoomLevel(),
         };
       }),

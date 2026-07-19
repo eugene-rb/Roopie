@@ -678,11 +678,15 @@ body {
   overflow: hidden;
 }
 
-#bookmark-bar:empty::after {
-  content: "Ctrl+D でこのページをブックマークに追加できます";
+/* ブックマークの案内。常に出すと邪魔なので、前にも来たのにまだ入れていない
+   ページでだけ表示し、ページをクリック/スクロールしたら引っ込める(renderer.js) */
+#bookmark-hint {
+  margin-left: auto;
+  padding-left: 12px;
   font-size: 11px;
   color: var(--text-dim);
-  padding-left: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .bookmark {

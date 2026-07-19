@@ -39,6 +39,11 @@ class History {
     this.store.save();
   }
 
+  // このURLを過去に訪れたことがあるか(「2回目以降の訪問」の判定に使う)
+  has(url) {
+    return !!url && this.entries.some((e) => e.url === url);
+  }
+
   // 直近のタイトル/faviconの更新を反映する(ページ読み込み完了後に呼ばれる)
   update(url, title, favicon) {
     const entry = this.entries.find((e) => e.url === url);

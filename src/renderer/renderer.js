@@ -3,6 +3,7 @@ const $ = (id) => document.getElementById(id);
 const chromeEl = $('chrome');
 const tabsEl = $('tabs');
 const bookmarkBarEl = $('bookmark-bar');
+const bookmarkHintEl = $('bookmark-hint');
 const addressBar = $('address-bar');
 const starBtn = $('star-btn');
 const backBtn = $('back-btn');
@@ -257,6 +258,7 @@ function renderToolbar() {
 
   starBtn.classList.toggle('bookmarked', !!tab?.isBookmarked);
   starBtn.disabled = !!tab?.isInternal;
+  renderBookmarkHint();
 
   // アドレスバーのアイコン: httpsなら鍵、それ以外は検索
   const isSecure = (tab?.url ?? '').startsWith('https://');
@@ -285,8 +287,15 @@ window.roopie.onBookmarksState((items) => {
   renderBookmarkBar();
 });
 
+// 「Ctrl+D でブックマーク」の案内。前にも来たのにまだ入れていないページでだけ出す
+// (メイン側が tab.bookmarkHint で判定し、ページをクリック/スクロールすると引っ込める)
+function renderBookmarkHint() {
+  bookmarkHintEl.classList.toggle('hidden', !activeTab()?.bookmarkHint);
+}
+
 function renderBookmarkBar() {
-  bookmarkBarEl.textContent = '';
+  // 案内(#bookmark-hint)はバーの中に常駐しているので、ブックマークだけ作り直す
+  for (const el of bookmarkBarEl.querySelectorAll('.bookmark')) el.remove();
   for (const bookmark of bookmarks) {
     const el = document.createElement('div');
     el.className = 'bookmark';
@@ -306,7 +315,7 @@ function renderBookmarkBar() {
     el.addEventListener('auxclick', (e) => {
       if (e.button === 1) window.roopie.newTab(bookmark.url); // 中クリックで新しいタブ
     });
-    bookmarkBarEl.appendChild(el);
+    bookmarkBarEl.insertBefore(el, bookmarkHintEl);
   }
   reportChromeHeight();
 }
