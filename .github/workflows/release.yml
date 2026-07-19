@@ -45,13 +45,22 @@ jobs:
       - name: CSSをビルド(tailwind.css → pages/app.css)
         run: npm run build:css
 
-      - name: バージョンを決める
+      - name: バージョンを決めてタグを作る
         shell: bash
         run: |
           VERSION="${VERSION_BASE}.${{ github.run_number }}"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           # package.json はコミットせずビルド用に書き換えるだけ
           npm version "$VERSION" --no-git-tag-version --allow-same-version
+          # 公開状態(draftではない)のリリースはタグが先に無いとGitHub APIが作れないため、
+          # ここでビルド対象のコミットにタグを打つ。
+          # タグのpushではこのワークフローは再起動しない(トリガーはmasterブランチへのpushのみ)
+          if git ls-remote --exit-code --tags origin "v$VERSION" >/dev/null 2>&1; then
+            echo "タグ v$VERSION は既にあります(再実行とみなす)"
+          else
+            git tag "v$VERSION"
+            git push origin "v$VERSION"
+          fi
           echo "このビルドのバージョン: $VERSION"
 
       - name: インストーラーをビルドしてReleasesへ公開
