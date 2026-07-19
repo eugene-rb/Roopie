@@ -51,10 +51,32 @@ const DEFAULT_SETTINGS = {
   startIconSize: 96,
 };
 const START_ICON_SIZE_RANGE = [48, 160];
-const DEFAULT_THEME = { accent: '#6c8cff', background: 'auto', backgroundImage: '', customCss: '' };
-const THEME_BACKGROUNDS = ['auto', 'dawn', 'day', 'dusk', 'night', 'plain', 'image'];
+const DEFAULT_THEME = {
+  accent: '#6c8cff',
+  background: 'auto',
+  backgroundImage: '',
+  // 画像背景のぼかし(px)と暗さ(0=そのまま)。写真の上でも時計や検索欄が読めるように手で調節する
+  backgroundBlur: 0,
+  backgroundDim: 0,
+  // ビルトインのパターン背景(種類と2色)
+  backgroundPattern: 'dots',
+  patternColor: '#6c8cff',
+  patternBase: '#12162b',
+  // 自由に組めるグラデーション(角度と色の並び)。CSS文字列ではなく構造で持ち、組み立てはレンダラー側
+  gradientAngle: 165,
+  gradientStops: ['#171632', '#453667', '#e29a76'],
+  // ウィンドウ全体の不透明度(1=不透明)。下限を設けないと画面から消えて操作できなくなる
+  windowOpacity: 1,
+  customCss: '',
+};
+const THEME_BACKGROUNDS = ['auto', 'dawn', 'day', 'dusk', 'night', 'plain', 'image', 'pattern', 'gradient', 'threebody'];
+const THEME_PATTERNS = ['dots', 'grid', 'diagonal', 'crosshatch', 'hexagon', 'wave', 'circuit'];
 const MAX_CUSTOM_CSS = 50000;
 const MAX_BACKGROUND_IMAGE = 4_000_000; // data URIとして保存するため大きめに許容(4MB程度)
+const BACKGROUND_BLUR_RANGE = [0, 40];
+const BACKGROUND_DIM_RANGE = [0, 80];
+const GRADIENT_STOPS_RANGE = [2, 5];
+const WINDOW_OPACITY_RANGE = [0.3, 1]; // 0.3未満は事実上見えず操作不能になるため許可しない
 const TAB_BAR_WIDTH = 220; // 縦タブ表示時のタブバー幅(tailwind.cssの#tab-barの幅と一致させる)
 
 // ウィンドウの背景色(ページの周囲に見える「額縁」の色)
@@ -69,7 +91,9 @@ const browser = {
   DEFAULT_SETTINGS,
   DEFAULT_THEME,
   THEME_BACKGROUNDS,
+  THEME_PATTERNS,
   START_ICON_SIZE_RANGE,
+  WINDOW_OPACITY_RANGE,
   MAX_CUSTOM_CSS,
 
   // プロファイル単位のデータ(全ウィンドウで共有)
@@ -338,6 +362,9 @@ browser.createWindow = ({ incognito = false, url, x, y, profileId, restoreTabs }
     media: null,
   });
 
+  // 新しいウィンドウにもテーマの不透明度を効かせる(既存ウィンドウと見た目を揃える)
+  browser.applyWindowOpacity(ctx);
+
   // 再生中だったタブを閉じたら、フローティングプレイヤー/サイドパネルの表示も消す
   tabManager.onTabClosed = (tab) => {
     if (ctx.media?.tabId === tab.id) {
@@ -491,6 +518,34 @@ browser.applyThemePatch = (themeStore, patch) => {
     if (patch.backgroundImage === '' || patch.backgroundImage.startsWith('data:image/')) {
       themeStore.data.backgroundImage = patch.backgroundImage;
     }
+  }
+  const clamp = (v, [min, max]) => Math.min(max, Math.max(min, v));
+  if (Number.isFinite(patch.backgroundBlur)) {
+    themeStore.data.backgroundBlur = Math.round(clamp(patch.backgroundBlur, BACKGROUND_BLUR_RANGE));
+  }
+  if (Number.isFinite(patch.backgroundDim)) {
+    themeStore.data.backgroundDim = Math.round(clamp(patch.backgroundDim, BACKGROUND_DIM_RANGE));
+  }
+  if (THEME_PATTERNS.includes(patch.backgroundPattern)) {
+    themeStore.data.backgroundPattern = patch.backgroundPattern;
+  }
+  for (const key of ['patternColor', 'patternBase']) {
+    if (typeof patch[key] === 'string' && /^#[0-9a-fA-F]{6}$/.test(patch[key])) {
+      themeStore.data[key] = patch[key].toLowerCase();
+    }
+  }
+  if (Number.isFinite(patch.gradientAngle)) {
+    themeStore.data.gradientAngle = Math.round(clamp(patch.gradientAngle, [0, 360]));
+  }
+  // 色は必ず #rrggbb だけを通す(レンダラーではCSSのgradient文字列に埋め込むため)
+  if (Array.isArray(patch.gradientStops)) {
+    const stops = patch.gradientStops.filter((c) => typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c)).map((c) => c.toLowerCase());
+    if (stops.length >= GRADIENT_STOPS_RANGE[0]) {
+      themeStore.data.gradientStops = stops.slice(0, GRADIENT_STOPS_RANGE[1]);
+    }
+  }
+  if (Number.isFinite(patch.windowOpacity)) {
+    themeStore.data.windowOpacity = clamp(patch.windowOpacity, WINDOW_OPACITY_RANGE);
   }
   if (typeof patch.customCss === 'string') {
     themeStore.data.customCss = patch.customCss.slice(0, browser.MAX_CUSTOM_CSS);
@@ -778,7 +833,21 @@ browser.sendSidePanel = (ctx) => {
 
 browser.sendThemeFor = (profileId) => {
   const bundle = profileData.get(profileId);
-  if (bundle) broadcastProfile(profileId, 'theme:state', bundle.theme.data);
+  if (!bundle) return;
+  broadcastProfile(profileId, 'theme:state', bundle.theme.data);
+  // ウィンドウの不透明度はCSSでは実現できない(デスクトップを透かすため)のでウィンドウ側に適用する
+  for (const ctx of windows.all()) {
+    if (ctx.profileId === profileId) browser.applyWindowOpacity(ctx);
+  }
+};
+
+// テーマの windowOpacity をウィンドウへ反映する(生成時とテーマ変更時に呼ぶ)
+browser.applyWindowOpacity = (ctx) => {
+  if (!ctx || ctx.window.isDestroyed()) return;
+  const theme = profileData.get(ctx.profileId)?.theme.data;
+  const value = Number.isFinite(theme?.windowOpacity) ? theme.windowOpacity : 1;
+  const [min, max] = WINDOW_OPACITY_RANGE;
+  ctx.window.setOpacity(Math.min(max, Math.max(min, value)));
 };
 
 browser.sendPasswordsFor = (profileId) => {

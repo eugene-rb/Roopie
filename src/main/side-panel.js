@@ -295,9 +295,9 @@ class SidePanel {
       this.updateActiveEntry({ favicon: favicons[favicons.length - 1] || null })
     );
 
-    // パネル内から開くリンクは通常のタブで開く
-    wc.setWindowOpenHandler(({ url }) => {
-      this.tabManager.createTab(url);
+    // パネル内から開くリンクは通常のタブで開く(ホイールクリックは裏で開く)
+    wc.setWindowOpenHandler(({ url, disposition }) => {
+      this.tabManager.createTab(url, { background: disposition === 'background-tab' });
       return { action: 'deny' };
     });
     attachContextMenu(wc, this.tabManager);

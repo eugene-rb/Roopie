@@ -16,6 +16,21 @@ const configCalls = [];
 const layoutCalls = [];
 let settings = { startIconSize: 96 };
 let onSettingsCb = () => {};
+let theme = {
+  accent: '#6c8cff',
+  background: 'night',
+  backgroundImage: '',
+  backgroundBlur: 0,
+  backgroundDim: 0,
+  backgroundPattern: 'dots',
+  patternColor: '#6c8cff',
+  patternBase: '#12162b',
+  gradientAngle: 165,
+  gradientStops: ['#171632', '#453667', '#e29a76'],
+  windowOpacity: 1,
+  customCss: '',
+};
+let onThemeCb = () => {};
 
 const FAKE_RSS = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0"><channel><title>テストフィード</title>
@@ -45,8 +60,16 @@ contextBridge.exposeInMainWorld('roopieInternal', {
   listLocalServers: async () => [],
   dismissLocalServer: () => {},
   onBookmarksState: () => {},
-  onThemeState: () => {},
-  getTheme: async () => ({ accent: '#6c8cff', background: 'night', backgroundImage: '', customCss: '' }),
+  onThemeState: (cb) => {
+    onThemeCb = cb;
+  },
+  getTheme: async () => theme,
+  // 検証から背景テーマを差し替えるための入口(本物のsetThemeはメインへ送る)
+  __setTheme: (patch) => {
+    theme = { ...theme, ...patch };
+    onThemeCb(theme);
+    return theme;
+  },
   getSettings: async () => settings,
   setSetting: (key, value) => {
     settings = { ...settings, [key]: value };

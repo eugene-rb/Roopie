@@ -195,6 +195,9 @@
           <option value="night">夜</option>
           <option value="plain">シンプル(単色)</option>
           <option value="image">画像</option>
+          <option value="pattern">パターン</option>
+          <option value="gradient">グラデーション(自由設定)</option>
+          <option value="threebody">三体問題シミュレーション</option>
         </select>
       </div>
       <div class="setting-row" id="bg-image-row">
@@ -206,6 +209,77 @@
           <button id="bg-image-upload" class="btn">画像をアップロード</button>
           <button id="bg-image-clear" class="btn danger">画像を削除</button>
         </div>
+      </div>
+      <div class="setting-row" id="bg-blur-row">
+        <div>
+          <div class="setting-name">画像のぼかし・暗さ</div>
+          <div class="setting-desc">写真の上でも時計や検索欄が読みやすくなります</div>
+        </div>
+        <div class="range-fields">
+          <label class="range-field">
+            <span class="range-label">ぼかし</span>
+            <input id="bg-blur" type="range" min="0" max="40" step="1" />
+            <span class="range-value" id="bg-blur-value">0px</span>
+          </label>
+          <label class="range-field">
+            <span class="range-label">暗さ</span>
+            <input id="bg-dim" type="range" min="0" max="80" step="1" />
+            <span class="range-value" id="bg-dim-value">0%</span>
+          </label>
+        </div>
+      </div>
+      <div class="setting-row" id="bg-pattern-row">
+        <div>
+          <div class="setting-name">パターン</div>
+          <div class="setting-desc">模様の種類と2色を選べます</div>
+        </div>
+        <div class="range-fields">
+          <select id="bg-pattern" class="gesture-select">
+            <option value="dots">ドット</option>
+            <option value="grid">グリッド</option>
+            <option value="diagonal">ストライプ(斜め)</option>
+            <option value="crosshatch">クロスハッチ</option>
+            <option value="hexagon">三角格子</option>
+            <option value="wave">波紋</option>
+            <option value="circuit">回路</option>
+          </select>
+          <label class="range-field">
+            <span class="range-label">模様</span>
+            <input id="pattern-color" type="color" class="color-input" />
+          </label>
+          <label class="range-field">
+            <span class="range-label">下地</span>
+            <input id="pattern-base" type="color" class="color-input" />
+          </label>
+        </div>
+      </div>
+      <div class="setting-row" id="bg-gradient-row">
+        <div>
+          <div class="setting-name">グラデーション</div>
+          <div class="setting-desc">色は2〜5色。角度は0°が下から上、180°が上から下です</div>
+        </div>
+        <div class="gradient-editor">
+          <div id="gradient-preview" class="gradient-preview"></div>
+          <div id="gradient-stops" class="gradient-stops"></div>
+          <div class="range-fields">
+            <button id="gradient-add" class="btn">色を追加</button>
+            <label class="range-field">
+              <span class="range-label">角度</span>
+              <input id="gradient-angle" type="range" min="0" max="360" step="1" />
+              <span class="range-value" id="gradient-angle-value">165°</span>
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">ウィンドウの不透明度</div>
+          <div class="setting-desc">ウィンドウ全体(UIも含む)が半透明になり、後ろのデスクトップが透けます</div>
+        </div>
+        <label class="range-field">
+          <input id="window-opacity" type="range" min="30" max="100" step="1" />
+          <span class="range-value" id="window-opacity-value">100%</span>
+        </label>
       </div>
       <div class="theme-css">
         <div class="setting-name">カスタムCSS(上級者向け)</div>

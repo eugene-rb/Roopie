@@ -70,8 +70,8 @@ window.addEventListener('resize', () => {
 
 // ---- 背景(テーマ設定が auto なら時間帯で切り替え) ----
 const bgEl = document.getElementById('bg');
-let themeBackground = 'auto';
-let themeBackgroundImage = '';
+const bgDimEl = document.getElementById('bg-dim');
+let currentTheme = {};
 
 function backgroundByHour(hour) {
   if (hour >= 5 && hour < 8) return 'dawn';
@@ -80,17 +80,272 @@ function backgroundByHour(hour) {
   return 'night';
 }
 
+// ---- 三体問題の3Dシミュレーション(背景が threebody のときだけ動く) ----
+// 初期条件はタブを開くたびにランダム。三体問題は「解が閉じた式で書けない」有名な例で、
+// わずかな初期値の差で軌道が全く変わる(カオス)。だからタブごとに違う模様になる。
+//
+// 実装上の要点:
+//  - 重力は 1/(r^2 + soft^2)^1.5 と軟化する。素の 1/r^2 だと二体が接近した瞬間に加速度が
+//    発散し、座標がNaNへ飛んで絵が消える
+//  - 積分はvelocity Verlet(シンプレクティック)。オイラー法はエネルギーが増え続けて破綻する
+//  - それでも飛び去る/破綻することはあるので、その場合は新しい初期条件で組み直す
+//  - 見えていない間(タブが裏、別のページ)はrAFを止める。裏で回し続けるとCPUを食う
+const threeBody = (() => {
+  const canvas = document.getElementById('bg-sim');
+  const ctx = canvas.getContext('2d');
+  const COLORS = ['#ffd479', '#7ad7f0', '#ff8fa3'];
+  const G = 1;
+  const SOFT = 0.35; // 軟化長。これ未満の距離では引力が頭打ちになる
+  const DT = 0.004;
+  const STEPS_PER_FRAME = 6;
+  const TRAIL = 260; // 軌跡として保持する点の数
+  const FOCAL = 2.2; // 透視投影の焦点距離(大きいほど遠近が弱い)
+
+  let bodies = [];
+  let running = false;
+  let active = false;
+  let frame = 0;
+  let rotation = 0;
+  let width = 0;
+  let height = 0;
+
+  const rand = (min, max) => min + Math.random() * (max - min);
+
+  // 重心を原点・全運動量を0にした3体をランダムに作る(そうしないと全体が画面外へ流れていく)
+  function seed() {
+    const masses = [rand(0.8, 1.6), rand(0.8, 1.6), rand(0.8, 1.6)];
+    const made = masses.map((mass) => ({
+      mass,
+      x: rand(-1.1, 1.1),
+      y: rand(-1.1, 1.1),
+      z: rand(-0.7, 0.7),
+      vx: rand(-0.45, 0.45),
+      vy: rand(-0.45, 0.45),
+      vz: rand(-0.3, 0.3),
+      ax: 0,
+      ay: 0,
+      az: 0,
+      trail: [],
+    }));
+    const total = made.reduce((sum, b) => sum + b.mass, 0);
+    for (const axis of ['x', 'y', 'z']) {
+      const center = made.reduce((sum, b) => sum + b[axis] * b.mass, 0) / total;
+      const v = 'v' + axis;
+      const drift = made.reduce((sum, b) => sum + b[v] * b.mass, 0) / total;
+      for (const b of made) {
+        b[axis] -= center;
+        b[v] -= drift;
+      }
+    }
+    bodies = made;
+    accelerate();
+    rotation = rand(0, Math.PI * 2);
+  }
+
+  function accelerate() {
+    for (const b of bodies) {
+      b.ax = 0;
+      b.ay = 0;
+      b.az = 0;
+    }
+    for (let i = 0; i < bodies.length; i++) {
+      for (let j = i + 1; j < bodies.length; j++) {
+        const a = bodies[i];
+        const b = bodies[j];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const dz = b.z - a.z;
+        const soft = dx * dx + dy * dy + dz * dz + SOFT * SOFT;
+        const inv = G / (soft * Math.sqrt(soft));
+        a.ax += dx * inv * b.mass;
+        a.ay += dy * inv * b.mass;
+        a.az += dz * inv * b.mass;
+        b.ax -= dx * inv * a.mass;
+        b.ay -= dy * inv * a.mass;
+        b.az -= dz * inv * a.mass;
+      }
+    }
+  }
+
+  function step() {
+    for (const b of bodies) {
+      b.x += b.vx * DT + 0.5 * b.ax * DT * DT;
+      b.y += b.vy * DT + 0.5 * b.ay * DT * DT;
+      b.z += b.vz * DT + 0.5 * b.az * DT * DT;
+      b.vx += 0.5 * b.ax * DT;
+      b.vy += 0.5 * b.ay * DT;
+      b.vz += 0.5 * b.az * DT;
+    }
+    accelerate();
+    for (const b of bodies) {
+      b.vx += 0.5 * b.ax * DT;
+      b.vy += 0.5 * b.ay * DT;
+      b.vz += 0.5 * b.az * DT;
+    }
+  }
+
+  // 1つでも飛び去った/数値が壊れたら作り直す(カオス系なのでいずれ必ず起きる)
+  function needsReseed() {
+    return bodies.some((b) => !Number.isFinite(b.x + b.y + b.z + b.vx + b.vy + b.vz) || Math.hypot(b.x, b.y, b.z) > 9);
+  }
+
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    width = canvas.clientWidth;
+    height = canvas.clientHeight;
+    canvas.width = Math.max(1, Math.round(width * dpr));
+    canvas.height = Math.max(1, Math.round(height * dpr));
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  // Y軸まわりに回してから透視投影する(ゆっくり回すと立体だと分かる)
+  function project(x, y, z) {
+    const cos = Math.cos(rotation);
+    const sin = Math.sin(rotation);
+    const rx = x * cos - z * sin;
+    const rz = x * sin + z * cos;
+    const depth = FOCAL / (FOCAL + rz);
+    const scale = Math.min(width, height) * 0.26;
+    return { sx: width / 2 + rx * scale * depth, sy: height / 2 + y * scale * depth, depth };
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, width, height);
+    for (const [index, b] of bodies.entries()) {
+      const color = COLORS[index % COLORS.length];
+      // 軌跡(古いほど薄く)
+      ctx.lineWidth = 1.4;
+      for (let i = 1; i < b.trail.length; i++) {
+        const prev = project(b.trail[i - 1].x, b.trail[i - 1].y, b.trail[i - 1].z);
+        const cur = project(b.trail[i].x, b.trail[i].y, b.trail[i].z);
+        ctx.strokeStyle = color;
+        ctx.globalAlpha = (i / b.trail.length) * 0.5;
+        ctx.beginPath();
+        ctx.moveTo(prev.sx, prev.sy);
+        ctx.lineTo(cur.sx, cur.sy);
+        ctx.stroke();
+      }
+      // 本体(手前ほど大きく明るく)
+      const p = project(b.x, b.y, b.z);
+      const radius = Math.max(1.5, 4.5 * b.mass * p.depth);
+      ctx.globalAlpha = 1;
+      const glow = ctx.createRadialGradient(p.sx, p.sy, 0, p.sx, p.sy, radius * 5);
+      glow.addColorStop(0, color);
+      glow.addColorStop(1, 'transparent');
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(p.sx, p.sy, radius * 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(p.sx, p.sy, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // 1フレーム分進めて描く(検証からも直接呼べるようにloopから切り出してある。
+  // 画面に出ていないウィンドウではrequestAnimationFrameが回らないため)
+  function tick() {
+    for (let i = 0; i < STEPS_PER_FRAME; i++) step();
+    if (needsReseed()) seed();
+    frame++;
+    if (frame % 2 === 0) {
+      for (const b of bodies) {
+        b.trail.push({ x: b.x, y: b.y, z: b.z });
+        if (b.trail.length > TRAIL) b.trail.shift();
+      }
+    }
+    rotation += 0.0012;
+    draw();
+  }
+
+  function loop() {
+    if (!running) return;
+    tick();
+    requestAnimationFrame(loop);
+  }
+
+  function start() {
+    if (running || !active || document.hidden) return;
+    running = true;
+    resize();
+    requestAnimationFrame(loop);
+  }
+
+  function stop() {
+    running = false;
+  }
+
+  window.addEventListener('resize', () => {
+    if (running) resize();
+  });
+  // 裏に回ったら止める(見えていないタブでCPUを使い続けない)
+  document.addEventListener('visibilitychange', () => (document.hidden ? stop() : start()));
+
+  return {
+    setActive(next) {
+      if (active === next) {
+        if (next) start();
+        return;
+      }
+      active = next;
+      if (!next) {
+        stop();
+        ctx.clearRect(0, 0, width, height);
+        return;
+      }
+      seed(); // タブごと(この新しいタブページごと)にランダムな初期条件
+      start();
+    },
+    // 検証用(scripts/test-backgrounds.js)
+    __state: () => ({ running, active, bodies: bodies.map((b) => ({ x: b.x, y: b.y, z: b.z, mass: b.mass, trail: b.trail.length })) }),
+    __reseed: seed,
+    __tick: tick,
+  };
+})();
+
+// 検証用のフック(scripts/test-backgrounds.js から呼ぶ)
+window.__threeBodyState = threeBody.__state;
+window.__threeBodyReseed = threeBody.__reseed;
+window.__threeBodyTick = threeBody.__tick;
+
 function applyBackground() {
-  const key =
-    themeBackground === 'auto' ? backgroundByHour(new Date().getHours()) : themeBackground;
+  const theme = currentTheme;
+  const mode = theme.background || 'auto';
+  const key = mode === 'auto' ? backgroundByHour(new Date().getHours()) : mode;
   document.body.dataset.bg = key;
-  bgEl.style.backgroundImage = key === 'image' && themeBackgroundImage ? `url("${themeBackgroundImage}")` : '';
+
+  // インラインで触るのは background(グラデーション)と background-image(画像)だけ。
+  // 先に両方消してからモードごとに設定する(背景色・パターンはCSS側が持つ)
+  bgEl.style.background = '';
+
+  // 画像: ぼかしと暗さ。ぼかすと縁が透けるので、ぼかし量のぶん外へはみ出させる
+  const blur = Number.isFinite(theme.backgroundBlur) ? theme.backgroundBlur : 0;
+  bgEl.style.backgroundImage = key === 'image' && theme.backgroundImage ? `url("${theme.backgroundImage}")` : '';
+  bgEl.style.setProperty('--bg-blur', `${key === 'image' ? blur : 0}px`);
+  bgEl.style.inset = key === 'image' && blur ? `-${4 + blur * 0.3}%` : '';
+  const dim = Number.isFinite(theme.backgroundDim) ? theme.backgroundDim : 0;
+  bgDimEl.style.setProperty('--bg-dim', String(key === 'image' ? dim / 100 : 0));
+
+  // パターン: 種類と2色
+  bgEl.dataset.pattern = theme.backgroundPattern || 'dots';
+  bgEl.style.setProperty('--pattern-color', theme.patternColor || '#6c8cff');
+  bgEl.style.setProperty('--pattern-base', theme.patternBase || '#12162b');
+
+  // グラデーション: 検証済みの色(#rrggbb)だけが渡ってくるのでここで文字列に組み立てる
+  if (key === 'gradient') {
+    const stops = Array.isArray(theme.gradientStops) && theme.gradientStops.length >= 2 ? theme.gradientStops : ['#171632', '#453667'];
+    const angle = Number.isFinite(theme.gradientAngle) ? theme.gradientAngle : 165;
+    bgEl.style.background = `linear-gradient(${angle}deg, ${stops.join(', ')})`;
+  }
+
+  threeBody.setActive(key === 'threebody');
 }
 
 // theme.js から呼ばれる(初期化時とテーマ変更時)
 window.onRoopieTheme = (theme) => {
-  themeBackground = theme.background || 'auto';
-  themeBackgroundImage = theme.backgroundImage || '';
+  currentTheme = theme || {};
   applyBackground();
 };
 // theme.jsのgetTheme()がこのスクリプトの読み込みより先に解決していた場合に備える

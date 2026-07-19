@@ -61,6 +61,98 @@ body[data-bg="image"] #bg {
   background-color: #1e1f24;
   background-size: cover;
   background-position: center;
+  filter: blur(var(--bg-blur, 0px));
+  /* ぼかすと縁が透けるので、ぼかし量に応じて外へはみ出させる(insetはJSが設定) */
+}
+
+/* ---- 画像の暗さ(ぼかしとは別に、写真の上でも文字が読めるようにする) ---- */
+#bg-dim {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background: #000;
+  opacity: var(--bg-dim, 0);
+}
+
+/* ---- ビルトインのパターン背景(下地色+線の色の2色。種類はdata-pattern) ---- */
+body[data-bg="pattern"] #bg {
+  background-color: var(--pattern-base, #12162b);
+  animation: none;
+}
+
+body[data-bg="pattern"] #bg[data-pattern="dots"] {
+  background-image: radial-gradient(circle at center, var(--pattern-color) 1.6px, transparent 1.7px);
+  background-size: 24px 24px;
+}
+
+body[data-bg="pattern"] #bg[data-pattern="grid"] {
+  background-image:
+    linear-gradient(to right, var(--pattern-color) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--pattern-color) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+body[data-bg="pattern"] #bg[data-pattern="diagonal"] {
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--pattern-color) 0 2px,
+    transparent 2px 18px
+  );
+}
+
+body[data-bg="pattern"] #bg[data-pattern="crosshatch"] {
+  background-image:
+    repeating-linear-gradient(45deg, var(--pattern-color) 0 1px, transparent 1px 20px),
+    repeating-linear-gradient(-45deg, var(--pattern-color) 0 1px, transparent 1px 20px);
+}
+
+/* 三方向の線で六角格子に見せる(hexagonそのものはCSSで描けないため) */
+body[data-bg="pattern"] #bg[data-pattern="hexagon"] {
+  background-image:
+    repeating-linear-gradient(60deg, var(--pattern-color) 0 1px, transparent 1px 28px),
+    repeating-linear-gradient(-60deg, var(--pattern-color) 0 1px, transparent 1px 28px),
+    repeating-linear-gradient(0deg, var(--pattern-color) 0 1px, transparent 1px 24px);
+}
+
+body[data-bg="pattern"] #bg[data-pattern="wave"] {
+  background-image: repeating-radial-gradient(
+    circle at 50% 120%,
+    transparent 0 38px,
+    var(--pattern-color) 38px 40px
+  );
+}
+
+body[data-bg="pattern"] #bg[data-pattern="circuit"] {
+  background-image:
+    linear-gradient(to right, var(--pattern-color) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--pattern-color) 1px, transparent 1px),
+    radial-gradient(circle at center, var(--pattern-color) 2.5px, transparent 2.6px);
+  background-size: 60px 60px, 60px 60px, 60px 60px;
+}
+
+/* ---- 自由に組めるグラデーション(角度と色はJSが組み立ててインラインで設定) ---- */
+body[data-bg="gradient"] #bg {
+  animation: none;
+}
+
+/* ---- 三体問題シミュレーション ---- */
+#bg-sim {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  display: none;
+  width: 100%;
+  height: 100%;
+}
+
+body[data-bg="threebody"] #bg {
+  background: radial-gradient(120% 90% at 50% 30%, #141a33 0%, #05070f 70%);
+  animation: none;
+}
+
+body[data-bg="threebody"] #bg-sim {
+  display: block;
 }
 
 /* 周辺を少し落として中央の文字を読みやすくする */

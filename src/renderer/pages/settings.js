@@ -1345,8 +1345,128 @@ function renderTheme() {
   themeBgEl.value = themeState.background;
   // 編集中のカスタムCSSは上書きしない
   if (document.activeElement !== customCssEl) customCssEl.value = themeState.customCss;
-  bgImageRowEl.classList.toggle('hidden', themeState.background !== 'image');
+  // 背景の種類ごとの設定行だけを出す
+  const isImage = themeState.background === 'image';
+  bgImageRowEl.classList.toggle('hidden', !isImage);
+  bgBlurRowEl.classList.toggle('hidden', !isImage);
+  bgPatternRowEl.classList.toggle('hidden', themeState.background !== 'pattern');
+  bgGradientRowEl.classList.toggle('hidden', themeState.background !== 'gradient');
+  renderBackgroundControls();
 }
+
+// ---- 背景の詳細設定(ぼかし/暗さ・パターン・グラデーション・ウィンドウ不透明度) ----
+const bgBlurRowEl = document.getElementById('bg-blur-row');
+const bgPatternRowEl = document.getElementById('bg-pattern-row');
+const bgGradientRowEl = document.getElementById('bg-gradient-row');
+const bgBlurEl = document.getElementById('bg-blur');
+const bgDimEl = document.getElementById('bg-dim');
+const bgPatternEl = document.getElementById('bg-pattern');
+const patternColorEl = document.getElementById('pattern-color');
+const patternBaseEl = document.getElementById('pattern-base');
+const gradientAngleEl = document.getElementById('gradient-angle');
+const gradientStopsEl = document.getElementById('gradient-stops');
+const gradientPreviewEl = document.getElementById('gradient-preview');
+const windowOpacityEl = document.getElementById('window-opacity');
+
+const DEFAULT_STOPS = ['#171632', '#453667', '#e29a76'];
+function gradientStops() {
+  const stops = themeState.gradientStops;
+  return Array.isArray(stops) && stops.length >= 2 ? stops.slice() : DEFAULT_STOPS.slice();
+}
+function gradientCss(stops, angle) {
+  return `linear-gradient(${angle}deg, ${stops.join(', ')})`;
+}
+
+// スライダーを掴んでいる間は値を上書きしない(送った値が返ってきて指が弾かれるのを防ぐ)
+function setRange(el, value) {
+  if (document.activeElement !== el) el.value = String(value);
+}
+
+function renderBackgroundControls() {
+  const blur = themeState.backgroundBlur ?? 0;
+  const dim = themeState.backgroundDim ?? 0;
+  setRange(bgBlurEl, blur);
+  setRange(bgDimEl, dim);
+  document.getElementById('bg-blur-value').textContent = `${blur}px`;
+  document.getElementById('bg-dim-value').textContent = `${dim}%`;
+
+  bgPatternEl.value = themeState.backgroundPattern ?? 'dots';
+  patternColorEl.value = themeState.patternColor ?? '#6c8cff';
+  patternBaseEl.value = themeState.patternBase ?? '#12162b';
+
+  const angle = themeState.gradientAngle ?? 165;
+  setRange(gradientAngleEl, angle);
+  document.getElementById('gradient-angle-value').textContent = `${angle}°`;
+  const stops = gradientStops();
+  gradientPreviewEl.style.background = gradientCss(stops, angle);
+  // 色を編集中(カラーピッカーを開いている)ときは組み直さない
+  if (!gradientStopsEl.contains(document.activeElement)) renderGradientStops(stops);
+
+  const opacity = Math.round((themeState.windowOpacity ?? 1) * 100);
+  setRange(windowOpacityEl, opacity);
+  document.getElementById('window-opacity-value').textContent = `${opacity}%`;
+}
+
+function renderGradientStops(stops) {
+  gradientStopsEl.textContent = '';
+  for (const [index, color] of stops.entries()) {
+    const wrap = document.createElement('div');
+    wrap.className = 'gradient-stop';
+    const input = document.createElement('input');
+    input.type = 'color';
+    input.className = 'color-input';
+    input.value = color;
+    input.addEventListener('input', () => {
+      const next = gradientStops();
+      next[index] = input.value;
+      gradientPreviewEl.style.background = gradientCss(next, Number(gradientAngleEl.value));
+      window.roopieInternal.setTheme({ gradientStops: next });
+    });
+    const remove = document.createElement('button');
+    remove.className = 'gradient-stop-remove';
+    remove.textContent = '✕';
+    remove.title = 'この色を削除';
+    remove.disabled = stops.length <= 2; // 2色未満はグラデーションにならない
+    remove.addEventListener('click', () => {
+      const next = gradientStops().filter((_, i) => i !== index);
+      window.roopieInternal.setTheme({ gradientStops: next });
+    });
+    wrap.append(input, remove);
+    gradientStopsEl.appendChild(wrap);
+  }
+}
+
+bgBlurEl.addEventListener('input', () => {
+  document.getElementById('bg-blur-value').textContent = `${bgBlurEl.value}px`;
+  window.roopieInternal.setTheme({ backgroundBlur: Number(bgBlurEl.value) });
+});
+bgDimEl.addEventListener('input', () => {
+  document.getElementById('bg-dim-value').textContent = `${bgDimEl.value}%`;
+  window.roopieInternal.setTheme({ backgroundDim: Number(bgDimEl.value) });
+});
+bgPatternEl.addEventListener('change', () =>
+  window.roopieInternal.setTheme({ backgroundPattern: bgPatternEl.value })
+);
+patternColorEl.addEventListener('input', () =>
+  window.roopieInternal.setTheme({ patternColor: patternColorEl.value })
+);
+patternBaseEl.addEventListener('input', () =>
+  window.roopieInternal.setTheme({ patternBase: patternBaseEl.value })
+);
+gradientAngleEl.addEventListener('input', () => {
+  document.getElementById('gradient-angle-value').textContent = `${gradientAngleEl.value}°`;
+  gradientPreviewEl.style.background = gradientCss(gradientStops(), Number(gradientAngleEl.value));
+  window.roopieInternal.setTheme({ gradientAngle: Number(gradientAngleEl.value) });
+});
+document.getElementById('gradient-add').addEventListener('click', () => {
+  const stops = gradientStops();
+  if (stops.length >= 5) return;
+  window.roopieInternal.setTheme({ gradientStops: [...stops, stops[stops.length - 1]] });
+});
+windowOpacityEl.addEventListener('input', () => {
+  document.getElementById('window-opacity-value').textContent = `${windowOpacityEl.value}%`;
+  window.roopieInternal.setTheme({ windowOpacity: Number(windowOpacityEl.value) / 100 });
+});
 
 accentCustomEl.addEventListener('change', () =>
   window.roopieInternal.setTheme({ accent: accentCustomEl.value })

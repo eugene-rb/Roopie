@@ -10,6 +10,10 @@
 <body data-bg="night">
   <!-- 背景(時間帯 or テーマ設定で変化) -->
   <div id="bg"></div>
+  <!-- 三体問題シミュレーション(背景が threebody のときだけ動く。初期条件はタブごとにランダム) -->
+  <canvas id="bg-sim"></canvas>
+  <!-- 画像背景の暗さ調節。ぼかしと違い文字の読みやすさに効く -->
+  <div id="bg-dim"></div>
   <div id="vignette"></div>
 
   <main id="newtab">

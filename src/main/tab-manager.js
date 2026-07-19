@@ -74,7 +74,8 @@ class TabManager {
     }
   }
 
-  createTab(url = NEW_TAB_URL) {
+  // background: true なら開くだけで表示は今のタブのまま(ホイールクリック/Ctrl+クリック)
+  createTab(url = NEW_TAB_URL, { background = false } = {}) {
     const id = nextTabId++;
     const isInternal = isInternalUrl(url);
     const view = new WebContentsView({
@@ -96,7 +97,14 @@ class TabManager {
     this.attachEvents(tab);
     this.onTabCreated?.(tab); // 拡張機能システム等への通知
     view.webContents.loadURL(url);
-    this.switchTab(id);
+    if (background) {
+      // 見えない位置に置いたままタブバーにだけ足す(今見ているページから離れない)
+      this.updateVisibility();
+      this.layout();
+      this.sendState();
+    } else {
+      this.switchTab(id);
+    }
     this.raiseTopViews(); // 新しいタブを載せた後も仕切り/プレイヤー/メニューが手前に来るようにする
     return tab;
   }
@@ -243,9 +251,11 @@ class TabManager {
       }
     });
 
-    // target="_blank" 等のリンクは新しいタブで開く
-    wc.setWindowOpenHandler(({ url }) => {
-      this.createTab(url);
+    // target="_blank" 等のリンクは新しいタブで開く。
+    // ホイールクリック/Ctrl+クリックは disposition が background-tab で来るので、
+    // Chrome同様にそのタブへは切り替えず裏で開く
+    wc.setWindowOpenHandler(({ url, disposition }) => {
+      this.createTab(url, { background: disposition === 'background-tab' });
       return { action: 'deny' };
     });
 
