@@ -245,6 +245,12 @@ class TabManager {
     this.layout();
   }
 
+  // フローティングのタイマー表示
+  setTimerPanel(timerPanel) {
+    this.timerPanel = timerPanel;
+    this.layout();
+  }
+
   // オーバーレイ(メニュー用の透明View)を登録する
   setOverlay(view) {
     this.overlay = view;
@@ -259,13 +265,14 @@ class TabManager {
     this.window.contentView.addChildView(this.overlay);
   }
 
-  // タブより手前に載るView群を、正しい重なり順(仕切り<プレイヤー<オーバーレイ)で最前面へ戻す。
+  // タブより手前に載るView群を、正しい重なり順(仕切り<プレイヤー<タイマー<オーバーレイ)で最前面へ戻す。
   // 新しいタブを追加するとそのタブが最前面に来てしまうため、生成後に呼ぶ
   raiseTopViews() {
     if (this.window.isDestroyed()) return;
     const cv = this.window.contentView;
     if (this.splitDivider) cv.addChildView(this.splitDivider);
     if (this.mediaPlayer?.view) cv.addChildView(this.mediaPlayer.view);
+    if (this.timerPanel?.view) cv.addChildView(this.timerPanel.view);
     if (this.overlay) cv.addChildView(this.overlay);
   }
 
@@ -454,6 +461,12 @@ class TabManager {
   switchTab(id) {
     const tab = this.getTab(id);
     if (!tab) return;
+    // タイマーの「タブを休止する」で退避したタブは、選び直された時点で元のURLへ復元する
+    if (tab.hibernated) {
+      tab.view.webContents.loadURL(tab.hibernatedUrl);
+      tab.hibernated = false;
+      tab.hibernatedUrl = null;
+    }
     // ページ全画面(YouTube等)のまま別のタブへ移ると、UIが消えたまま別ページが
     // 全画面表示になり戻る手段が無くなる。切り替える前に全画面を抜ける
     if (this.htmlFullscreenTabId != null && this.htmlFullscreenTabId !== id) {
@@ -984,6 +997,10 @@ class TabManager {
     // ミニプレイヤーはページ全体の領域を基準に置く(分割の影響は受けない)。
     // サイドパネルが開いている側の隅は、パネルとの間にも余白を空ける
     this.mediaPlayer?.layout({ x: areaX, y: areaY, width: areaWidth, height: areaHeight }, radius, {
+      left: panelWidth && panelOnLeft ? panelWidth + m : 0,
+      right: panelWidth && !panelOnLeft ? panelWidth + m : 0,
+    });
+    this.timerPanel?.layout({ x: areaX, y: areaY, width: areaWidth, height: areaHeight }, radius, {
       left: panelWidth && panelOnLeft ? panelWidth + m : 0,
       right: panelWidth && !panelOnLeft ? panelWidth + m : 0,
     });

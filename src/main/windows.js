@@ -42,6 +42,7 @@ function contextFor(sender) {
     if (ctx.sidePanel?.panelView?.webContents === sender) return true;
     if (ctx.sidePanel?.webView?.webContents === sender) return true;
     if (ctx.mediaPlayer?.view?.webContents === sender) return true;
+    if (ctx.timerPanel?.view?.webContents === sender) return true;
     if (ctx.tabManager.splitDivider?.webContents === sender) return true;
     return false;
   });

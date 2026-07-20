@@ -12,6 +12,7 @@ const {
   showSidePanelRailMenu,
   showToolbarMenu,
   showWebPanelMenu,
+  showTimerMenu,
 } = require('./toolbar-context-menu');
 const { searchUrl } = require('./search-engines');
 const { normalizeToolbarItems } = require('./toolbar-items');
@@ -444,6 +445,23 @@ function registerIpc() {
   ipcMain.on('readlist:set-read', (e, id, read) => bundleOf(e)?.readlist.setRead(id, read));
   ipcMain.on('readlist:clear-read', (e) => bundleOf(e)?.readlist.clearRead());
 
+  // ---- タイマー(プロファイル単位のデータCRUD) ----
+  ipcMain.handle('timer:list', (e) => bundleOf(e)?.timers.list() ?? []);
+  ipcMain.on('timer:add', (e, payload) => bundleOf(e)?.timers.add(payload));
+  ipcMain.on('timer:update', (e, id, patch) => bundleOf(e)?.timers.update(id, patch));
+  ipcMain.on('timer:remove', (e, id) => bundleOf(e)?.timers.remove(id));
+  ipcMain.on('timer:start', (e, id) => bundleOf(e)?.timers.start(id));
+  ipcMain.on('timer:pause', (e, id) => bundleOf(e)?.timers.pause(id));
+  ipcMain.on('timer:reset', (e, id) => bundleOf(e)?.timers.reset(id));
+  // 危険アクション(ウィンドウを閉じる/シャットダウン)無しの発火(音のみ等)を確認して止める
+  ipcMain.on('timer:acknowledge', (e, id) => bundleOf(e)?.timers.acknowledge(id));
+  // 危険アクション付きの発火をユーザーが猶予中にキャンセルする
+  ipcMain.on('timer:cancel-fire', (e, fireId) => {
+    bundleOf(e)?.timers.cancelFire(fireId);
+    ctxOf(e)?.timerPanel?.ringClear(fireId);
+  });
+  ipcMain.on('timer:context-menu', (e, id) => showTimerMenu(bundleOf(e), id));
+
   // ---- トラッキング分析(サイドパネル「トラッキング」) ----
   // セッションは送信元ウィンドウのもの(プロファイルごとにCookieストアが別)
   ipcMain.handle('trackers:analyze', (e) => {
@@ -868,6 +886,7 @@ function registerIpc() {
     const profileId = bundle.profileId;
     if (key === 'adblock') browser.applyAdblockFor(profileId);
     if (key === 'mediaDocked') browser.applyMediaDockedFor(profileId);
+    if (key === 'timerDocked') browser.applyTimerDockedFor(profileId);
     if (key === 'downloadPath') browser.applyDownloadPathFor(profileId);
     if (key === 'tabBarPosition') browser.applyTabBarPositionFor(profileId);
     if (key === 'sidePanelPosition') browser.applySidePanelPositionFor(profileId);
@@ -953,6 +972,12 @@ function registerIpc() {
   ipcMain.on('media:drag-start', (e) => ctxOf(e)?.mediaPlayer.dragStart());
   ipcMain.on('media:drag', (e, dx, dy) => ctxOf(e)?.mediaPlayer.dragBy(dx, dy));
   ipcMain.on('media:drag-end', (e) => ctxOf(e)?.mediaPlayer.dragEnd());
+
+  // ---- タイマーのフローティングパネル(ウィンドウ操作。media:drag-*と同型) ----
+  ipcMain.on('timer:drag-start', (e) => ctxOf(e)?.timerPanel?.dragStart());
+  ipcMain.on('timer:drag', (e, dx, dy) => ctxOf(e)?.timerPanel?.dragBy(dx, dy));
+  ipcMain.on('timer:drag-end', (e) => ctxOf(e)?.timerPanel?.dragEnd());
+  ipcMain.on('timer:dismiss', (e) => ctxOf(e)?.timerPanel?.hideTemporarily());
 
   // ---- イントロ / 変更点 / アプリ情報 ----
 

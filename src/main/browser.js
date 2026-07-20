@@ -6,12 +6,15 @@ const TabManager = require('./tab-manager');
 const History = require('./history');
 const Bookmarks = require('./bookmarks');
 const Readlist = require('./readlist');
+const Timers = require('./timers');
+const timerActions = require('./timer-actions');
 const Downloads = require('./downloads');
 const Profiles = require('./profiles');
 const GoogleAccounts = require('./google-accounts');
 const Gestures = require('./gestures');
 const SidePanel = require('./side-panel');
 const MediaPlayer = require('./media-player');
+const TimerPanel = require('./timer-panel');
 const ExtensionSupport = require('./extension-support');
 const AdBlock = require('./adblock');
 const Tor = require('./tor');
@@ -33,6 +36,8 @@ const DEFAULT_SETTINGS = {
   savePasswords: true,
   mediaDocked: false,
   mediaCorner: 'bottom-right',
+  timerDocked: false,
+  timerCorner: 'top-right', // メディアプレイヤー(既定bottom-right)と隅が重ならないように
   downloadPath: '', // 空ならOS既定(session.setDownloadPathを呼ばない)
   tabBarPosition: 'top', // 'top' | 'left'
   sidePanelPosition: 'right', // 'left' | 'right'
@@ -198,6 +203,10 @@ browser.bundleFor = (profileId) => {
     history: new History(store(profile, 'history', [])),
     bookmarks: new Bookmarks(store(profile, 'bookmarks', []), () => browser.sendBookmarksFor(profileId)),
     readlist: new Readlist(store(profile, 'readlist', []), () => browser.sendReadlistFor(profileId)),
+    timers: new Timers(store(profile, 'timers', []), {
+      onChange: () => browser.sendTimersFor(profileId),
+      onFire: (timer) => browser.fireTimer(profileId, timer),
+    }),
     downloads: new Downloads(store(profile, 'downloads', []), () => browser.sendDownloadsFor(profileId)),
     settings: store(profile, 'settings', { ...DEFAULT_SETTINGS }),
     gestures: new Gestures(store(profile, 'gestures', Gestures.defaults())),
@@ -225,6 +234,7 @@ for (const key of [
   'passwords',
   'autofill',
   'widgets',
+  'timers',
 ]) {
   Object.defineProperty(browser, key, {
     get: () => browser.activeBundle()?.[key] ?? null,
@@ -253,6 +263,13 @@ browser.initData = () => {
   );
 
   browser.bundleFor(browser.profiles.activeId);
+
+  // タイマーのtickはブラウザ全体で1本。ウィンドウが開いているプロファイルの分だけ進める
+  // (ウィンドウの無いプロファイルのタイマーは鳴らない仕様)
+  setInterval(() => {
+    const profileIds = new Set(windows.all().map((ctx) => ctx.profileId));
+    for (const id of profileIds) profileData.get(id)?.timers.tick(Date.now());
+  }, 1000);
 };
 
 browser.flushAll = () => {
@@ -359,11 +376,24 @@ browser.createWindow = ({ incognito = false, url, x, y, profileId, restoreTabs }
   mediaPlayer.setDocked(bundle.settings.data.mediaDocked);
   tabManager.setMediaPlayer(mediaPlayer);
 
+  const timerPanel = new TimerPanel(window, {
+    session,
+    tabManager,
+    corner: bundle.settings.data.timerCorner,
+    onDrag: (corner) => {
+      bundle.settings.data.timerCorner = corner;
+      bundle.settings.save();
+    },
+  });
+  timerPanel.setDocked(bundle.settings.data.timerDocked);
+  tabManager.setTimerPanel(timerPanel);
+
   const ctx = windows.add({
     window,
     tabManager,
     sidePanel,
     mediaPlayer,
+    timerPanel,
     session,
     incognito,
     profileId: profile.id,
@@ -799,6 +829,7 @@ browser.removeProfile = (id) => {
   if (!browser.profiles.remove(id)) return;
   const targets = windows.normal().filter((c) => c.profileId === id);
   for (const ctx of targets) ctx.window.close();
+  profileData.get(id)?.timers.destroy();
   profileData.delete(id);
   if (!windows.normal().length) browser.createWindow({ profileId: browser.profiles.activeId });
   browser.sendProfiles();
@@ -878,6 +909,17 @@ browser.sendBookmarksFor = (profileId) => {
 browser.sendReadlistFor = (profileId) => {
   const bundle = profileData.get(profileId);
   if (bundle) broadcastProfile(profileId, 'readlist:state', bundle.readlist.list());
+};
+
+browser.sendTimersFor = (profileId) => {
+  const bundle = profileData.get(profileId);
+  if (!bundle) return;
+  const list = bundle.timers.list();
+  broadcastProfile(profileId, 'timer:state', list);
+  // フローティング表示(タイマーパネル)へは複数タイマーのリストとして個別に送る
+  for (const ctx of windows.all()) {
+    if (ctx.profileId === profileId) ctx.timerPanel?.setState(list);
+  }
 };
 
 browser.sendDownloadsFor = (profileId) => {
@@ -963,6 +1005,49 @@ browser.sendExtensionsFor = (profileId) => {
   broadcastProfile(profileId, 'extensions:state', browser.extensions.list(session));
 };
 
+const TIMER_GRACE_MS = 15_000; // 「ウィンドウを閉じる」「シャットダウン」の猶予(キャンセル可能)
+
+function windowsForProfile(profileId) {
+  return windows.all().filter((c) => c.profileId === profileId);
+}
+
+// そのプロファイルのウィンドウの中から、フォーカス中のものを優先して選ぶ(無ければ先頭)
+function primaryWindowForProfile(profileId) {
+  const list = windowsForProfile(profileId);
+  const focused = BrowserWindow.getFocusedWindow();
+  return list.find((c) => c.window === focused) ?? list[0] ?? null;
+}
+
+// タイマー発火時のアクション実行。音はTimerPanel側(actions.soundを見て自前で再生)。
+// 危険アクション(ウィンドウを閉じる/シャットダウン)は猶予15秒+キャンセル可能にする
+browser.fireTimer = (profileId, timer) => {
+  const ctx = primaryWindowForProfile(profileId);
+  if (!ctx) return;
+  const actions = timer.actions || {};
+
+  if (actions.hibernateTabs) {
+    for (const c of windowsForProfile(profileId)) timerActions.hibernateBackgroundTabs(c);
+  }
+  if (actions.openPage?.enabled) timerActions.openPage(ctx, actions.openPage.url);
+
+  ctx.timerPanel?.ring(timer);
+
+  const dangerous = !!actions.closeWindow || !!actions.shutdown;
+  if (!dangerous) return;
+
+  const bundle = profileData.get(profileId);
+  bundle?.timers.registerGrace(
+    timer.id,
+    timer.fireId,
+    TIMER_GRACE_MS,
+    () => {
+      if (actions.closeWindow) timerActions.closeWindow(ctx);
+      if (actions.shutdown) timerActions.runShutdown();
+    },
+    true
+  );
+};
+
 // メディア再生状態はウィンドウごとに異なる。フローティングプレイヤーとサイドパネルの
 // 「再生中」セクションの両方へ届ける(サイドパネルはsendToContext経由で自動的に届く)
 browser.sendMedia = (ctx) => {
@@ -1009,6 +1094,14 @@ browser.applyMediaDockedFor = (profileId) => {
   }
 };
 
+// 「サイドパネルに格納」設定の変更を、そのプロファイルのウィンドウのタイマーパネルへ反映する
+browser.applyTimerDockedFor = (profileId) => {
+  const docked = browser.bundleFor(profileId)?.settings.data.timerDocked === true;
+  for (const ctx of windows.all()) {
+    if (ctx.profileId === profileId) ctx.timerPanel.setDocked(docked);
+  }
+};
+
 browser.sendAll = () => {
   for (const ctx of windows.all()) browser.sendAllTo(ctx);
   browser.sendKeybindings();
@@ -1032,6 +1125,9 @@ browser.sendAllTo = (ctx) => {
   sendToContext(ctx, 'theme:state', bundle.theme.data);
   sendToContext(ctx, 'passwords:state', bundle.passwords.list());
   sendToContext(ctx, 'tor:status', browser.tor.state());
+  const timerList = bundle.timers.list();
+  sendToContext(ctx, 'timer:state', timerList);
+  ctx.timerPanel?.setState(timerList);
   browser.sendSidePanel(ctx);
 };
 

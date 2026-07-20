@@ -12,6 +12,7 @@ const panelHeaderTitle = $('panel-header-title');
 const webReloadBtn = $('web-reload');
 const webOpenTabBtn = $('web-open-tab');
 const downloadsListEl = $('downloads-list');
+const timersListEl = $('timers-list');
 
 let state = { open: true, webPanels: [], activeSection: null, activeWebId: null, notes: '' };
 
@@ -24,6 +25,7 @@ const SECTION_LABELS = {
   notes: 'メモ',
   readlist: 'リーディングリスト',
   trackers: 'トラッキング',
+  timers: 'タイマー',
   web: 'ウェブパネル',
   'now-playing': '再生中',
 };
@@ -580,6 +582,302 @@ async function refreshReadlist() {
 window.roopieInternal.onReadlistState((items) => {
   readlist = items;
   renderReadlist();
+});
+
+// ---- タイマー(カウントダウン/時刻指定/ストップウォッチ) ----
+const WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
+let timers = [];
+let timersReceivedAt = Date.now(); // 受信時刻からの経過分を差し引いて残り/経過時間をローカル再計算する(IPCを毎秒飛ばさない)
+
+function formatDuration(ms) {
+  if (ms == null) return '';
+  const total = Math.max(0, Math.round(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const pad = (n) => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+}
+
+function formatClockTime(t) {
+  return `${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}`;
+}
+
+function defaultTimerName(t) {
+  return t.type === 'countdown' ? 'カウントダウン' : t.type === 'clock' ? '時刻指定タイマー' : 'ストップウォッチ';
+}
+
+function timerSubText(t, elapsed) {
+  if (t.ringing) return '時間になりました';
+  if (t.type === 'stopwatch') {
+    return formatDuration(t.status === 'running' ? t.elapsedMs + elapsed : t.elapsedMs);
+  }
+  if (t.type === 'countdown') {
+    if (t.status !== 'running' && t.status !== 'paused') return `${formatDuration(t.durationMs)} に設定`;
+    const ms = t.status === 'running' ? t.remainingMs - elapsed : t.remainingMs;
+    return `残り ${formatDuration(ms)}`;
+  }
+  // clock
+  const timeText = formatClockTime(t.clockTime);
+  const repeatText = t.repeat?.enabled ? t.repeat.weekdays.map((on, i) => (on ? WEEKDAY_LABELS[i] : '')).join('') : '';
+  const label = repeatText ? `${timeText}(${repeatText})` : timeText;
+  if (t.status === 'running' && t.remainingMs != null) {
+    return `${label} まで残り ${formatDuration(Math.max(0, t.remainingMs - elapsed))}`;
+  }
+  return label;
+}
+
+function timerItemBtn(label, onClick) {
+  const btn = document.createElement('button');
+  btn.className = 'item-btn';
+  btn.textContent = label;
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    onClick();
+  });
+  return btn;
+}
+
+function renderTimers() {
+  timersListEl.textContent = '';
+  if (!timers.length) {
+    timersListEl.appendChild(emptyNote('タイマーはまだありません', 'clock'));
+    return;
+  }
+  const elapsed = Date.now() - timersReceivedAt;
+  for (const t of timers) {
+    const item = document.createElement('div');
+    item.className = 'panel-item timer-item' + (t.ringing ? ' ringing' : '');
+
+    const main = document.createElement('div');
+    main.className = 'timer-item-main';
+    const icon = document.createElement('span');
+    icon.className = 'letter emoji';
+    icon.textContent = t.type === 'clock' ? '⏰' : t.type === 'stopwatch' ? '⏱' : '⏲';
+    main.appendChild(icon);
+
+    const label = document.createElement('span');
+    label.className = 'label';
+    label.textContent = t.name || defaultTimerName(t);
+    const sub = document.createElement('span');
+    sub.className = 'sub';
+    sub.textContent = timerSubText(t, elapsed);
+    label.appendChild(sub);
+    main.appendChild(label);
+    main.addEventListener('click', () => openTimerModal(t.id));
+    item.appendChild(main);
+
+    const controls = document.createElement('div');
+    controls.className = 'timer-item-controls';
+
+    if (t.ringing) {
+      const remainMs = t.graceEndsAt ? Math.max(0, t.graceEndsAt - Date.now()) : null;
+      const stopLabel = remainMs != null ? `止める(${Math.ceil(remainMs / 1000)}s)` : '止める';
+      controls.appendChild(
+        timerItemBtn(stopLabel, () => {
+          if (t.fireId) window.roopieInternal.cancelTimerFire(t.fireId);
+          else window.roopieInternal.acknowledgeTimer(t.id);
+        })
+      );
+    } else {
+      if (t.status === 'running') {
+        controls.appendChild(timerItemBtn('一時停止', () => window.roopieInternal.pauseTimer(t.id)));
+      } else {
+        controls.appendChild(timerItemBtn('開始', () => window.roopieInternal.startTimer(t.id)));
+      }
+      if (t.status !== 'idle') {
+        controls.appendChild(timerItemBtn('リセット', () => window.roopieInternal.resetTimer(t.id)));
+      }
+    }
+    controls.appendChild(timerItemBtn('削除', () => window.roopieInternal.removeTimer(t.id)));
+
+    item.appendChild(controls);
+    item.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      window.roopieInternal.timerContextMenu(t.id);
+    });
+    timersListEl.appendChild(item);
+  }
+}
+
+window.roopieInternal.onTimerState((items) => {
+  timers = items;
+  timersReceivedAt = Date.now();
+  renderTimers();
+});
+window.roopieInternal.listTimers().then((items) => {
+  timers = items;
+  timersReceivedAt = Date.now();
+  renderTimers();
+});
+// 残り/経過時間の表示だけをローカルで1秒ごとに更新する(データはpush購読のみでIPCは飛ばさない)
+setInterval(() => {
+  if (state.activeSection === 'timers') renderTimers();
+}, 1000);
+
+// ---- タイマーの追加/編集モーダル ----
+const timerEditModal = $('timer-edit');
+const timerEditTitle = $('timer-edit-title');
+const timerNameInput = $('timer-name');
+const timerHInput = $('timer-h');
+const timerMInput = $('timer-m');
+const timerSInput = $('timer-s');
+const timerClockTimeInput = $('timer-clock-time');
+const timerRepeatEnabled = $('timer-repeat-enabled');
+const timerWeekdaysEl = $('timer-weekdays');
+const timerActionsBlock = $('timer-actions-block');
+const timerEditError = $('timer-edit-error');
+const actSound = $('act-sound');
+const actHibernate = $('act-hibernate');
+const actClose = $('act-close');
+const actOpen = $('act-open');
+const actOpenUrl = $('act-open-url');
+const actShutdown = $('act-shutdown');
+const actShutdownConfirmRow = $('act-shutdown-confirm-row');
+const actShutdownConfirm = $('act-shutdown-confirm');
+
+let timerEditId = null; // nullなら新規追加
+let timerEditType = 'countdown';
+let timerEditWeekdays = Array(7).fill(false);
+
+function setTimerType(type) {
+  timerEditType = type;
+  for (const btn of document.querySelectorAll('.timer-type-btn')) {
+    btn.classList.toggle('active', btn.dataset.type === type);
+  }
+  $('timer-fields-countdown').classList.toggle('hidden', type !== 'countdown');
+  $('timer-fields-clock').classList.toggle('hidden', type !== 'clock');
+  timerActionsBlock.classList.toggle('hidden', type === 'stopwatch');
+}
+
+for (const btn of document.querySelectorAll('.timer-type-btn')) {
+  btn.addEventListener('click', () => setTimerType(btn.dataset.type));
+}
+
+function renderWeekdayChips() {
+  for (const chip of timerWeekdaysEl.querySelectorAll('.weekday-chip')) {
+    chip.classList.toggle('active', timerEditWeekdays[Number(chip.dataset.day)]);
+  }
+}
+
+for (const chip of timerWeekdaysEl.querySelectorAll('.weekday-chip')) {
+  chip.addEventListener('click', () => {
+    const day = Number(chip.dataset.day);
+    timerEditWeekdays[day] = !timerEditWeekdays[day];
+    renderWeekdayChips();
+  });
+}
+
+timerRepeatEnabled.addEventListener('change', () => {
+  timerWeekdaysEl.classList.toggle('hidden', !timerRepeatEnabled.checked);
+});
+actOpen.addEventListener('change', () => {
+  actOpenUrl.classList.toggle('hidden', !actOpen.checked);
+});
+actShutdown.addEventListener('change', () => {
+  actShutdownConfirmRow.classList.toggle('hidden', !actShutdown.checked);
+  if (!actShutdown.checked) actShutdownConfirm.checked = false;
+});
+
+function openTimerModal(id) {
+  const existing = id ? timers.find((t) => t.id === id) : null;
+  timerEditId = id || null;
+  timerEditError.classList.add('hidden');
+  timerEditTitle.textContent = existing ? 'タイマーを編集' : '新しいタイマー';
+  timerNameInput.value = existing?.name || '';
+
+  setTimerType(existing?.type || 'countdown');
+
+  const total = Math.round((existing?.type === 'countdown' ? existing.durationMs : 5 * 60_000) / 1000);
+  timerHInput.value = Math.floor(total / 3600);
+  timerMInput.value = Math.floor((total % 3600) / 60);
+  timerSInput.value = total % 60;
+
+  const clockTime = existing?.clockTime || { hour: 9, minute: 0 };
+  timerClockTimeInput.value = formatClockTime(clockTime);
+  timerRepeatEnabled.checked = !!existing?.repeat?.enabled;
+  timerEditWeekdays = existing?.repeat?.weekdays ? [...existing.repeat.weekdays] : Array(7).fill(false);
+  timerWeekdaysEl.classList.toggle('hidden', !timerRepeatEnabled.checked);
+  renderWeekdayChips();
+
+  const actions = existing?.actions || {};
+  actSound.checked = actions.sound !== undefined ? actions.sound : true;
+  actHibernate.checked = !!actions.hibernateTabs;
+  actClose.checked = !!actions.closeWindow;
+  actOpen.checked = !!actions.openPage?.enabled;
+  actOpenUrl.value = actions.openPage?.url || '';
+  actOpenUrl.classList.toggle('hidden', !actOpen.checked);
+  actShutdown.checked = !!actions.shutdown;
+  actShutdownConfirm.checked = !!actions.shutdownConfirmed;
+  actShutdownConfirmRow.classList.toggle('hidden', !actShutdown.checked);
+
+  timerEditModal.classList.remove('hidden');
+  timerNameInput.focus();
+}
+
+function closeTimerModal() {
+  timerEditModal.classList.add('hidden');
+  timerEditId = null;
+}
+
+function applyTimerEdit() {
+  timerEditError.classList.add('hidden');
+  const payload = { name: timerNameInput.value.trim(), type: timerEditType };
+
+  if (timerEditType === 'countdown') {
+    const h = Number(timerHInput.value) || 0;
+    const m = Number(timerMInput.value) || 0;
+    const s = Number(timerSInput.value) || 0;
+    const durationMs = (h * 3600 + m * 60 + s) * 1000;
+    if (durationMs < 1000) {
+      timerEditError.textContent = '1秒以上の時間を指定してください';
+      timerEditError.classList.remove('hidden');
+      return;
+    }
+    payload.durationMs = durationMs;
+  }
+
+  if (timerEditType === 'clock') {
+    const [hour, minute] = (timerClockTimeInput.value || '09:00').split(':').map(Number);
+    payload.clockTime = { hour, minute };
+    payload.repeat = { enabled: timerRepeatEnabled.checked, weekdays: timerEditWeekdays };
+  }
+
+  if (timerEditType !== 'stopwatch') {
+    if (actShutdown.checked && !actShutdownConfirm.checked) {
+      timerEditError.textContent = 'シャットダウンを有効にするには確認チェックが必要です';
+      timerEditError.classList.remove('hidden');
+      return;
+    }
+    if (actOpen.checked && !looksLikeUrl(actOpenUrl.value)) {
+      timerEditError.textContent = '「特定のページを開く」に正しいURLを入力してください';
+      timerEditError.classList.remove('hidden');
+      return;
+    }
+    payload.actions = {
+      sound: actSound.checked,
+      hibernateTabs: actHibernate.checked,
+      closeWindow: actClose.checked,
+      openPage: { enabled: actOpen.checked, url: actOpenUrl.value },
+      shutdown: actShutdown.checked,
+      shutdownConfirmed: actShutdownConfirm.checked,
+    };
+  }
+
+  if (timerEditId) window.roopieInternal.updateTimer(timerEditId, payload);
+  else window.roopieInternal.addTimer(payload);
+  closeTimerModal();
+}
+
+$('timer-add-btn').addEventListener('click', () => openTimerModal(null));
+$('timer-edit-apply').addEventListener('click', applyTimerEdit);
+$('timer-edit-cancel').addEventListener('click', closeTimerModal);
+timerEditModal.addEventListener('click', (e) => {
+  if (e.target === timerEditModal) closeTimerModal();
+});
+timerNameInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') applyTimerEdit();
+  else if (e.key === 'Escape') closeTimerModal();
 });
 
 // ---- メモ(自動保存) ----
@@ -1191,6 +1489,7 @@ function render() {
   if (state.activeSection === 'bookmarks') refreshBookmarks();
   if (state.activeSection === 'downloads') refreshDownloads();
   if (state.activeSection === 'trackers') refreshTrackers();
+  if (state.activeSection === 'timers') renderTimers();
 
   renderPinnedWebPanels();
   // 入力中のメモは上書きしない

@@ -62,6 +62,13 @@
         <div id="readlist-list" class="panel-list"></div>
       </div>
 
+      <div id="section-timers" class="section">
+        <div class="timers-toolbar">
+          <button id="timer-add-btn" class="btn timers-add">新しいタイマー</button>
+        </div>
+        <div id="timers-list" class="panel-list"></div>
+      </div>
+
       <div id="section-trackers" class="section">
         <div class="tr-toolbar">
           <button id="trackers-refresh-btn" class="item-btn">再分析</button>
@@ -96,6 +103,9 @@
       </button>
       <button class="section-tab" data-section="trackers" title="トラッキング">
         <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 0 1 9 9 9 9 0 0 1-9 9 9 9 0 0 1-9-9 9 9 0 0 1 9-9z"/><circle cx="12" cy="12" r="3.2"/><path d="M12 3v3.4"/><path d="M12 17.6V21"/><path d="M3 12h3.4"/><path d="M17.6 12H21"/></svg>
+      </button>
+      <button class="section-tab" data-section="timers" title="タイマー">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5"/><path d="M9 2h6"/></svg>
       </button>
       <!-- 登録したWebパネルをアイコンレールに直接ピン留め表示(クリックで即表示、右クリックで編集・削除) -->
       <div id="web-pin-list"></div>
@@ -139,6 +149,65 @@
       <div class="modal-actions">
         <button id="web-edit-cancel" class="btn">キャンセル</button>
         <button id="web-edit-apply" class="btn primary">適用</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- タイマーの追加/編集(サイドパネルの「タイマー」セクション内のボタン/鉛筆アイコンから開く) -->
+  <div id="timer-edit" class="modal-backdrop hidden">
+    <div class="modal timer-modal">
+      <div class="modal-title" id="timer-edit-title">新しいタイマー</div>
+
+      <input id="timer-name" class="panel-input" type="text" placeholder="名前(省略可)" spellcheck="false" autocomplete="off" />
+
+      <div class="timer-type-tabs">
+        <button type="button" class="item-btn timer-type-btn" data-type="countdown">カウントダウン</button>
+        <button type="button" class="item-btn timer-type-btn" data-type="clock">時刻指定</button>
+        <button type="button" class="item-btn timer-type-btn" data-type="stopwatch">ストップウォッチ</button>
+      </div>
+
+      <div id="timer-fields-countdown" class="timer-fields hidden">
+        <div class="timer-duration-inputs">
+          <input id="timer-h" type="number" min="0" max="23" value="0" /><span>時間</span>
+          <input id="timer-m" type="number" min="0" max="59" value="5" /><span>分</span>
+          <input id="timer-s" type="number" min="0" max="59" value="0" /><span>秒</span>
+        </div>
+      </div>
+
+      <div id="timer-fields-clock" class="timer-fields hidden">
+        <input id="timer-clock-time" class="panel-input" type="time" value="09:00" />
+        <label class="timer-action-row">
+          <input type="checkbox" id="timer-repeat-enabled" /> 曜日を指定して繰り返す
+        </label>
+        <div id="timer-weekdays" class="weekday-chips hidden">
+          <button type="button" class="weekday-chip" data-day="0">日</button>
+          <button type="button" class="weekday-chip" data-day="1">月</button>
+          <button type="button" class="weekday-chip" data-day="2">火</button>
+          <button type="button" class="weekday-chip" data-day="3">水</button>
+          <button type="button" class="weekday-chip" data-day="4">木</button>
+          <button type="button" class="weekday-chip" data-day="5">金</button>
+          <button type="button" class="weekday-chip" data-day="6">土</button>
+        </div>
+      </div>
+
+      <div id="timer-actions-block" class="timer-fields hidden">
+        <div class="timer-actions-title">時間になったら</div>
+        <label class="timer-action-row"><input type="checkbox" id="act-sound" /> 音を鳴らす</label>
+        <label class="timer-action-row"><input type="checkbox" id="act-hibernate" /> タブを休止する</label>
+        <label class="timer-action-row"><input type="checkbox" id="act-close" /> ウィンドウを閉じる</label>
+        <label class="timer-action-row"><input type="checkbox" id="act-open" /> 特定のページを開く</label>
+        <input id="act-open-url" class="panel-input timer-suboption hidden" type="text" placeholder="URLを入力(例: example.com)" spellcheck="false" autocomplete="off" />
+        <label class="timer-action-row"><input type="checkbox" id="act-shutdown" /> シャットダウンする</label>
+        <label id="act-shutdown-confirm-row" class="timer-action-row timer-suboption danger hidden">
+          <input type="checkbox" id="act-shutdown-confirm" /> シャットダウンを実行することを理解しました
+        </label>
+      </div>
+
+      <div id="timer-edit-error" class="modal-error hidden"></div>
+
+      <div class="modal-actions">
+        <button id="timer-edit-cancel" class="btn">キャンセル</button>
+        <button id="timer-edit-apply" class="btn primary">保存</button>
       </div>
     </div>
   </div>

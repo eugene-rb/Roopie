@@ -82,6 +82,25 @@ function showWebPanelMenu(panel, id) {
 }
 
 /**
+ * タイマー一覧の行を右クリックしたときのメニュー。編集は一覧の鉛筆アイコンから開く(モーダルの
+ * 項目が多いためメニュー経由にしない)。ここでは複製・削除のみを扱う。
+ */
+function showTimerMenu(bundle, id) {
+  const timer = bundle?.timers.list().find((t) => t.id === id);
+  if (!timer) return;
+  const menu = new Menu();
+  menu.append(
+    new MenuItem({
+      label: '複製',
+      click: () => bundle.timers.add({ ...timer, name: `${timer.name || 'タイマー'}のコピー` }),
+    })
+  );
+  menu.append(new MenuItem({ type: 'separator' }));
+  menu.append(new MenuItem({ label: '削除', click: () => bundle.timers.remove(id) }));
+  menu.popup();
+}
+
+/**
  * ツールバーのユーティリティ群を右クリックしたときのメニュー。
  * 各項目の表示/非表示をチェックボックスで切り替え、設定画面(並び替え)へも誘導する。
  */
@@ -116,4 +135,10 @@ function showToolbarMenu(ctx) {
   menu.popup();
 }
 
-module.exports = { showSidePanelPositionMenu, showSidePanelRailMenu, showToolbarMenu, showWebPanelMenu };
+module.exports = {
+  showSidePanelPositionMenu,
+  showSidePanelRailMenu,
+  showToolbarMenu,
+  showWebPanelMenu,
+  showTimerMenu,
+};

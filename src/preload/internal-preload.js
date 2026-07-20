@@ -144,6 +144,25 @@ if (location.protocol === 'roopie:') {
     clearReadReadlist: () => ipcRenderer.send('readlist:clear-read'),
     onReadlistState: (cb) => ipcRenderer.on('readlist:state', (_e, items) => cb(items)),
 
+    // タイマー(カウントダウン/時刻指定/ストップウォッチ)
+    listTimers: () => ipcRenderer.invoke('timer:list'),
+    addTimer: (payload) => ipcRenderer.send('timer:add', payload),
+    updateTimer: (id, patch) => ipcRenderer.send('timer:update', id, patch),
+    removeTimer: (id) => ipcRenderer.send('timer:remove', id),
+    startTimer: (id) => ipcRenderer.send('timer:start', id),
+    pauseTimer: (id) => ipcRenderer.send('timer:pause', id),
+    resetTimer: (id) => ipcRenderer.send('timer:reset', id),
+    acknowledgeTimer: (id) => ipcRenderer.send('timer:acknowledge', id),
+    cancelTimerFire: (fireId) => ipcRenderer.send('timer:cancel-fire', fireId),
+    timerContextMenu: (id) => ipcRenderer.send('timer:context-menu', id),
+    onTimerState: (cb) => ipcRenderer.on('timer:state', (_e, items) => cb(items)),
+    onTimerRing: (cb) => ipcRenderer.on('timer:ring', (_e, payload) => cb(payload)),
+    onTimerRingClear: (cb) => ipcRenderer.on('timer:ring-clear', (_e, fireId) => cb(fireId)),
+    timerDragStart: () => ipcRenderer.send('timer:drag-start'),
+    timerDrag: (dx, dy) => ipcRenderer.send('timer:drag', dx, dy),
+    timerDragEnd: () => ipcRenderer.send('timer:drag-end'),
+    timerDismiss: () => ipcRenderer.send('timer:dismiss'),
+
     // 保存パスワード(管理画面用)
     listPasswords: () => ipcRenderer.invoke('passwords:list'),
     revealPassword: (id) => ipcRenderer.invoke('passwords:reveal', id),

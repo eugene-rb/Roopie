@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https: data:; style-src 'self'" />
+  <title>タイマー</title>
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body class="timerp-body">
+  <div id="timerp">
+    <div id="timerp-rows"></div>
+    <div id="timerp-tools">
+      <button id="timerp-dock" class="tbtn" title="サイドパネルに格納">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg>
+      </button>
+      <div class="spacer"></div>
+      <button id="timerp-dismiss" class="tbtn" title="一時的に非表示">
+        <svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <script src="theme.js"></script>
+  <script src="timerpanel.js"></script>
+</body>
+</html>
