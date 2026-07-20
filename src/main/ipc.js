@@ -139,6 +139,7 @@ function registerIpc() {
   ipcMain.on('tabs:close', (e, id) => tabsOf(e)?.closeTab(id));
   ipcMain.on('tabs:switch', (e, id) => tabsOf(e)?.switchTab(id));
   ipcMain.on('tabs:move', (e, id, toIndex) => tabsOf(e)?.moveTab(id, toIndex));
+  ipcMain.on('tabs:toggle-mute', (e, id) => tabsOf(e)?.toggleMute(id));
 
   // ---- タブのドラッグ(D&D分割 / 新しいウィンドウへの切り離し) ----
   // ドラッグ中はページ領域にドロップゾーンを出す。ドロップ先で「分割」か「切り離し」かが決まる。

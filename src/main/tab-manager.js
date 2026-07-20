@@ -214,12 +214,20 @@ class TabManager {
       bookmarkHint: false, // 「Ctrl+Dでブックマーク」の案内を出しているか
       bookmarkHintListener: null, // 案内を出している間だけ張る input-event のリスナ
       mediaTimer: null, // 再生中に全フレームを見に行くタイマー
+      isAudible: false, // 音声再生中か(タブのスピーカーアイコン用)
     };
     this.tabs.push(tab);
     this.window.contentView.addChildView(view);
 
     this.attachEvents(tab);
+    const prevActiveTabId = this.activeTabId;
     this.onTabCreated?.(tab); // 拡張機能システム等への通知
+    // 拡張機能システム(electron-chrome-extensions)はタブ登録時に必ずchrome.tabs.onActivatedを
+    // 発火する仕様で、その結果このタブがアクティブ化されてしまう(observeTab内で無条件にonActivated
+    // を呼ぶため)。バックグラウンドで開きたいタブの場合は、その誤ったアクティブ化を打ち消す
+    if (background && this.activeTabId !== prevActiveTabId) {
+      this.switchTab(prevActiveTabId);
+    }
     view.webContents.loadURL(url);
     if (background) {
       // 見えない位置に置いたままタブバーにだけ足す(今見ているページから離れない)
@@ -333,6 +341,7 @@ class TabManager {
       // (旧方式ではpreloadがnullを送っていた経路。今はメイン側で明示的に消す)
       this.stopMediaWatch(tab);
       this.onMediaReport?.(tab.id, null, null);
+      tab.isAudible = false;
       // ブックマークの案内は「また来たのにまだ入れていないページ」にだけ出す。
       // 履歴へ足す前に判定する(足した後だと必ず1件見つかってしまう)
       this.setBookmarkHint(tab, !tab.isInternal && this.history.has(url) && !this.bookmarks.find(url));
@@ -349,6 +358,13 @@ class TabManager {
     // これをきっかけに全フレームを見に行く
     wc.on('media-started-playing', () => this.startMediaWatch(tab));
     wc.on('media-paused', () => this.probeMedia(tab));
+
+    // タブのスピーカーアイコン用。実際に音が鳴っているかどうかはこちらの方が正確
+    // (media-started-playingは無音のvideo要素でも飛ぶため)
+    wc.on('audio-state-changed', (e) => {
+      tab.isAudible = e.audible;
+      this.sendState();
+    });
 
     wc.on('page-favicon-updated', (_e, favicons) => {
       tab.favicon = favicons[favicons.length - 1] || null;
@@ -578,7 +594,7 @@ class TabManager {
 
   async probeMedia(tab) {
     const wc = tab.view.webContents;
-    if (wc.isDestroyed()) {
+    if (!wc || wc.isDestroyed()) {
       this.stopMediaWatch(tab);
       return;
     }
@@ -1048,6 +1064,8 @@ class TabManager {
           // ブックマークすれば当然消える(did-navigateを待たずにここで打ち消す)
           bookmarkHint: !!t.bookmarkHint && !isBookmarked,
           zoomLevel: wc.getZoomLevel(),
+          isAudible: !!t.isAudible,
+          isMuted: wc.isAudioMuted(),
         };
       }),
     };

@@ -71,6 +71,20 @@ function renderTabs() {
     title.textContent = tab.title;
     tabEl.appendChild(title);
 
+    if (tab.isAudible || tab.isMuted) {
+      const audioBtn = document.createElement('button');
+      audioBtn.className = 'audio-btn' + (tab.isMuted ? ' muted' : '');
+      audioBtn.title = tab.isMuted ? 'ミュート中(クリックで解除)' : 'クリックでミュート';
+      audioBtn.innerHTML = tab.isMuted
+        ? '<svg viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>'
+        : '<svg viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>';
+      audioBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        window.roopie.toggleMuteTab(tab.id);
+      });
+      tabEl.appendChild(audioBtn);
+    }
+
     const closeBtn = document.createElement('button');
     closeBtn.className = 'close-btn';
     closeBtn.textContent = '✕';
