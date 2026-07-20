@@ -632,6 +632,28 @@ $('password-never').addEventListener('click', () => {
   closePasswordBar();
 });
 
+// ---- 既定のブラウザ化のお願い ----
+const defaultBrowserBar = $('default-browser-bar');
+
+window.roopie.onDefaultBrowserPrompt(() => {
+  defaultBrowserBar.classList.remove('hidden');
+  reportChromeHeight();
+});
+
+function closeDefaultBrowserBar() {
+  defaultBrowserBar.classList.add('hidden');
+  reportChromeHeight();
+}
+
+$('default-browser-set').addEventListener('click', () => {
+  window.roopie.setAsDefaultBrowser();
+  closeDefaultBrowserBar();
+});
+$('default-browser-dismiss').addEventListener('click', () => {
+  window.roopie.dismissDefaultBrowserPrompt();
+  closeDefaultBrowserBar();
+});
+
 // ---- ページ内検索 ----
 window.roopie.onOpenFind(() => {
   findBar.classList.remove('hidden');

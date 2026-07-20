@@ -20,6 +20,7 @@ const { geocode, weather, fetchRss } = require('./widgets');
 const trackers = require('./trackers');
 const appState = require('./app-state');
 const updater = require('./updater');
+const defaultBrowser = require('./default-browser');
 
 // ページのタイトルをHTMLの<title>から取得する(ショートカット追加時の名前自動設定用)。
 // 本文全体は読まず、</title>が見つかるまで先頭256KBだけ読む
@@ -540,6 +541,10 @@ function registerIpc() {
     browser.pendingPassword = null;
     if (pending) browser.bundleFor(pending.profileId)?.passwords.addNeverSave(pending.origin);
   });
+
+  // ---- 既定のブラウザ化のお願い ----
+  ipcMain.on('default-browser:set', () => defaultBrowser.setAsDefault());
+  ipcMain.on('default-browser:dismiss', () => defaultBrowser.dismiss());
 
   // ページのオートフィルに出す候補一覧。パスワード本体は含めない(選択時に別途取得)
   ipcMain.handle('autofill:page-data', (e) => {

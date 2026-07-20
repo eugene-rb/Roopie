@@ -26,6 +26,7 @@ const windows = require('./windows');
 const { defaultToolbarItems, normalizeToolbarItems } = require('./toolbar-items');
 const { Keybindings } = require('./keybindings');
 const LocalServers = require('./local-servers');
+const DefaultBrowser = require('./default-browser');
 
 const PAGES_DIR = path.join(__dirname, '..', 'renderer', 'pages');
 const PRELOAD_DIR = path.join(__dirname, '..', 'preload');
@@ -435,6 +436,13 @@ browser.createWindow = ({ incognito = false, url, x, y, profileId, restoreTabs }
   window.webContents.once('did-finish-load', () => {
     window.webContents.send('ui:window', { incognito });
     browser.sendAllTo(ctx);
+    // 既定のブラウザ化のお願い。1起動につきどれか1つのウィンドウで1回だけ。
+    // イントロ/変更点の案内と競合しないよう、それらを開くウィンドウでは出さない(次の機会に回る)
+    const isOnboarding = url === 'roopie://welcome' || url === 'roopie://whatsnew';
+    if (!incognito && !isOnboarding && DefaultBrowser.shouldPrompt()) {
+      DefaultBrowser.markShown();
+      window.webContents.send('default-browser:prompt');
+    }
     if (restoreTabs?.length) {
       tabManager.restoreTabs(restoreTabs);
       // 復元と同時に開きたいページ(初回イントロ/更新後の変更点)は復元後に前面で開く

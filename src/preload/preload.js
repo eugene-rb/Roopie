@@ -490,6 +490,11 @@ contextBridge.exposeInMainWorld('roopie', {
   savePassword: () => ipcRenderer.send('passwords:confirm-save'),
   dismissPassword: () => ipcRenderer.send('passwords:dismiss'),
   neverSavePassword: () => ipcRenderer.send('passwords:never-save'),
+
+  // 既定のブラウザ化のお願い
+  onDefaultBrowserPrompt: (cb) => ipcRenderer.on('default-browser:prompt', () => cb()),
+  setAsDefaultBrowser: () => ipcRenderer.send('default-browser:set'),
+  dismissDefaultBrowserPrompt: () => ipcRenderer.send('default-browser:dismiss'),
   onFocusAddressBar: (cb) => ipcRenderer.on('ui:focus-address-bar', () => cb()),
   onOpenFind: (cb) => ipcRenderer.on('ui:open-find', () => cb()),
   onToggleCompact: (cb) => ipcRenderer.on('ui:toggle-compact', () => cb()),

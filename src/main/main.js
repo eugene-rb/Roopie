@@ -7,6 +7,7 @@ const { setupMenu } = require('./menu');
 const { setupVerifyLog } = require('./verify-log');
 const { setupAutoUpdater } = require('./updater');
 const appState = require('./app-state');
+const defaultBrowser = require('./default-browser');
 
 // 二重起動を防ぐ(2つ目のインスタンスはプロファイルのキャッシュ等を壊すため)。
 // 既に起動中なら、そのインスタンスのウィンドウを前面に出して終了する。
@@ -30,6 +31,7 @@ setupVerifyLog();
 app.whenReady().then(() => {
   browser.initData();
   appState.init();
+  defaultBrowser.init();
   setupMenu();
   // ショートカット割り当てが変わったらメニュー(アクセラレータ)を作り直し、設定画面へ配信する
   browser.onKeybindingsChanged = () => {
