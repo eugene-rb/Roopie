@@ -166,7 +166,7 @@ function hideDropSlot() {
 
 function cleanupDrag() {
   hideDropSlot();
-  tabBarEl.classList.remove('drag-search');
+  tabBarEl.classList.remove('drag-search', 'dnd-armed');
   for (const el of tabsEl.querySelectorAll('.tab.dragging, .tab.drag-collapsed')) {
     el.classList.remove('dragging', 'drag-collapsed');
   }
@@ -204,6 +204,20 @@ function dragMode(e) {
   if ([...e.dataTransfer.types].includes('text/plain')) return 'search';
   return null;
 }
+
+// タブバーの空き領域はウィンドウ移動用のドラッグ領域(-webkit-app-region: drag)なので、
+// そのままだとその上でドロップイベントを一切拾えない(並べ替え・検索とも末尾への挿入が死ぬ)。
+// ドラッグセッション中だけno-dragへ切り替える。タブバー自身のdragoverを待つと空き領域へ直接
+// 進入したケースに間に合わないため、ページ側から上がってくる途中(ツールバー等)で先に検知する
+document.addEventListener('dragover', (e) => {
+  if ([...e.dataTransfer.types].includes('text/plain')) {
+    tabBarEl.classList.add('dnd-armed');
+  }
+});
+document.addEventListener('drop', () => tabBarEl.classList.remove('dnd-armed'));
+document.addEventListener('dragleave', (e) => {
+  if (!e.relatedTarget) tabBarEl.classList.remove('dnd-armed'); // ウィンドウの外へ出た
+});
 
 tabBarEl.addEventListener('dragover', (e) => {
   const mode = dragMode(e);
