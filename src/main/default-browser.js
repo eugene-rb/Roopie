@@ -41,7 +41,7 @@ function decidePrompt({ isDefault, dismissCount, dismissedAt, now }) {
 }
 
 function shouldPrompt() {
-  if (shownThisSession) return false;
+  if (shownThisSession || !store) return false;
   const alreadyDefault = isDefault();
   if (alreadyDefault) {
     // Windowsの設定から直接変えていた場合など、見送り履歴を持ち越さない
