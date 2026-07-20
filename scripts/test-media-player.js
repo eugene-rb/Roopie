@@ -1,7 +1,8 @@
 // メディアプレイヤーの表示条件の検証(再利用可能)。
 // 実行: npx electron scripts/test-media-player.js
-// 確認内容: 再生中タブがアクティブな間はフローティング非表示 / タブを離れると表示 /
-// 分割相手として見えている間も非表示 / 「一時的に非表示」とその自動解除(再生終了・別タブ再生)
+// 確認内容: 再生中タブがアクティブな間はそのタブの行だけ非表示(他タブは表示のまま) /
+// タブを離れると表示 / 分割相手として見えている間も非表示 /
+// 「一時的に非表示」(全タブぶんまとめて。再生が全部止まると自動解除)
 const { app } = require('electron');
 const fs = require('fs');
 const os = require('os');
@@ -20,11 +21,17 @@ function check(name, actual, expected) {
   if (!ok) failed++;
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const fakeFrame = () => ({ isDestroyed: () => false });
 
 // フローティングの実表示状態(layout()がsetVisibleした結果)を返す
 function playerVisible(ctx) {
   const view = ctx.mediaPlayer.view;
   return !!view && view.getVisible();
+}
+
+// 現在フローティングに並んでいるタブ名一覧(visibleRows()準拠)
+function visibleTitles(ctx) {
+  return ctx.mediaPlayer.visibleRows().map((m) => m.title);
 }
 
 app.whenReady().then(async () => {
@@ -46,14 +53,9 @@ app.whenReady().then(async () => {
 
   // createTabはBをアクティブにする → Aに戻してから、Aで再生が始まった状況を作る
   tm.switchTab(tabA.id);
-  const play = (tabId, title) => {
-    ctx.media = { title, artist: '', playing: true, duration: 100, currentTime: 0, tabId };
-    browser.sendMedia(ctx);
-  };
-  const stop = () => {
-    ctx.media = null;
-    browser.sendMedia(ctx);
-  };
+  const play = (tabId, title) =>
+    tm.onMediaReport(tabId, { title, artist: '', playing: true, duration: 100, currentTime: 0, canPrev: false, canNext: false, hasVideo: false }, fakeFrame());
+  const stop = (tabId) => tm.onMediaReport(tabId, null, null);
 
   play(tabA.id, '曲1');
   await sleep(300);
@@ -74,28 +76,40 @@ app.whenReady().then(async () => {
   tm.layout();
   check('分割解除 → 表示', playerVisible(ctx), true);
 
-  // 一時的に非表示(右クリックメニュー相当)
+  // Bでも再生を始める → 2タブぶん独立して並ぶ(この時点のアクティブはB)
+  play(tabB.id, '曲2');
+  await sleep(300);
+  check('アクティブ(B)の行だけ隠れ、他タブ(A)の行は出る', visibleTitles(ctx).sort(), ['曲1']);
+  tm.switchTab(tabA.id);
+  await sleep(300);
+  check('タブ切り替えでAの行が隠れBの行が出る', visibleTitles(ctx).sort(), ['曲2']);
+  stop(tabB.id);
+  await sleep(200);
+
+  // 一時的に非表示(右クリックメニュー相当。全タブぶんまとめて)
+  tm.switchTab(tabB.id); // Aの行が出る状況にしておく
+  await sleep(200);
   ctx.mediaPlayer.hideTemporarily();
   check('一時的に非表示', playerVisible(ctx), false);
   tm.switchTab(tabA.id);
   tm.switchTab(tabB.id);
   check('タブを行き来しても非表示のまま', playerVisible(ctx), false);
 
-  // 同じタブの再生が続く限り非表示のまま(状態更新では解除されない)
-  play(tabA.id, '曲1');
-  check('同じタブの状態更新では解除されない', playerVisible(ctx), false);
+  // 再生が全部止まるまでは解除されない(別タブの再生が増えても)
+  play(tabB.id, '曲2'); // 既にAが再生中の状態にBも追加
+  await sleep(200);
+  check('別タブの再生が増えても解除されない(まだ何か再生中)', playerVisible(ctx), false);
 
-  // 別タブの再生に変わったら解除
-  play(tabB.id, '曲2');
-  tm.switchTab(tabA.id);
-  check('別タブの再生に変わったら解除', playerVisible(ctx), true);
+  // 再生が全部止まったら解除される
+  stop(tabA.id);
+  stop(tabB.id);
+  await sleep(200);
+  check('再生が全部止まると自動解除', ctx.mediaPlayer.tempHidden, false);
 
-  // 再生終了→再開でも解除
-  ctx.mediaPlayer.hideTemporarily();
-  check('再度、一時的に非表示', playerVisible(ctx), false);
-  stop();
-  play(tabB.id, '曲3');
-  check('再生終了→再開で解除', playerVisible(ctx), true);
+  play(tabA.id, '曲3');
+  tm.switchTab(tabB.id);
+  await sleep(200);
+  check('再開後は通常通り表示される', playerVisible(ctx), true);
 
   console.log(failed === 0 ? '\nすべてOK' : `\n${failed}件のNG`);
   app.exit(failed === 0 ? 0 : 1);

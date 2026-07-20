@@ -374,7 +374,6 @@ browser.createWindow = ({ incognito = false, url, x, y, profileId, restoreTabs }
       bundle.settings.save();
     },
   });
-  mediaPlayer.setDocked(bundle.settings.data.mediaDocked);
   tabManager.setMediaPlayer(mediaPlayer);
 
   const timerPanel = new TimerPanel(window, {
@@ -398,11 +397,12 @@ browser.createWindow = ({ incognito = false, url, x, y, profileId, restoreTabs }
     session,
     incognito,
     profileId: profile.id,
-    media: null,
+    mediaList: [], // 再生中/一時停止中のタブ一覧(タブごとに独立して扱う)
     // フレーム(iframe含む)ごとの再生状態。動画がiframeの中にあるサイトでは、
     // 動画を持たないメインフレームからもnullが届くため、1つの変数では上書きし合ってしまう
     mediaFrames: new Map(),
-    mediaFrame: null, // 操作対象のWebFrameMain(再生/一時停止/シークの実行先)
+    // タブ単位の「フローティング表示」上書き(セッション限り。無指定ならmediaDocked設定に従う)
+    mediaDockedOverrides: new Map(),
   });
 
   // 新しいウィンドウにもテーマの不透明度を効かせる(既存ウィンドウと見た目を揃える)
@@ -415,7 +415,7 @@ browser.createWindow = ({ incognito = false, url, x, y, profileId, restoreTabs }
   tabManager.onMediaReport = (tabId, state, frame) => {
     if (state) ctx.mediaFrames.set(tabId, { state: { ...state, tabId }, frame, tabId });
     else ctx.mediaFrames.delete(tabId);
-    browser.pickMedia(ctx);
+    browser.refreshMedia(ctx);
   };
 
   // Googleにログインした可能性のあるタイミングでアカウントを自動検出する(シークレットでは行わない)
@@ -1057,31 +1057,38 @@ browser.fireTimer = (profileId, timer) => {
 };
 
 // メディア再生状態はウィンドウごとに異なる。フローティングプレイヤーとサイドパネルの
-// 「再生中」セクションの両方へ届ける(サイドパネルはsendToContext経由で自動的に届く)
+// 「再生中」セクションの両方へ届ける(サイドパネルはsendToContext経由で自動的に届く)。
+// 複数タブが同時に再生していても、それぞれ独立したタブとして一覧を送る
 browser.sendMedia = (ctx) => {
   if (!ctx || ctx.window.isDestroyed()) return;
-  sendToContext(ctx, 'media:state', ctx.media);
-  ctx.mediaPlayer.setState(ctx.media);
+  sendToContext(ctx, 'media:state', ctx.mediaList);
+  ctx.mediaPlayer.setState(ctx.mediaList);
 };
 
-// フレームごとの報告から「今かかっているもの」を1つ選ぶ。
-// 再生中のものを最優先、次に再生位置が進んでいるもの(一時停止中の続き)。
+// フレームごとの報告から、タブ単位の再生状態一覧を作り直す。
+// 再生中のものを先頭に、次に再生位置が進んでいるもの(一時停止中の続き)の順で並べる。
 // 消えたフレームの報告は捨てる(タブを閉じた/ページを離れた後に残ると誤表示になる)
-browser.pickMedia = (ctx) => {
+browser.refreshMedia = (ctx) => {
   if (!ctx) return;
   for (const [key, entry] of ctx.mediaFrames) {
     if (!entry.frame || entry.frame.isDestroyed?.() || !ctx.tabManager.getTab(entry.tabId)) {
       ctx.mediaFrames.delete(key);
+      ctx.mediaDockedOverrides.delete(key);
     }
   }
-  const entries = [...ctx.mediaFrames.values()];
-  const chosen =
-    entries.find((entry) => entry.state.playing) ??
-    entries.filter((entry) => entry.state.currentTime > 0).at(-1) ??
-    entries.at(-1) ??
-    null;
-  ctx.media = chosen?.state ?? null;
-  ctx.mediaFrame = chosen?.frame ?? null;
+  const entries = [...ctx.mediaFrames.values()].sort((a, b) => {
+    if (a.state.playing !== b.state.playing) return a.state.playing ? -1 : 1;
+    return (b.state.currentTime || 0) - (a.state.currentTime || 0);
+  });
+  const globalDocked = browser.bundleFor(ctx.profileId)?.settings.data.mediaDocked === true;
+  ctx.mediaList = entries.map((entry) => {
+    const wc = ctx.tabManager.getTab(entry.tabId)?.view.webContents;
+    return {
+      ...entry.state,
+      muted: !!wc?.isAudioMuted(),
+      docked: ctx.mediaDockedOverrides.has(entry.tabId) ? ctx.mediaDockedOverrides.get(entry.tabId) : globalDocked,
+    };
+  });
   browser.sendMedia(ctx);
 };
 
@@ -1091,15 +1098,24 @@ browser.forgetMediaForTab = (ctx, tabId) => {
   for (const [key, entry] of ctx.mediaFrames) {
     if (entry.tabId === tabId) ctx.mediaFrames.delete(key);
   }
-  browser.pickMedia(ctx);
+  ctx.mediaDockedOverrides.delete(tabId);
+  browser.refreshMedia(ctx);
 };
 
-// 「サイドパネルに格納」設定の変更を、そのプロファイルのウィンドウのプレイヤーへ反映する
+// 「サイドパネルに格納」設定(既定値)の変更を、そのプロファイルの全ウィンドウへ反映する
 browser.applyMediaDockedFor = (profileId) => {
-  const docked = browser.bundleFor(profileId)?.settings.data.mediaDocked === true;
   for (const ctx of windows.all()) {
-    if (ctx.profileId === profileId) ctx.mediaPlayer.setDocked(docked);
+    if (ctx.profileId === profileId) browser.refreshMedia(ctx);
   }
+};
+
+// タブ単位の「フローティング表示」上書き(星ボタンならぬトグル用。既定値と同じなら上書きを消す)
+browser.setMediaDockedForTab = (ctx, tabId, docked) => {
+  if (!ctx) return;
+  const globalDocked = browser.bundleFor(ctx.profileId)?.settings.data.mediaDocked === true;
+  if (!!docked === globalDocked) ctx.mediaDockedOverrides.delete(tabId);
+  else ctx.mediaDockedOverrides.set(tabId, !!docked);
+  browser.refreshMedia(ctx);
 };
 
 // 「サイドパネルに格納」設定の変更を、そのプロファイルのウィンドウのタイマーパネルへ反映する

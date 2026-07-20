@@ -7,7 +7,7 @@
 //   1. iframeの中のプレイヤー
 //   2. shadow DOM の中のプレイヤー
 //   3. 後から差し込まれたプレイヤー
-//   4. browser.pickMedia が「再生中のもの」を選ぶ
+//   4. browser.refreshMedia がタブごとに独立した一覧を作る(再生中のものを先頭に)
 const { app, BrowserWindow, session } = require('electron');
 const http = require('http');
 // browser.js は app ready より前に protocol.registerSchemesAsPrivileged を呼ぶ
@@ -76,40 +76,44 @@ const PAGE_LATE = `<!doctype html><meta charset="utf-8"><title>遅延</title>
   }, 1000);
 </script>`;
 
-function testPickMedia() {
-  // ctxのうち pickMedia が触る部分だけを用意する
+function testRefreshMedia() {
+  // ctxのうち refreshMedia が触る部分だけを用意する
+  const fakeTab = () => ({ view: { webContents: { isAudioMuted: () => false } } });
   const ctx = {
     window: { isDestroyed: () => false },
     mediaPlayer: { setState: () => {} },
-    tabManager: { getTab: (id) => ({ id }) },
+    tabManager: { getTab: (id) => fakeTab(id) },
     mediaFrames: new Map(),
-    media: null,
-    mediaFrame: null,
+    mediaDockedOverrides: new Map(),
+    mediaList: [],
+    profileId: undefined, // browser.bundleFor(undefined) は profiles未初期化なのでnull(=既定docked:false)を返す
   };
   const frame = { isDestroyed: () => false };
   const realSendMedia = browser.sendMedia;
   browser.sendMedia = () => {}; // 実ウィンドウが無いので配信はしない
 
+  // タブ単位で独立して一覧に乗る(1つを選ぶのではなく、両方とも残る)
   ctx.mediaFrames.set(1, { state: { title: '止まっている', playing: false, currentTime: 0, tabId: 1 }, frame, tabId: 1 });
   ctx.mediaFrames.set(2, { state: { title: '再生中', playing: true, currentTime: 5, tabId: 2 }, frame, tabId: 2 });
-  browser.pickMedia(ctx);
-  check('再生中のものが選ばれる', ctx.media.title, '再生中');
+  browser.refreshMedia(ctx);
+  check('両タブぶんが独立して一覧に乗る', ctx.mediaList.map((m) => m.title).sort(), ['再生中', '止まっている'].sort());
+  check('再生中のものが先頭に並ぶ', ctx.mediaList[0].title, '再生中');
 
   ctx.mediaFrames.set(2, { state: { title: '再生中', playing: false, currentTime: 5, tabId: 2 }, frame, tabId: 2 });
-  browser.pickMedia(ctx);
-  check('誰も再生中でなければ再生位置が進んでいるものを選ぶ', ctx.media.title, '再生中');
+  browser.refreshMedia(ctx);
+  check('誰も再生中でなくても両方とも一覧に残る', ctx.mediaList.length, 2);
 
-  ctx.tabManager.getTab = (id) => (id === 1 ? { id: 1 } : null);
-  browser.pickMedia(ctx);
-  check('無くなったタブの報告は捨てる', ctx.media.title, '止まっている');
+  ctx.tabManager.getTab = (id) => (id === 1 ? fakeTab() : null);
+  browser.refreshMedia(ctx);
+  check('無くなったタブの報告は捨てる', ctx.mediaList.map((m) => m.title), ['止まっている']);
 
   browser.forgetMediaForTab(ctx, 1);
-  check('タブを閉じるとそのタブの報告は消える', ctx.media, null);
+  check('タブを閉じるとそのタブの報告は消える', ctx.mediaList, []);
   browser.sendMedia = realSendMedia;
 }
 
 app.whenReady().then(async () => {
-  testPickMedia();
+  testRefreshMedia();
 
   const server = http
     .createServer((req, res) => {
@@ -128,7 +132,7 @@ app.whenReady().then(async () => {
   const TabManager = require('../src/main/tab-manager');
   const window = new BrowserWindow({ show: true, width: 900, height: 700 });
   const history = { add: () => {}, update: () => {}, has: () => false };
-  const bookmarks = { find: () => null, toggle: () => {} };
+  const bookmarks = { find: () => null, existsAnywhere: () => false, toggle: () => {} };
   const tabManager = new TabManager(window, { history, bookmarks, session: session.defaultSession });
 
   // TabManagerが報告してくる再生状態を受け取る(browser.js がやっていること)

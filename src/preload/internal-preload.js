@@ -92,13 +92,16 @@ if (location.protocol === 'roopie:') {
     resetAllKeybindings: () => ipcRenderer.invoke('keybindings:reset-all'),
     onKeybindings: (cb) => ipcRenderer.on('keybindings:state', (_e, config) => cb(config)),
 
-    // メディアプレイヤー
+    // メディアプレイヤー(複数タブが同時に再生し得るため、どのタブへの操作かをtabIdで指定する)
     onMediaState: (cb) => ipcRenderer.on('media:state', (_e, state) => cb(state)),
-    mediaToggle: () => ipcRenderer.send('media:control', 'toggle'),
-    mediaSeek: (time) => ipcRenderer.send('media:control', 'seek', time),
-    mediaPip: () => ipcRenderer.send('media:control', 'pip'),
-    mediaNext: () => ipcRenderer.send('media:control', 'next'),
-    mediaPrev: () => ipcRenderer.send('media:control', 'prev'),
+    listMedia: () => ipcRenderer.invoke('media:list'),
+    mediaToggle: (tabId) => ipcRenderer.send('media:control', tabId, 'toggle'),
+    mediaSeek: (tabId, time) => ipcRenderer.send('media:control', tabId, 'seek', time),
+    mediaPip: (tabId) => ipcRenderer.send('media:control', tabId, 'pip'),
+    mediaNext: (tabId) => ipcRenderer.send('media:control', tabId, 'next'),
+    mediaPrev: (tabId) => ipcRenderer.send('media:control', tabId, 'prev'),
+    mediaToggleMute: (tabId) => ipcRenderer.send('media:toggle-mute', tabId),
+    mediaSetDocked: (tabId, docked) => ipcRenderer.send('media:set-docked', tabId, docked),
 
     // 画面分割のペイン間リサイズ(仕切りView)
     onSplitDivider: (cb) => ipcRenderer.on('split:divider', (_e, info) => cb(info)),
@@ -109,7 +112,7 @@ if (location.protocol === 'roopie:') {
     // D&D分割: タブのドラッグ中にオーバーレイへドロップゾーンを出す
     onDropZones: (cb) => ipcRenderer.on('overlay:drop-zones', (_e, info) => cb(info)),
     splitDrop: (zone) => ipcRenderer.send('split:drop', zone),
-    mediaSwitchToTab: () => ipcRenderer.send('media:switch-to-tab'),
+    mediaSwitchToTab: (tabId) => ipcRenderer.send('media:switch-to-tab', tabId),
     mediaDismiss: () => ipcRenderer.send('media:dismiss'),
     mediaDragStart: () => ipcRenderer.send('media:drag-start'),
     mediaDrag: (dx, dy) => ipcRenderer.send('media:drag', dx, dy),

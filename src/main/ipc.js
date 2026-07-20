@@ -916,20 +916,24 @@ function registerIpc() {
   });
 
   // ---- メディアプレイヤー ----
-  // 再生状態の収集はメインプロセス側(tab-manager.js の probeMedia → browser.pickMedia)。
-  // ここでは操作だけを受ける
-  ipcMain.on('media:control', (e, action, value) => {
+  // 再生状態の収集はメインプロセス側(tab-manager.js の probeMedia → browser.refreshMedia)。
+  // ここでは操作だけを受ける。複数タブが同時に再生し得るため、どのタブへの操作かをtabIdで指定する
+
+  // フローティングパネルは表示されるまでViewが作られないため(push配信だけでは表示直後に
+  // 何も描画されないまま=timerpanel.jsで見つかった不具合と同型)、表示時に明示的取得できるようにする
+  ipcMain.handle('media:list', (e) => ctxOf(e)?.mediaPlayer.visibleRows() ?? []);
+
+  ipcMain.on('media:control', (e, tabId, action, value) => {
     const ctx = ctxOf(e);
-    const media = ctx?.media;
-    if (!media) return;
-    const tab = ctx.tabManager.getTab(media.tabId);
-    if (!tab) {
-      browser.forgetMediaForTab(ctx, media.tabId);
+    const entry = ctx?.mediaFrames.get(tabId);
+    const tab = ctx?.tabManager.getTab(tabId);
+    if (!entry || !tab) {
+      if (ctx) browser.forgetMediaForTab(ctx, tabId);
       return;
     }
     // 操作は「その動画があるフレーム」に対して行う。タブのメインフレームに送ると、
     // 動画がiframeの中にあるサイト(ニュース系に多い)では要素が見つからず何も起きない
-    const frame = ctx.mediaFrame && !ctx.mediaFrame.isDestroyed?.() ? ctx.mediaFrame : null;
+    const frame = entry.frame && !entry.frame.isDestroyed?.() ? entry.frame : null;
     const run = (code) => {
       const target = frame ?? tab.view.webContents;
       target.executeJavaScript(code, true).catch(() => {});
@@ -965,16 +969,26 @@ function registerIpc() {
     }
   });
 
-  ipcMain.on('media:switch-to-tab', (e) => {
+  // タブ単位のミュート切り替え(タブのスピーカーアイコンと同じtoggleMuteを使う)
+  ipcMain.on('media:toggle-mute', (e, tabId) => {
     const ctx = ctxOf(e);
-    if (ctx?.media) ctx.tabManager.switchTab(ctx.media.tabId);
+    ctx?.tabManager.toggleMute(tabId);
+    if (ctx) browser.refreshMedia(ctx);
   });
 
-  ipcMain.on('media:dismiss', (e) => {
+  // タブ単位の「フローティング表示」上書き(既定値はmediaDocked設定)
+  ipcMain.on('media:set-docked', (e, tabId, docked) => {
     const ctx = ctxOf(e);
-    if (!ctx) return;
-    ctx.media = null;
-    browser.sendMedia(ctx);
+    if (ctx) browser.setMediaDockedForTab(ctx, tabId, docked);
+  });
+
+  ipcMain.on('media:switch-to-tab', (e, tabId) => {
+    ctxOf(e)?.tabManager.switchTab(tabId);
+  });
+
+  // フローティングパネルの「一時的に非表示」(全タブぶんまとめて。タイマーと同型)
+  ipcMain.on('media:dismiss', (e) => {
+    ctxOf(e)?.mediaPlayer.hideTemporarily();
   });
 
   ipcMain.on('media:drag-start', (e) => ctxOf(e)?.mediaPlayer.dragStart());

@@ -37,7 +37,7 @@ app.whenReady().then(async () => {
   TabManager.applyFullscreenPolicy(session.defaultSession);
   const window = new BrowserWindow({ show: true, width: 900, height: 700 });
   const history = { add: () => {}, update: () => {}, has: () => false };
-  const bookmarks = { find: () => null, toggle: () => {} };
+  const bookmarks = { find: () => null, existsAnywhere: () => false, toggle: () => {} };
   const tabManager = new TabManager(window, { history, bookmarks, session: session.defaultSession });
   tabManager.chromeHeight = 84;
 

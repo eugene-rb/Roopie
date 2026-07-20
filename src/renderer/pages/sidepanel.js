@@ -1103,96 +1103,115 @@ webEditInput.addEventListener('keydown', (e) => {
 window.roopieInternal.onEditWebPanel(({ id, field }) => openWebEditModal(id, field));
 window.roopieInternal.onAddWebPrompt(() => openWebAddModal());
 
-// ---- 再生中 ----
-let mediaState = null;
-let mediaSettings = { mediaDocked: false };
-let seekingNowPlaying = false;
+// ---- 再生中(タブごとに独立して扱う。複数タブが同時に再生していれば複数カード表示) ----
+let mediaList = [];
+let seekingTabIds = new Set(); // シークバーをドラッグ中のタブは、届いた状態で上書きしない
 
 function renderNowPlaying() {
-  nowPlayingTab.classList.toggle('hidden', !mediaState);
+  nowPlayingTab.classList.toggle('hidden', mediaList.length === 0);
   // 再生が止まったのに「再生中」を表示中なら、折りたたんで空振りを解消する
-  if (state.activeSection === 'now-playing' && !mediaState) {
+  if (state.activeSection === 'now-playing' && mediaList.length === 0) {
     window.roopieInternal.openSidePanelSection('now-playing');
   }
   // シークバーをドラッグ中に描画し直すと操作中の値が飛ぶため、いったん保留する
-  if (seekingNowPlaying) return;
+  if (seekingTabIds.size > 0) return;
 
   nowPlayingBody.textContent = '';
-  if (!mediaState) {
+  if (mediaList.length === 0) {
     nowPlayingBody.appendChild(emptyNote('再生中のメディアはありません', 'music'));
     return;
   }
 
+  for (const m of mediaList) {
+    nowPlayingBody.appendChild(createNowPlayingCard(m));
+  }
+}
+
+function createNowPlayingCard(m) {
   const card = document.createElement('div');
   card.className = 'now-playing-card';
 
+  const head = document.createElement('div');
+  head.className = 'now-playing-head';
+
   const art = document.createElement('div');
   art.className = 'now-playing-art';
-  if (mediaState.artwork) {
+  if (m.artwork) {
     const img = document.createElement('img');
-    img.src = mediaState.artwork;
+    img.src = m.artwork;
     art.appendChild(img);
   } else {
     art.innerHTML =
       '<svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
   }
-  card.appendChild(art);
+  head.appendChild(art);
 
+  const texts = document.createElement('div');
+  texts.className = 'now-playing-texts';
   const title = document.createElement('div');
   title.className = 'now-playing-title';
-  title.textContent = mediaState.title || '';
-  card.appendChild(title);
-
+  title.textContent = m.title || '';
   const artist = document.createElement('div');
   artist.className = 'now-playing-artist';
-  artist.textContent = mediaState.artist || '';
-  card.appendChild(artist);
+  artist.textContent = m.artist || '';
+  texts.appendChild(title);
+  texts.appendChild(artist);
+  head.appendChild(texts);
+
+  const muteBtn = document.createElement('button');
+  muteBtn.className = 'now-playing-mute' + (m.muted ? ' muted' : '');
+  muteBtn.title = m.muted ? 'ミュート中(クリックで解除)' : 'クリックでミュート';
+  muteBtn.innerHTML = m.muted
+    ? '<svg viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>'
+    : '<svg viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>';
+  muteBtn.addEventListener('click', () => window.roopieInternal.mediaToggleMute(m.tabId));
+  head.appendChild(muteBtn);
+
+  card.appendChild(head);
 
   const range = document.createElement('input');
   range.type = 'range';
   range.min = '0';
   range.max = '1000';
   range.className = 'now-playing-seek';
-  range.disabled = !(mediaState.duration > 0);
-  range.value = String(
-    mediaState.duration > 0 ? Math.round((mediaState.currentTime / mediaState.duration) * 1000) : 0
-  );
+  range.disabled = !(m.duration > 0);
+  range.value = String(m.duration > 0 ? Math.round((m.currentTime / m.duration) * 1000) : 0);
   range.addEventListener('mousedown', () => {
-    seekingNowPlaying = true;
+    seekingTabIds.add(m.tabId);
   });
   range.addEventListener('change', () => {
-    if (mediaState.duration > 0) {
-      window.roopieInternal.mediaSeek((Number(range.value) / 1000) * mediaState.duration);
+    if (m.duration > 0) {
+      window.roopieInternal.mediaSeek(m.tabId, (Number(range.value) / 1000) * m.duration);
     }
-    seekingNowPlaying = false;
+    seekingTabIds.delete(m.tabId);
   });
   card.appendChild(range);
 
   const controls = document.createElement('div');
   controls.className = 'now-playing-controls';
-  if (mediaState.canPrev) {
-    controls.appendChild(button('前へ', () => window.roopieInternal.mediaPrev()));
+  if (m.canPrev) {
+    controls.appendChild(button('前へ', () => window.roopieInternal.mediaPrev(m.tabId)));
   }
-  controls.appendChild(button(mediaState.playing ? '一時停止' : '再生', () => window.roopieInternal.mediaToggle()));
-  if (mediaState.canNext) {
-    controls.appendChild(button('次へ', () => window.roopieInternal.mediaNext()));
+  controls.appendChild(button(m.playing ? '一時停止' : '再生', () => window.roopieInternal.mediaToggle(m.tabId)));
+  if (m.canNext) {
+    controls.appendChild(button('次へ', () => window.roopieInternal.mediaNext(m.tabId)));
   }
-  if (mediaState.hasVideo) {
-    controls.appendChild(button('PinP', () => window.roopieInternal.mediaPip()));
+  if (m.hasVideo) {
+    controls.appendChild(button('PinP', () => window.roopieInternal.mediaPip(m.tabId)));
   }
-  controls.appendChild(button('タブを表示', () => window.roopieInternal.mediaSwitchToTab()));
+  controls.appendChild(button('タブを表示', () => window.roopieInternal.mediaSwitchToTab(m.tabId)));
   card.appendChild(controls);
 
   card.appendChild(
     createToggleRow(
       'フローティング表示',
-      'オフにすると、このパネルだけで操作します',
-      !mediaSettings.mediaDocked,
-      (checked) => window.roopieInternal.setSetting('mediaDocked', !checked)
+      'オフにすると、このタブはパネルだけで操作します',
+      !m.docked,
+      (checked) => window.roopieInternal.mediaSetDocked(m.tabId, !checked)
     )
   );
 
-  nowPlayingBody.appendChild(card);
+  return card;
 }
 
 // 簡易ボタン(内部ページ共通の.btnスタイルを流用)
@@ -1233,14 +1252,12 @@ function createToggleRow(name, desc, checked, onChange) {
 }
 
 window.roopieInternal.onMediaState((next) => {
-  mediaState = next;
+  mediaList = next || [];
   renderNowPlaying();
 });
 
 window.roopieInternal.onSettings((settings) => {
-  mediaSettings.mediaDocked = settings.mediaDocked === true;
   applySidePanelSide(settings.sidePanelPosition);
-  if (mediaState) renderNowPlaying();
 });
 
 // ---- トラッキング分析 ----
@@ -1508,7 +1525,6 @@ window.roopieInternal.onSidePanelState((next) => {
     window.roopieInternal.getSettings(),
   ]);
   if (next) state = next;
-  mediaSettings.mediaDocked = settings.mediaDocked === true;
   applySidePanelSide(settings.sidePanelPosition);
   render();
   refreshBookmarks();

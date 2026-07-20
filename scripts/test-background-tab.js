@@ -44,8 +44,8 @@ app.whenReady().then(async () => {
   const TabManager = require('../src/main/tab-manager');
   const window = new BrowserWindow({ show: true, width: 900, height: 700 });
   // TabManagerは履歴・ブックマークを直接触るので最小限のスタブを渡す
-  const history = { add: () => {}, update: () => {} };
-  const bookmarks = { find: () => null, toggle: () => {} };
+  const history = { add: () => {}, update: () => {}, has: () => false };
+  const bookmarks = { find: () => null, existsAnywhere: () => false, toggle: () => {} };
   const tabManager = new TabManager(window, { history, bookmarks, session: session.defaultSession });
 
   const first = tabManager.createTab(`http://localhost:${PORT}/`);

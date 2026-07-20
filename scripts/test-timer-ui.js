@@ -116,8 +116,11 @@ app.whenReady().then(async () => {
     await sleep(300);
     ctx.tabManager.switchTab(ctx.tabManager.tabs[0].id); // アクティブタブ以外を再生中にする(再生中タブがアクティブだとメディア側が非表示のため)
     ctx.mediaPlayer.corner = ctx.timerPanel.corner; // 意図的に同じ隅へそろえる
-    ctx.media = { title: '曲', artist: '', playing: true, duration: 100, currentTime: 0, tabId: otherTab.id };
-    browser.sendMedia(ctx);
+    ctx.tabManager.onMediaReport(
+      otherTab.id,
+      { title: '曲', artist: '', playing: true, duration: 100, currentTime: 0, canPrev: false, canNext: false, hasVideo: false },
+      { isDestroyed: () => false }
+    );
     await sleep(300);
     check('メディアプレイヤーも表示される', ctx.mediaPlayer.view?.getVisible(), true);
     const mpBounds = ctx.mediaPlayer.view.getBounds();

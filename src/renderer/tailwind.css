@@ -3202,20 +3202,34 @@ select.row-btn {
   cursor: grabbing;
 }
 
-#player-main {
+/* 複数タブが同時に再生していれば、それぞれ独立した行として並べる(timer-panel.jsと同型) */
+#player-rows {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.player-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 10px 6px;
+  padding: 8px 10px;
   min-width: 0;
+  cursor: pointer;
 }
 
-#player-art {
+.player-row:hover {
+  background: var(--card-hover);
+}
+
+.player-row-art {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   flex-shrink: 0;
   border-radius: 8px;
   overflow: hidden;
@@ -3223,9 +3237,9 @@ select.row-btn {
   color: var(--text-dim);
 }
 
-#player-art svg {
-  width: 18px;
-  height: 18px;
+.player-row-art svg {
+  width: 16px;
+  height: 16px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.6;
@@ -3233,18 +3247,18 @@ select.row-btn {
   stroke-linejoin: round;
 }
 
-#player-art img {
+.player-row-art img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-#player-info {
+.player-row-info {
   flex: 1;
   min-width: 0;
 }
 
-#player-title {
+.player-row-title {
   font-size: 12.5px;
   font-weight: 600;
   white-space: nowrap;
@@ -3252,7 +3266,7 @@ select.row-btn {
   text-overflow: ellipsis;
 }
 
-#player-artist {
+.player-row-artist {
   margin-top: 2px;
   font-size: 11px;
   color: var(--text-dim);
@@ -3354,37 +3368,6 @@ select.row-btn {
   background: var(--accent);
 }
 
-#player-actions {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
-/* 前へ/次へ: アクセント円ではなく控えめなゴーストボタン(中央の再生ボタンを目立たせる) */
-.pbtn-min {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border: none;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--text-dim);
-  cursor: pointer;
-}
-
-.pbtn-min:hover {
-  color: var(--text);
-  background: var(--hover);
-}
-
-.pbtn-min svg {
-  width: 14px;
-  height: 14px;
-}
-
 .pbtn {
   display: flex;
   align-items: center;
@@ -3401,18 +3384,6 @@ select.row-btn {
 .pbtn svg {
   width: 15px;
   height: 15px;
-}
-
-#player-seek {
-  padding: 0 10px;
-}
-
-#player-range {
-  width: 100%;
-  height: 14px;
-  margin: 0;
-  accent-color: var(--accent);
-  cursor: pointer;
 }
 
 #player-tools {
@@ -3563,21 +3534,35 @@ select.row-btn {
   color: var(--text-dim);
 }
 
+/* 複数タブが同時に再生していれば、タブごとに独立したカードを並べる */
+#now-playing-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .now-playing-card {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px;
+  gap: 10px;
+  padding: 14px;
   border-radius: 12px;
   background: var(--card);
+}
+
+.now-playing-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .now-playing-art {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
-  aspect-ratio: 1;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
   border-radius: 10px;
   overflow: hidden;
   background: var(--card-hover);
@@ -3585,8 +3570,8 @@ select.row-btn {
 }
 
 .now-playing-art svg {
-  width: 40px;
-  height: 40px;
+  width: 20px;
+  height: 20px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.4;
@@ -3600,17 +3585,60 @@ select.row-btn {
   object-fit: cover;
 }
 
+.now-playing-texts {
+  flex: 1;
+  min-width: 0;
+}
+
 .now-playing-title {
   font-size: 13px;
   font-weight: 600;
-  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .now-playing-artist {
   margin-top: 2px;
   font-size: 11px;
   color: var(--text-dim);
-  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* タブ単位のミュート切り替え(タブのスピーカーアイコンと同じ意匠) */
+.now-playing-mute {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.now-playing-mute svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.now-playing-mute:hover {
+  background: var(--card-hover);
+  color: var(--text);
+}
+
+.now-playing-mute.muted {
+  color: var(--accent);
 }
 
 .now-playing-controls {
