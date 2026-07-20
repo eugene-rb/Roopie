@@ -110,9 +110,16 @@ class TimerPanel {
 
     const rows = Math.max(1, visibleTimers.length);
     const height = Math.min(MAX_HEIGHT, TOOLS_HEIGHT + rows * ROW_HEIGHT);
-    const bounds = this.boundsFor(this.corner, area, panelInset, height);
+    const bounds = this.boundsFor(this.corner, area, panelInset, height, this.mediaPlayerOffset());
     this.view.setBounds(bounds);
     this.view.setBorderRadius(Math.min(radius || MAX_RADIUS, MAX_RADIUS));
+  }
+
+  // メディアプレイヤーが同じ隅に表示中なら、その高さぶんだけ縦にずらして重なりを避ける
+  mediaPlayerOffset() {
+    const mp = this.tabManager.mediaPlayer;
+    if (!mp?.view || mp.corner !== this.corner || !mp.view.getVisible()) return 0;
+    return mp.view.getBounds().height + MARGIN;
   }
 
   dragStart() {
@@ -120,13 +127,15 @@ class TimerPanel {
     this.dragOrigin = this.view.getBounds();
   }
 
-  boundsFor(corner, area, panelInset, height) {
+  boundsFor(corner, area, panelInset, height, stackOffset = 0) {
     const rightInset = corner.includes('right') ? panelInset.right || 0 : 0;
     const leftInset = !corner.includes('right') ? panelInset.left || 0 : 0;
     const x = corner.includes('right')
       ? area.x + area.width - WIDTH - MARGIN - rightInset
       : area.x + MARGIN + leftInset;
-    const y = corner.includes('bottom') ? area.y + area.height - height - MARGIN : area.y + MARGIN;
+    const y = corner.includes('bottom')
+      ? area.y + area.height - height - MARGIN - stackOffset
+      : area.y + MARGIN + stackOffset;
     return { x: Math.round(x), y: Math.round(y), width: WIDTH, height: Math.round(height) };
   }
 
