@@ -13,6 +13,7 @@ const {
   showToolbarMenu,
   showWebPanelMenu,
   showTimerMenu,
+  showBookmarkBarMenu,
 } = require('./toolbar-context-menu');
 const { searchUrl } = require('./search-engines');
 const { normalizeToolbarItems } = require('./toolbar-items');
@@ -423,6 +424,7 @@ function registerIpc() {
 
   // ツールバーのユーティリティ群を右クリック → 表示/非表示の切り替えメニュー
   ipcMain.on('toolbar:context-menu', (e) => showToolbarMenu(ctxOf(e)));
+  ipcMain.on('bookmark-bar:context-menu', (e) => showBookmarkBarMenu(ctxOf(e)));
   ipcMain.handle('sidepanel:state', (e) => panelOf(e)?.state() ?? null);
   ipcMain.on('sidepanel:add-web', (e, url) => panelOf(e)?.addWeb(url));
   ipcMain.on('sidepanel:remove-web', (e, id) => panelOf(e)?.removeWeb(id));

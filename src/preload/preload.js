@@ -453,6 +453,7 @@ contextBridge.exposeInMainWorld('roopie', {
   toggleSidePanel: () => ipcRenderer.send('sidepanel:toggle'),
   sidePanelContextMenu: () => ipcRenderer.send('sidepanel:context-menu'),
   toolbarContextMenu: () => ipcRenderer.send('toolbar:context-menu'),
+  bookmarkBarContextMenu: () => ipcRenderer.send('bookmark-bar:context-menu'),
 
   // ページ内検索
   find: (text, options) => ipcRenderer.send('find:start', text, options),

@@ -135,10 +135,34 @@ function showToolbarMenu(ctx) {
   menu.popup();
 }
 
+/**
+ * ブックマークバーを右クリックしたときのメニュー。表示/非表示の切り替えのみ
+ * (Ctrl+Shift+Bと同じ設定を操作する)。
+ */
+function showBookmarkBarMenu(ctx) {
+  const bundle = bundleOf(ctx);
+  if (!bundle) return;
+  const menu = new Menu();
+  menu.append(
+    new MenuItem({
+      label: 'ブックマークバーを表示',
+      type: 'checkbox',
+      checked: bundle.settings.data.showBookmarkBar !== false,
+      click: () => {
+        bundle.settings.data.showBookmarkBar = !bundle.settings.data.showBookmarkBar;
+        bundle.settings.save();
+        browser.sendSettingsFor(bundle.profileId);
+      },
+    })
+  );
+  menu.popup();
+}
+
 module.exports = {
   showSidePanelPositionMenu,
   showSidePanelRailMenu,
   showToolbarMenu,
   showWebPanelMenu,
   showTimerMenu,
+  showBookmarkBarMenu,
 };

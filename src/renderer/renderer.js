@@ -554,6 +554,12 @@ $('toolbar-utility').addEventListener('contextmenu', (e) => {
   window.roopie.toolbarContextMenu();
 });
 
+// ブックマークバーを右クリック → 表示/非表示の切り替えメニュー(ネイティブ)
+bookmarkBarEl.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  window.roopie.bookmarkBarContextMenu();
+});
+
 $('tab-bar-position-btn').addEventListener('click', () => {
   window.roopie.setSetting('tabBarPosition', tabBarPosition === 'left' ? 'top' : 'left');
 });
