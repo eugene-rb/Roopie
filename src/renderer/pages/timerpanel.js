@@ -27,6 +27,9 @@ function defaultName(t) {
   return t.type === 'clock' ? '時刻指定タイマー' : t.type === 'stopwatch' ? 'ストップウォッチ' : 'カウントダウン';
 }
 
+const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>';
+const ICON_STOP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+
 function render() {
   rowsEl.textContent = '';
   const elapsed = Date.now() - receivedAt;
@@ -36,41 +39,42 @@ function render() {
     const row = document.createElement('div');
     row.className = 'timerp-row' + (t.ringing ? ' ringing' : '');
 
-    const icon = document.createElement('span');
-    icon.className = 'timerp-icon';
-    icon.textContent = t.type === 'clock' ? '⏰' : t.type === 'stopwatch' ? '⏱' : '⏲';
-    row.appendChild(icon);
-
-    const info = document.createElement('div');
-    info.className = 'timerp-info';
-    const name = document.createElement('div');
-    name.className = 'timerp-name';
-    name.textContent = t.name || defaultName(t);
-    const time = document.createElement('div');
-    time.className = 'timerp-time';
-    time.textContent = t.ringing ? '時間になりました' : rowTime(t, elapsed);
-    info.appendChild(name);
-    info.appendChild(time);
-    row.appendChild(info);
-
     const btn = document.createElement('button');
-    btn.className = 'timerp-action';
+    btn.className = 'timerp-circle' + (t.ringing ? ' ringing' : '');
+    btn.innerHTML = t.ringing ? ICON_STOP : ICON_PAUSE;
     if (t.ringing) {
-      const remain = t.graceEndsAt ? Math.max(0, Math.ceil((t.graceEndsAt - Date.now()) / 1000)) : null;
-      btn.textContent = remain != null ? `止める(${remain}s)` : '止める';
+      btn.title = '止める';
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         if (t.fireId) window.roopieInternal.cancelTimerFire(t.fireId);
         else window.roopieInternal.acknowledgeTimer(t.id);
       });
     } else {
-      btn.textContent = '一時停止';
+      btn.title = '一時停止';
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         window.roopieInternal.pauseTimer(t.id);
       });
     }
     row.appendChild(btn);
+
+    const info = document.createElement('div');
+    info.className = 'timerp-info';
+    const name = document.createElement('div');
+    name.className = 'timerp-name';
+    name.textContent = t.name || defaultName(t);
+    info.appendChild(name);
+    row.appendChild(info);
+
+    const time = document.createElement('div');
+    time.className = 'timerp-time';
+    if (t.ringing) {
+      const remain = t.graceEndsAt ? Math.max(0, Math.ceil((t.graceEndsAt - Date.now()) / 1000)) : null;
+      time.textContent = remain != null ? `あと${remain}秒` : '時間です';
+    } else {
+      time.textContent = rowTime(t, elapsed);
+    }
+    row.appendChild(time);
 
     // 行クリック(ボタン以外)でサイドパネルのタイマーセクションを開く
     row.addEventListener('click', (e) => {
@@ -109,6 +113,13 @@ function updateBeep(shouldBeep) {
 }
 
 window.roopieInternal.onTimerState((items) => {
+  timers = items;
+  receivedAt = Date.now();
+  render();
+});
+// このViewは表示されるまで作られないため、直後に状態変化が無いと何も描画されないまま
+// になっていた(pushのみでpull無し)。表示された時点の状態を明示的に取得しておく
+window.roopieInternal.listTimers().then((items) => {
   timers = items;
   receivedAt = Date.now();
   render();

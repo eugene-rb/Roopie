@@ -603,39 +603,52 @@ function formatClockTime(t) {
   return `${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}`;
 }
 
-function defaultTimerName(t) {
-  return t.type === 'countdown' ? 'カウントダウン' : t.type === 'clock' ? '時刻指定タイマー' : 'ストップウォッチ';
+// iOSの時計アプリ「タイマー」タブ風: 大きい数字+小さい説明+丸い再生/一時停止ボタンのみ。
+// リセットは行が煩雑になるため右クリックメニューへ移した(showTimerMenuに追加)
+function formatDurationNice(ms) {
+  const total = Math.max(0, Math.round((ms ?? 0) / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  if (h > 0) return m > 0 ? `${h}時間${m}分` : `${h}時間`;
+  if (m > 0) return s > 0 ? `${m}分${s}秒` : `${m}分`;
+  return `${s}秒`;
 }
 
-function timerSubText(t, elapsed) {
-  if (t.ringing) return '時間になりました';
+function timerBigTime(t, elapsed) {
+  if (t.ringing) return '00:00';
   if (t.type === 'stopwatch') {
     return formatDuration(t.status === 'running' ? t.elapsedMs + elapsed : t.elapsedMs);
   }
   if (t.type === 'countdown') {
-    if (t.status !== 'running' && t.status !== 'paused') return `${formatDuration(t.durationMs)} に設定`;
+    if (t.status !== 'running' && t.status !== 'paused') return formatDuration(t.durationMs);
     const ms = t.status === 'running' ? t.remainingMs - elapsed : t.remainingMs;
-    return `残り ${formatDuration(ms)}`;
+    return formatDuration(Math.max(0, ms));
   }
-  // clock
-  const timeText = formatClockTime(t.clockTime);
-  const repeatText = t.repeat?.enabled ? t.repeat.weekdays.map((on, i) => (on ? WEEKDAY_LABELS[i] : '')).join('') : '';
-  const label = repeatText ? `${timeText}(${repeatText})` : timeText;
+  // clock: 開始済みなら残り時間、そうでなければ指定時刻そのものを大きく出す
   if (t.status === 'running' && t.remainingMs != null) {
-    return `${label} まで残り ${formatDuration(Math.max(0, t.remainingMs - elapsed))}`;
+    return formatDuration(Math.max(0, t.remainingMs - elapsed));
   }
-  return label;
+  return formatClockTime(t.clockTime);
 }
 
-function timerItemBtn(label, onClick) {
-  const btn = document.createElement('button');
-  btn.className = 'item-btn';
-  btn.textContent = label;
-  btn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    onClick();
-  });
-  return btn;
+function timerSmallSub(t) {
+  if (t.ringing) {
+    const remainMs = t.graceEndsAt ? Math.max(0, t.graceEndsAt - Date.now()) : null;
+    return remainMs != null ? `あと${Math.ceil(remainMs / 1000)}秒で自動実行` : '時間になりました';
+  }
+  if (t.name) return t.name; // 名前を付けていればそれを優先(iOSの元の長さ表示の代わり)
+  if (t.type === 'countdown') return formatDurationNice(t.durationMs);
+  if (t.type === 'stopwatch') return 'ストップウォッチ';
+  // clock
+  const repeatText = t.repeat?.enabled ? t.repeat.weekdays.map((on, i) => (on ? WEEKDAY_LABELS[i] : '')).join('') : '';
+  return repeatText ? `毎週${repeatText}` : '時刻指定';
+}
+
+function timerCircleIcon(kind) {
+  if (kind === 'play') return '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5l12 7-12 7z"/></svg>';
+  if (kind === 'pause') return '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>';
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
 }
 
 function renderTimers() {
@@ -651,47 +664,35 @@ function renderTimers() {
 
     const main = document.createElement('div');
     main.className = 'timer-item-main';
-    const icon = document.createElement('span');
-    icon.className = 'letter emoji';
-    icon.textContent = t.type === 'clock' ? '⏰' : t.type === 'stopwatch' ? '⏱' : '⏲';
-    main.appendChild(icon);
-
-    const label = document.createElement('span');
-    label.className = 'label';
-    label.textContent = t.name || defaultTimerName(t);
-    const sub = document.createElement('span');
-    sub.className = 'sub';
-    sub.textContent = timerSubText(t, elapsed);
-    label.appendChild(sub);
-    main.appendChild(label);
+    const time = document.createElement('div');
+    time.className = 'timer-item-time';
+    time.textContent = timerBigTime(t, elapsed);
+    const sub = document.createElement('div');
+    sub.className = 'timer-item-sub';
+    sub.textContent = timerSmallSub(t);
+    main.appendChild(time);
+    main.appendChild(sub);
     main.addEventListener('click', () => openTimerModal(t.id));
     item.appendChild(main);
 
-    const controls = document.createElement('div');
-    controls.className = 'timer-item-controls';
-
-    if (t.ringing) {
-      const remainMs = t.graceEndsAt ? Math.max(0, t.graceEndsAt - Date.now()) : null;
-      const stopLabel = remainMs != null ? `止める(${Math.ceil(remainMs / 1000)}s)` : '止める';
-      controls.appendChild(
-        timerItemBtn(stopLabel, () => {
-          if (t.fireId) window.roopieInternal.cancelTimerFire(t.fireId);
-          else window.roopieInternal.acknowledgeTimer(t.id);
-        })
-      );
-    } else {
-      if (t.status === 'running') {
-        controls.appendChild(timerItemBtn('一時停止', () => window.roopieInternal.pauseTimer(t.id)));
+    const circleKind = t.ringing ? 'stop' : t.status === 'running' ? 'pause' : 'play';
+    const circleBtn = document.createElement('button');
+    circleBtn.className = 'timer-circle-btn ' + (t.ringing ? 'ringing' : t.status === 'running' ? 'running' : 'idle');
+    circleBtn.title = t.ringing ? '止める' : t.status === 'running' ? '一時停止' : '開始';
+    circleBtn.innerHTML = timerCircleIcon(circleKind);
+    circleBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (t.ringing) {
+        if (t.fireId) window.roopieInternal.cancelTimerFire(t.fireId);
+        else window.roopieInternal.acknowledgeTimer(t.id);
+      } else if (t.status === 'running') {
+        window.roopieInternal.pauseTimer(t.id);
       } else {
-        controls.appendChild(timerItemBtn('開始', () => window.roopieInternal.startTimer(t.id)));
+        window.roopieInternal.startTimer(t.id);
       }
-      if (t.status !== 'idle') {
-        controls.appendChild(timerItemBtn('リセット', () => window.roopieInternal.resetTimer(t.id)));
-      }
-    }
-    controls.appendChild(timerItemBtn('削除', () => window.roopieInternal.removeTimer(t.id)));
+    });
+    item.appendChild(circleBtn);
 
-    item.appendChild(controls);
     item.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       window.roopieInternal.timerContextMenu(t.id);

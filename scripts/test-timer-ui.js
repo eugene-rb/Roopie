@@ -93,6 +93,12 @@ app.whenReady().then(async () => {
     ctx.sidePanel.setOpen(false);
     await sleep(600);
     check('パネルを閉じるとフローティングタイマーが表示される', ctx.timerPanel.view?.getVisible(), true);
+    const runningRow = await js(
+      ctx.timerPanel.view.webContents,
+      `document.querySelector('.timerp-row') ? true : false`
+    );
+    check('フローティング側に実行中タイマーが描画される(初期表示のpull取得)', runningRow, true);
+    await shot(ctx.timerPanel.view.webContents, 'timerp-running.png');
 
     // 発火(未来時刻を注入)→フローティング側もringing表示になる
     bundle.timers.tick(Date.now() + 10_000);
@@ -103,6 +109,7 @@ app.whenReady().then(async () => {
       `document.querySelector('.timerp-row.ringing') ? true : false`
     );
     check('フローティング側もringing表示になる', ringingRow, true);
+    await shot(ctx.timerPanel.view.webContents, 'timerp-ringing.png');
 
     // ---- メディアプレイヤーと同じ隅でも重ならない(タイマー側がメディアの高さぶん避ける) ----
     const otherTab = ctx.tabManager.createTab();

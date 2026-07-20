@@ -2954,38 +2954,89 @@ select.row-btn {
   margin-bottom: 8px;
 }
 
+/* iOSの時計アプリ「タイマー」タブ風: 大きい数字+小さい説明+丸い再生/一時停止ボタン */
 .timer-item {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 4px;
+  gap: 10px;
+  padding: 9px 8px;
   cursor: default;
 }
 
 .timer-item-main {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 1px;
   min-width: 0;
-}
-
-.timer-item .label {
+  flex: 1;
   cursor: pointer;
 }
 
+.timer-item-time {
+  font-size: 25px;
+  font-weight: 600;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.timer-item-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .timer-item.ringing {
-  outline: 1px solid var(--accent);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  outline: 1px solid #ff3b30;
+  background: color-mix(in srgb, #ff3b30 14%, transparent);
 }
 
-.timer-item-controls {
+.timer-item.ringing .timer-item-time {
+  color: #ff3b30;
+}
+
+.timer-circle-btn {
   display: flex;
-  gap: 4px;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
   flex-shrink: 0;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  background: transparent;
 }
 
-.timer-item .item-btn {
-  visibility: visible; /* 一覧の他パネルと違い常時表示(誤操作より発見しやすさを優先) */
-  border: 1px solid var(--border);
+.timer-circle-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.timer-circle-btn.idle {
+  background: #30d158;
+  color: #06210f;
+}
+
+.timer-circle-btn.idle svg {
+  margin-left: 1px; /* 再生アイコンの視覚的な中心補正 */
+}
+
+.timer-circle-btn.running {
+  background: #ff9f0a;
+  color: #2b1400;
+}
+
+.timer-circle-btn.ringing {
+  background: #ff3b30;
+  color: #2b0705;
+}
+
+.timer-circle-btn:hover {
+  filter: brightness(1.08);
 }
 
 .modal.timer-modal {
@@ -3413,9 +3464,7 @@ select.row-btn {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--menu-bg);
-  border: 1px solid var(--border);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+  background: transparent;
   cursor: grab;
 }
 
@@ -3427,24 +3476,49 @@ select.row-btn {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   padding: 6px 6px 0;
 }
 
+/* iOSのロック画面ライブアクティビティ(タイマー)風の黒い丸ピル */
 .timerp-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 6px;
-  border-radius: 8px;
+  padding: 5px 12px 5px 5px;
+  border-radius: 999px;
+  background: #1c1c1e;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
 }
 
 .timerp-row.ringing {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  background: color-mix(in srgb, #ff3b30 32%, #1c1c1e);
 }
 
-.timerp-icon {
+.timerp-circle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
   flex-shrink: 0;
-  font-size: 16px;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  background: #ff9f0a;
+  color: #2b1400;
+}
+
+.timerp-circle svg {
+  width: 13px;
+  height: 13px;
+}
+
+.timerp-circle.ringing {
+  background: #ff3b30;
+  color: #2b0705;
 }
 
 .timerp-info {
@@ -3454,38 +3528,23 @@ select.row-btn {
 
 .timerp-name {
   font-size: 12px;
-  font-weight: 600;
+  color: rgba(255, 255, 255, 0.75);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .timerp-time {
-  margin-top: 1px;
-  font-size: 11px;
-  color: var(--text-dim);
+  flex-shrink: 0;
+  font-size: 17px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #ff9f0a;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .timerp-row.ringing .timerp-time {
-  color: var(--accent);
-}
-
-.timerp-action {
-  flex-shrink: 0;
-  padding: 4px 8px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.timerp-action:hover {
-  background: var(--card-hover);
+  color: #ff3b30;
 }
 
 #timerp-tools {

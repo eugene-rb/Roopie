@@ -89,6 +89,9 @@ function showTimerMenu(bundle, id) {
   const timer = bundle?.timers.list().find((t) => t.id === id);
   if (!timer) return;
   const menu = new Menu();
+  if (timer.status !== 'idle') {
+    menu.append(new MenuItem({ label: 'リセット', click: () => bundle.timers.reset(id) }));
+  }
   menu.append(
     new MenuItem({
       label: '複製',
