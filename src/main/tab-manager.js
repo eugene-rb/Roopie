@@ -343,8 +343,9 @@ class TabManager {
       this.onMediaReport?.(tab.id, null, null);
       tab.isAudible = false;
       // ブックマークの案内は「また来たのにまだ入れていないページ」にだけ出す。
-      // 履歴へ足す前に判定する(足した後だと必ず1件見つかってしまう)
-      this.setBookmarkHint(tab, !tab.isInternal && this.history.has(url) && !this.bookmarks.find(url));
+      // 履歴へ足す前に判定する(足した後だと必ず1件見つかってしまう)。
+      // フォルダの中(スタート画面のショートカット等)にあるページでも出さない
+      this.setBookmarkHint(tab, !tab.isInternal && this.history.has(url) && !this.bookmarks.existsAnywhere(url));
       if (!tab.isInternal) this.history.add(url, wc.getTitle());
       this.sendState();
 
@@ -1050,6 +1051,8 @@ class TabManager {
         const wc = t.view.webContents;
         const url = wc.getURL();
         const isBookmarked = !t.isInternal && !!this.bookmarks.find(url);
+        // 案内の抑制はフォルダの中(スタート画面のショートカット等)も含めて判定する
+        const savedAnywhere = isBookmarked || (!t.isInternal && this.bookmarks.existsAnywhere(url));
         return {
           id: t.id,
           title: wc.getTitle() || '新しいタブ',
@@ -1062,7 +1065,7 @@ class TabManager {
           canGoForward: wc.navigationHistory.canGoForward(),
           isBookmarked,
           // ブックマークすれば当然消える(did-navigateを待たずにここで打ち消す)
-          bookmarkHint: !!t.bookmarkHint && !isBookmarked,
+          bookmarkHint: !!t.bookmarkHint && !savedAnywhere,
           zoomLevel: wc.getZoomLevel(),
           isAudible: !!t.isAudible,
           isMuted: wc.isAudioMuted(),

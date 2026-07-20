@@ -27,10 +27,17 @@ app.whenReady().then(async () => {
   const History = require('../src/main/history');
   const window = new BrowserWindow({ show: true, width: 900, height: 700 });
 
-  // 履歴は本物(store.data が履歴の配列)。ブックマークは登録済みかどうかだけのスタブ
+  // 履歴は本物(store.data が履歴の配列)。ブックマークは登録済みかどうかだけのスタブ。
+  // bookmarked=トップレベル(星ボタン相当)、savedElsewhere=フォルダの中(スタート画面の
+  // ショートカット等)。existsAnywhereは実クラス同様、両方を見る
   const history = new History({ data: [], save: () => {} });
   let bookmarked = new Set();
-  const bookmarks = { find: (url) => (bookmarked.has(url) ? { url } : null), toggle: () => {} };
+  let savedElsewhere = new Set();
+  const bookmarks = {
+    find: (url) => (bookmarked.has(url) ? { url } : null),
+    existsAnywhere: (url) => bookmarked.has(url) || savedElsewhere.has(url),
+    toggle: () => {},
+  };
   const tabManager = new TabManager(window, { history, bookmarks, session: session.defaultSession });
 
   const tab = tabManager.createTab(`http://localhost:${PORT}/a`);
@@ -75,6 +82,15 @@ app.whenReady().then(async () => {
   bookmarked.add(`http://localhost:${PORT}/b`);
   await navigate(`http://localhost:${PORT}/b`);
   check('ブックマーク済みのページでは出さない', tab.bookmarkHint, false);
+
+  // フォルダの中(スタート画面のショートカット等のサブディレクトリ含む)に
+  // 保存済みのページでも出さない(トップレベルのfindには乗らないケース)
+  savedElsewhere.add(`http://localhost:${PORT}/c`);
+  await navigate(`http://localhost:${PORT}/c`);
+  check('フォルダ内保存ページの初回訪問でも出さない', tab.bookmarkHint, false);
+  await navigate(`http://localhost:${PORT}/a`);
+  await navigate(`http://localhost:${PORT}/c`);
+  check('フォルダ内(スタート画面のショートカット等)に保存済みのページは再訪問でも案内を出さない', tab.bookmarkHint, false);
 
   // 内部ページ(新しいタブなど)でも出さない
   const internalTab = tabManager.createTab();

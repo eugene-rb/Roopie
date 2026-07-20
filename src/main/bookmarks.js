@@ -55,6 +55,12 @@ class Bookmarks {
     return this.list().find((b) => b.url === url) || null;
   }
 
+  // フォルダ階層を問わず(スタート画面のショートカット等のサブフォルダも含め)どこかに
+  // 同じURLがあるか。Ctrl+D案内の抑制など「もう保存済みか」の判定にだけ使う
+  existsAnywhere(url) {
+    return this.items.some((b) => b.type !== 'folder' && b.url === url);
+  }
+
   add(url, title, favicon) {
     if (!url || this.find(url)) return;
     const item = {
