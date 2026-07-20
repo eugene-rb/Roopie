@@ -597,14 +597,27 @@ browser.setThemeFor = (profileId, patch) => {
 // ---- Googleアカウントの自動検出 ----
 
 // プロファイルID -> 直近に自動検出チェックした時刻(google.comへのナビゲーションの連打で
-// 何度もListAccountsを叩かないようにする)
+// 何度もDOMを読みに行かないようにする)
 const googleCheckedAt = new Map();
+
+// そのプロファイルの各ウィンドウの中から、今Googleドメインを開いているタブのwebContentsを探す
+// (ListAccounts APIはページの文脈が無いと弾かれるため、実際に開いているページのDOMを見に行く)
+browser.findGoogleTabWebContents = (profileId) => {
+  for (const ctx of windows.all()) {
+    if (ctx.profileId !== profileId) continue;
+    for (const tab of ctx.tabManager.tabs) {
+      const wc = tab.view.webContents;
+      if (!wc.isDestroyed() && GoogleAccounts.isGoogleDomain(wc.getURL())) return wc;
+    }
+  }
+  return null;
+};
 
 // ログイン中なのに未登録のアカウントを見つけたら自動登録し、そのプロファイルで有効化する
 browser.autoRegisterGoogleAccounts = async (profile) => {
-  if (!browser.googleAccounts) return;
-  const session = browser.profiles.sessionFor(profile);
-  const detected = await GoogleAccounts.fetchSignedIn(session);
+  if (!browser.googleAccounts) return [];
+  const wc = browser.findGoogleTabWebContents(profile.id);
+  const detected = wc ? await GoogleAccounts.detectFromWebContents(wc) : [];
   let changed = false;
 
   for (const { email, name } of detected) {
@@ -623,6 +636,7 @@ browser.autoRegisterGoogleAccounts = async (profile) => {
     }
   }
   if (changed) browser.sendProfiles();
+  return detected;
 };
 
 // 起動時にも一度だけ見に行く。Googleのページを開かない人でも、既にログインしていれば

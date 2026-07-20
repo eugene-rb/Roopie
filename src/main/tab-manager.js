@@ -2,6 +2,7 @@ const { WebContentsView } = require('electron');
 const path = require('path');
 const { attachContextMenu } = require('./context-menu');
 const { searchUrl, DEFAULT_ENGINE } = require('./search-engines');
+const { isGoogleDomain } = require('./google-accounts');
 
 const NEW_TAB_URL = 'roopie://newtab';
 const INTERNAL_SCHEME = 'roopie:';
@@ -153,25 +154,6 @@ function applyFullscreenPolicy(session) {
     }
     callback(true);
   });
-}
-
-// Googleのログイン状態が共有されるドメイン。ここを訪れたらログイン中アカウントを見に行く
-const GOOGLE_DOMAINS = [
-  'google.com',
-  'google.co.jp',
-  'youtube.com',
-  'gmail.com',
-  'googlemail.com',
-  'googleusercontent.com',
-];
-
-function isGoogleDomain(url) {
-  try {
-    const host = new URL(url).hostname.toLowerCase();
-    return GOOGLE_DOMAINS.some((domain) => host === domain || host.endsWith(`.${domain}`));
-  } catch {
-    return false; // 不正なURLは無視
-  }
 }
 
 let nextTabId = 1;

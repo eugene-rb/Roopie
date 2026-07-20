@@ -1,8 +1,23 @@
 const crypto = require('crypto');
 
-// Chromiumが使うのと同じエンドポイント。セッションのCookieからログイン中のアカウントを取得する
-const LIST_ACCOUNTS_URL =
-  'https://accounts.google.com/ListAccounts?gpsia=1&source=ChromiumBrowser&json=standard';
+// Googleのログイン状態が共有されるドメイン。ここを訪れたらログイン中アカウントを見に行く
+const GOOGLE_DOMAINS = [
+  'google.com',
+  'google.co.jp',
+  'youtube.com',
+  'gmail.com',
+  'googlemail.com',
+  'googleusercontent.com',
+];
+
+function isGoogleDomain(url) {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return GOOGLE_DOMAINS.some((domain) => host === domain || host.endsWith(`.${domain}`));
+  } catch {
+    return false; // 不正なURLは無視
+  }
+}
 
 /**
  * ブラウザ全体で保持するGoogleアカウントの一覧(プロファイル横断)。
@@ -63,33 +78,49 @@ class GoogleAccounts {
   }
 }
 
-/**
- * 指定セッションで実際にGoogleにログイン中のアカウント(メール+表示名)を返す。
- * 先頭がGoogleの言う「既定のアカウント(authuser=0)」。
- */
-async function fetchSignedIn(session) {
-  if (!session?.fetch) return [];
-  try {
-    // **必ず session.fetch を使うこと**。net.fetch(url, { session }) はセッション指定を無視して
-    // 常に defaultSession で送るため、プロファイルのCookieが乗らず未ログイン扱い(HTTP 400)になる。
-    // Roopieの閲覧は全て persist:profile-<id> パーティションなので、これだと絶対に検出できない
-    const response = await session.fetch(LIST_ACCOUNTS_URL);
-    if (!response.ok) return [];
-    const data = JSON.parse(await response.text());
-    // ["gaia.l.a.r", [["gaia.l.a", index, name, email, ...], ...]]
-    const rows = Array.isArray(data?.[1]) ? data[1] : [];
-    return rows
-      .map((row) => ({ email: row[3], name: row[2] }))
-      .filter((a) => typeof a.email === 'string' && a.email.includes('@'));
-  } catch {
-    // 未ログイン・オフライン・仕様変更時は「取得できなかった」として扱う
-    return [];
-  }
+// GoogleのListAccounts API(Chromiumが内部で使うのと同じもの)は、ページの文脈を持たない
+// 素のリクエスト(Sec-Fetch-Site: none / Origin無し)だと「不正な形式」扱いでHTTP 400を返す。
+// Cookieを正しく送っていても拒否されるため、代わりにページ自身がすでに描画している
+// 「Google アカウント: 名前 (メール)」ボタンのaria-label/titleをDOM越しに読む(追加の通信は発生しない)
+const DETECT_SCRIPT = `(() => {
+  const els = [...document.querySelectorAll('a,button,div,span')].filter((el) => {
+    const label = (el.getAttribute('aria-label') || '') + (el.getAttribute('title') || '');
+    return label.includes('@') || /account|アカウント/i.test(label);
+  }).slice(0, 15);
+  return els.map((el) => ({ aria: el.getAttribute('aria-label'), title: el.getAttribute('title') }));
+})()`;
+
+// "Google アカウント: 太郎 (taro@gmail.com)" のような文字列からメール+名前を取り出す
+function parseAccountLabel(label) {
+  if (!label) return null;
+  const emailMatch = label.match(/\(([^()\s]+@[^()\s]+)\)/);
+  if (!emailMatch) return null;
+  const nameMatch = label.match(/:\s*([\s\S]+?)\s*\(/);
+  return {
+    email: emailMatch[1],
+    name: nameMatch ? nameMatch[1].replace(/\s+/g, ' ').trim() : '',
+  };
 }
 
-// メールアドレスの一覧だけが欲しい場合(設定画面の「ログイン中」表示用)
-async function signedInAccounts(session) {
-  return (await fetchSignedIn(session)).map((a) => a.email);
+/**
+ * 指定タブ(Googleドメインを開いているwebContents)のDOMから、
+ * 現在ログイン中として表示されているアカウント(メール+表示名)を読み取る。
+ * ページが実際に表示しているアカウントは1つだけなので、複数アカウント同時ログインのうち
+ * そのページで表示中の1件のみ返す(ListAccounts APIのような全件取得はできない)。
+ */
+async function detectFromWebContents(webContents) {
+  if (!webContents || webContents.isDestroyed()) return [];
+  try {
+    const candidates = await webContents.executeJavaScript(DETECT_SCRIPT, true);
+    for (const candidate of candidates ?? []) {
+      const found = parseAccountLabel(candidate.aria) || parseAccountLabel(candidate.title);
+      if (found) return [found];
+    }
+    return [];
+  } catch {
+    // ページ側の都合(遷移中・破棄済みなど)で読めなくても、次の訪問でまた試すので無視してよい
+    return [];
+  }
 }
 
 // セッションからGoogleのログイン情報(Cookie)を削除する = ログアウト
@@ -117,8 +148,9 @@ function normalizeEmail(email) {
 }
 
 module.exports = GoogleAccounts;
-module.exports.signedInAccounts = signedInAccounts;
-module.exports.fetchSignedIn = fetchSignedIn;
+module.exports.isGoogleDomain = isGoogleDomain;
+module.exports.detectFromWebContents = detectFromWebContents;
+module.exports.parseAccountLabel = parseAccountLabel;
 module.exports.signOut = signOut;
 module.exports.loginUrl = loginUrl;
 module.exports.normalizeEmail = normalizeEmail;

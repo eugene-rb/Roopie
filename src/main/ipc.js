@@ -383,13 +383,13 @@ function registerIpc() {
     browser.sendProfiles();
   });
 
-  // 実際にログイン中のアカウントは、そのプロファイルのセッションのCookieから取得する。
+  // 実際にログイン中のアカウントは、そのプロファイルで開いているGoogleページのDOMから取得する。
   // 未登録のアカウントがあれば自動登録・有効化もあわせて行う
   ipcMain.handle('google:signed-in', async (_e, profileId) => {
     const profile = browser.profiles?.list().find((p) => p.id === profileId);
     if (!profile) return [];
-    await browser.autoRegisterGoogleAccounts(profile);
-    return GoogleAccounts.signedInAccounts(browser.profiles.sessionFor(profile));
+    const detected = await browser.autoRegisterGoogleAccounts(profile);
+    return detected.map((a) => a.email);
   });
 
   // ログインはそのプロファイルのセッションで行う必要がある。
