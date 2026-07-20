@@ -58,7 +58,7 @@ function linkItem({ favicon, title, url }) {
   // クリックで現在のタブに表示、中クリックで新しいタブ
   item.addEventListener('click', () => window.roopieInternal.navigate(url));
   item.addEventListener('auxclick', (e) => {
-    if (e.button === 1) window.roopieInternal.openTab(url);
+    if (e.button === 1) window.roopieInternal.openTab(url, true);
   });
   return item;
 }
@@ -336,7 +336,7 @@ function bmBookmarkRow(bookmark) {
     window.roopieInternal.navigate(bookmark.url);
   });
   row.addEventListener('auxclick', (e) => {
-    if (e.button === 1) window.roopieInternal.openTab(bookmark.url);
+    if (e.button === 1) window.roopieInternal.openTab(bookmark.url, true);
   });
   row.addEventListener('contextmenu', (e) => {
     e.preventDefault();
@@ -558,7 +558,7 @@ function renderReadlist() {
     });
     item.addEventListener('auxclick', (e) => {
       if (e.button === 1) {
-        window.roopieInternal.openTab(entry.url);
+        window.roopieInternal.openTab(entry.url, true);
         window.roopieInternal.setReadlistRead(entry.id, true);
       }
     });

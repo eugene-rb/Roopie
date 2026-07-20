@@ -3,7 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 // 内部ページ(roopie://)以外では絶対にIPCを公開しない
 if (location.protocol === 'roopie:') {
   contextBridge.exposeInMainWorld('roopieInternal', {
-    openTab: (url) => ipcRenderer.send('tabs:new', url),
+    openTab: (url, background) => ipcRenderer.send('tabs:new', url, background),
     navigate: (input) => ipcRenderer.send('tabs:navigate', input),
 
     listBookmarks: () => ipcRenderer.invoke('bookmarks:list'),

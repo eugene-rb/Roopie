@@ -126,7 +126,7 @@ const profileIdOf = (e) => ctxOf(e)?.profileId ?? browser.profiles?.activeId;
 
 function registerIpc() {
   // ---- タブ ----
-  ipcMain.on('tabs:new', (e, url) => tabsOf(e)?.createTab(url || undefined));
+  ipcMain.on('tabs:new', (e, url, background) => tabsOf(e)?.createTab(url || undefined, { background: !!background }));
   // タブバーへのドラッグ&ドロップ検索(Edgeオマージュ): 選択テキストは常に検索する
   ipcMain.on('tabs:search-new-tab', (e, text, index) => {
     const query = String(text ?? '').trim();

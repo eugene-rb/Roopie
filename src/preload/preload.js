@@ -422,7 +422,7 @@ injectBrowserAction();
 // ブラウザUI(タブバー・ツールバー)に公開する安全なAPI
 contextBridge.exposeInMainWorld('roopie', {
   // タブ操作
-  newTab: (url) => ipcRenderer.send('tabs:new', url),
+  newTab: (url, background) => ipcRenderer.send('tabs:new', url, background),
   searchInNewTab: (text, index) => ipcRenderer.send('tabs:search-new-tab', text, index),
   closeTab: (id) => ipcRenderer.send('tabs:close', id),
   switchTab: (id) => ipcRenderer.send('tabs:switch', id),

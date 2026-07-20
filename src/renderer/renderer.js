@@ -327,7 +327,7 @@ function renderBookmarkBar() {
 
     el.addEventListener('click', () => window.roopie.navigate(bookmark.url));
     el.addEventListener('auxclick', (e) => {
-      if (e.button === 1) window.roopie.newTab(bookmark.url); // 中クリックで新しいタブ
+      if (e.button === 1) window.roopie.newTab(bookmark.url, true); // 中クリックで裏に新しいタブ
     });
     bookmarkBarEl.insertBefore(el, bookmarkHintEl);
   }
