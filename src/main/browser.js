@@ -420,6 +420,15 @@ browser.createWindow = ({ incognito = false, url, x, y, profileId, restoreTabs }
     if (command === 'browser-forward') tabManager.goForward();
   });
 
+  // ウィンドウがOSレベルでフォーカスされると、既定ではUI(タブバー等のchrome)側の
+  // webContentsにフォーカスが行ってしまう。ウィンドウ切り替え直後からYouTube等の
+  // ページ内ショートカットが使えるよう、アクティブなタブのコンテンツへフォーカスを戻す
+  // (メニュー等のオーバーレイ表示中はそちらのフォーカスを奪わない)
+  window.on('focus', () => {
+    if (tabManager.overlayVisible) tabManager.overlay.webContents.focus();
+    else tabManager.activeWebContents()?.focus();
+  });
+
   // そのプロファイルの最後のウィンドウを閉じるとき、タブ構成を保存する
   // (次にプロファイルを開いたとき同じタブで再開できるように。Edgeのワークスペース風)
   window.on('close', () => {

@@ -4,6 +4,14 @@
 
 ## 進捗記録
 
+### 2026-07-20: ウィンドウ切り替え時にページコンテンツへフォーカスが戻らない不具合を修正
+
+- 症状: 複数ウィンドウを行き来した直後、YouTube等のページ内キーボードショートカット(スペースで再生/一時停止等)がすぐに使えなかった。
+- 原因: `WebContentsView` でタブ内容とUI(chrome/index.html)を別webContentsとして持つ構成上、`BrowserWindow` がOSレベルでフォーカスを取り戻すと既定でトップレベルのUI側webContentsにフォーカスが行き、直前にアクティブだったタブのcontentへは戻らなかった。タブ切り替え(`switchTab`)自体は既にフォーカス処理済みで問題なし。
+- 修正: `browser.js` の `createWindow` に `window.on('focus', ...)` を追加し、アクティブタブのwebContentsへ明示的に `.focus()` する。メニュー等のオーバーレイ表示中はそちらを奪わないよう `tabManager.overlayVisible` フラグ(`showOverlay` で更新)で分岐。
+- 検証: `npx electron scripts/test-focus-on-switch.js`(再利用可能。2ウィンドウでの相互切り替え/タブ切り替え/オーバーレイ表示中の除外を実UIフォーカス状態で確認)。
+- 変更: `src/main/browser.js`, `src/main/tab-manager.js`。
+
 ### 2026-07-19: タブバーのドラッグD&Dを共通スロットUXに刷新
 
 - タブの並べ替えと「ドラッグ検索(ページの選択テキストをタブバーへドロップ)」を、同じ挿入プレビューUXに統一。既存タブの間に差し込めるようにした(従来は検索ドロップが末尾に新タブを開くだけだった)。

@@ -198,6 +198,7 @@ class TabManager {
     this.sidePanelSide = 'right'; // サイドパネルを表示する側('left' | 'right')
     this.searchEngine = DEFAULT_ENGINE; // アドレスバーでURLでない入力をしたときの検索エンジン
     this.overlay = null; // メニュー等を表示する、常にタブより手前のView
+    this.overlayVisible = false;
     this.htmlFullscreenTabId = null; // ページ側の全画面(YouTube等)にしているタブ
     this.closedTabs = []; // 閉じたタブの履歴({ url, index })。新しいものが末尾
 
@@ -319,6 +320,7 @@ class TabManager {
     if (!this.overlay) return;
     if (visible) this.raiseOverlay();
     this.overlay.setVisible(visible);
+    this.overlayVisible = visible;
     if (visible) this.overlay.webContents.focus();
     else this.activeWebContents()?.focus();
   }
