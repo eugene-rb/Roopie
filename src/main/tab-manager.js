@@ -187,6 +187,7 @@ class TabManager {
     this.overlayVisible = false;
     this.htmlFullscreenTabId = null; // ページ側の全画面(YouTube等)にしているタブ
     this.closedTabs = []; // 閉じたタブの履歴({ url, index })。新しいものが末尾
+    this._suppressActivationFor = null; // 作成直後の背景タブID(拡張機能の誤アクティブ化を無視する間だけ設定)
     this.fullscreenChromeRevealed = false; // OS全画面(F11)中、マウス接近でタブバー/ツールバーを一時表示しているか
     this._fullscreenPollTimer = null;
 
@@ -270,19 +271,30 @@ class TabManager {
       // バックグラウンドで開いたタブは、実際に選ぶまで読み込まない(「タブを休止する」と同じ復元経路 = switchTab内)
       hibernated: background && !isInternal,
       hibernatedUrl: background && !isInternal ? url : null,
+      // ホイールクリック等で裏に開いた/セッション復元・休止復帰したタブが、見ていない/まだ
+      // 触れていない間に勝手に音を鳴らし始めないようにする(autoplayPolicyだけでは、
+      // メインプロセスからのloadURLによる遷移では自動再生が止まらないため、ミュートで抑える)
+      autoMuted: background,
+      autoMutedListener: null,
     };
     this.tabs.push(tab);
     this.window.contentView.addChildView(view);
+    if (tab.autoMuted) view.webContents.setAudioMuted(true);
 
     this.attachEvents(tab);
     const prevActiveTabId = this.activeTabId;
-    this.onTabCreated?.(tab); // 拡張機能システム等への通知
     // 拡張機能システム(electron-chrome-extensions)はタブ登録時に必ずchrome.tabs.onActivatedを
-    // 発火する仕様で、その結果このタブがアクティブ化されてしまう(observeTab内で無条件にonActivated
-    // を呼ぶため)。バックグラウンドで開きたいタブの場合は、その誤ったアクティブ化を打ち消す
+    // 発火する仕様で、その結果このタブがswitchTab経由で即アクティブ化・休止解除されてしまう
+    // (observeTab内で無条件にonActivatedを呼ぶため)。onTabCreated呼び出し中(同期的に発火する)
+    // だけ、このタブへのswitchTabを無視するようにして、背景で作った意味そのものを守る
+    if (background) this._suppressActivationFor = id;
+    this.onTabCreated?.(tab); // 拡張機能システム等への通知
+    this._suppressActivationFor = null;
+    // 上のガードをすり抜けて activeTabId だけ変わってしまった場合の保険
     if (background && this.activeTabId !== prevActiveTabId) {
       this.switchTab(prevActiveTabId);
     }
+    if (tab.autoMuted) this.armAutoUnmute(tab);
     if (!tab.hibernated) view.webContents.loadURL(url);
     if (background) {
       // 見えない位置に置いたままタブバーにだけ足す(今見ているページから離れない)
@@ -531,6 +543,9 @@ class TabManager {
   }
 
   switchTab(id) {
+    // 作成直後の背景タブに対して拡張機能システムが誤って発火させたものは無視する
+    // (createTab側の説明を参照。ここで無視しないと休止/自動ミュートの意味が無くなる)
+    if (id === this._suppressActivationFor) return;
     const tab = this.getTab(id);
     if (!tab) return;
     // タイマーの「タブを休止する」で退避したタブは、選び直された時点で元のURLへ復元する
@@ -579,6 +594,29 @@ class TabManager {
     }
   }
 
+  // 裏で開いた/復元・休止復帰したタブのミュートを、そのタブ自身への実際の操作
+  // (クリック・キー入力)があった時点で自動的に解除する。タブバー側のクリック(切り替え)は
+  // ページへの操作ではないため対象外(=切り替えただけでは解除されない)
+  armAutoUnmute(tab) {
+    const wc = tab.view.webContents;
+    tab.autoMutedListener = (_e, input) => {
+      if (input.type === 'mouseDown' || input.type === 'keyDown') this.disarmAutoUnmute(tab);
+    };
+    wc.on('input-event', tab.autoMutedListener);
+  }
+
+  disarmAutoUnmute(tab) {
+    if (!tab.autoMuted) return;
+    tab.autoMuted = false;
+    const wc = tab.view.webContents;
+    if (!wc.isDestroyed()) {
+      wc.setAudioMuted(false);
+      if (tab.autoMutedListener) wc.off('input-event', tab.autoMutedListener);
+    }
+    tab.autoMutedListener = null;
+    this.sendState();
+  }
+
   // ---- 閉じたタブを開き直す(Chromeの Ctrl+Shift+T 相当) ----
 
   rememberClosedTab(tab, index) {
@@ -622,8 +660,15 @@ class TabManager {
   }
 
   toggleMute(id) {
-    const wc = this.getTab(id)?.view.webContents;
+    const tab = this.getTab(id);
+    const wc = tab?.view.webContents;
     if (!wc || wc.isDestroyed()) return;
+    // 手動で切り替えたら、自動ミュートの管理下からは外す(以後は自動で解除されない)
+    if (tab.autoMuted) {
+      tab.autoMuted = false;
+      if (tab.autoMutedListener) wc.off('input-event', tab.autoMutedListener);
+      tab.autoMutedListener = null;
+    }
     wc.setAudioMuted(!wc.isAudioMuted());
     this.sendState();
   }
@@ -909,12 +954,14 @@ class TabManager {
     };
   }
 
-  // snapshotTabs() で記録した構成を再現する(URLからの再読み込みで復元する)
+  // snapshotTabs() で記録した構成を再現する(URLからの再読み込みで復元する)。
+  // フォーカスするタブ以外は裏で開いたタブと同じ扱い(不活性化+自動ミュート)にし、
+  // 見ていないタブが復帰直後に勝手に音を鳴らし始めないようにする
   restoreTabs(entries) {
     let activeId = null;
     for (const entry of entries ?? []) {
       if (!entry?.url) continue;
-      const tab = this.createTab(entry.url);
+      const tab = this.createTab(entry.url, { background: !entry.active });
       if (entry.active) activeId = tab.id;
     }
     if (activeId) this.switchTab(activeId);

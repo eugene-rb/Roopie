@@ -78,8 +78,11 @@ app.whenReady().then(async () => {
     );
     check('無音タブにはスピーカーアイコンが出ない', hasIconWhenSilent, false);
 
-    // バックグラウンドで音を鳴らすタブを作る(background:trueでアクティブは変えない)
-    const tab = tm.createTab('data:text/html,<title>audio</title>', { background: true });
+    // タブを開いて(いったんアクティブ化)音を鳴らし、その後で別のタブへ移る
+    // = 「見ていないタブが背後で鳴らし続けている」状況を再現する。
+    // (裏で開いたタブは切り替えるまで読み込まれなくなった=test-background-tab.jsの領分なので、
+    //  ここでは非表示のViewにexecuteJavaScriptを投げると応答が返らないことがある問題も避けられる)
+    const tab = tm.createTab('data:text/html,<title>audio</title>');
     await sleep(300);
     const wc = tab.view.webContents;
     // AudioContextのautoplay制限を避けるため、先に信頼済みクリックでユーザー操作扱いにしておく
@@ -98,9 +101,13 @@ app.whenReady().then(async () => {
     );
     console.log(`   AudioContext.state = ${ctxState}`);
 
+    // 元の無音タブへ戻る。ここからは「背後で鳴らし続けている」状態になる
+    tm.switchTab(silentTabId);
+    await sleep(200);
+
     const becameAudible = await waitForAudible(tm, tab.id);
     check('オシレーター再生でisAudibleがtrueになる', becameAudible, true);
-    check('バックグラウンド再生でもアクティブタブは変わらない', tm.activeTabId, silentTabId);
+    check('背後で鳴っていてもアクティブタブは戻ったまま', tm.activeTabId, silentTabId);
 
     await sleep(200); // sendState()のIPC反映を待つ
     const iconState = await js(

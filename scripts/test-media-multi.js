@@ -50,9 +50,20 @@ app.whenReady().then(async () => {
     await sleep(300);
     const silentTabId = tm.activeTabId;
 
-    // 2つのバックグラウンドタブを作り、それぞれ独立に「再生中」を報告させる
+    // 2つのバックグラウンドタブを作り、それぞれ独立に「再生中」を報告させる。
+    // 裏で開いたタブは (1) 実際に選ぶまで読み込まれない (2) 見ていない間に音を鳴らさないよう
+    // 自動ミュートされる、という2つの仕様が今回入ったが、このテストの主題(複数タブの
+    // メディア一覧・ミュート・フローティング表示の独立性)には関係ないため、
+    // 「既にページが読み込まれ、ユーザーが一度触れた状態」を模してここで両方解除しておく。
+    // (休止中のまま switchTab すると実ナビゲーションが走り、下でシミュレートした再生報告が
+    //  did-navigate で消えてしまうため)
     const tabA = tm.createTab('data:text/html,<title>mediaA</title>', { background: true });
     const tabB = tm.createTab('data:text/html,<title>mediaB</title>', { background: true });
+    for (const tab of [tabA, tabB]) {
+      tm.disarmAutoUnmute(tab);
+      tab.hibernated = false;
+      tab.hibernatedUrl = null;
+    }
     await sleep(300);
 
     tm.onMediaReport(tabA.id, { title: '曲A', artist: 'アーティストA', playing: true, duration: 120, currentTime: 10, canPrev: false, canNext: false, hasVideo: false }, fakeFrame());
