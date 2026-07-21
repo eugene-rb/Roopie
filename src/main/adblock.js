@@ -26,6 +26,10 @@ class AdBlock {
         read: fs.promises.readFile,
         write: fs.promises.writeFile,
       });
+      // コスメティックフィルタ(ページへのCSS/スクリプトレット注入)はYouTubeのPolymer製UIと
+      // 衝突し、スクリプトの二重宣言やdom-repeatのスタックオーバーフローでUIが崩れることがある
+      // (実機検証で確認)。ネットワークレベルの広告/トラッカー遮断はそのまま有効にし、注入だけ止める
+      this.blocker.config.loadCosmeticFilters = false;
     } catch (err) {
       console.error('広告ブロックエンジンの初期化に失敗:', err.message);
     }

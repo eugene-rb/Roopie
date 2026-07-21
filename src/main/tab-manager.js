@@ -249,6 +249,10 @@ class TabManager {
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
+        // Electronの既定(no-user-gesture-required)は無条件に自動再生を許すため、
+        // ホイールクリック等で裏で開いたタブがユーザーの見ていない間に音を鳴らし始めてしまう。
+        // Chrome/Firefox既定と同じ「そのタブ自身への操作(クリック等)が要る」方式にする
+        autoplayPolicy: 'document-user-activation-required',
       },
     });
 
