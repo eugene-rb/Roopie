@@ -14,6 +14,10 @@ const { installChromeWebStore, installExtension, uninstallExtension } = require(
 class ExtensionSupport {
   constructor() {
     this.bySession = new Map(); // session -> ElectronChromeExtensions
+    // session -> Map(extensionId -> メタデータ)。無効化するとsession.extensionsから
+    // 消えて情報が引けなくなる(名前もパスも)ため、読み込まれるたびにここへ控えておく。
+    // 一覧表示(無効化中も出す)と再有効化(パスが要る)の両方に使う
+    this.metaBySession = new Map();
     this.tabManager = null;
     this.window = null;
   }
@@ -31,8 +35,37 @@ class ExtensionSupport {
     return this.tabManager?.tabs.find((t) => t.view.webContents === wc) ?? null;
   }
 
-  // セッションに拡張機能サポートを取り付け、保存済み拡張を読み込む
-  async attach(session, profileId) {
+  _metaMapFor(session) {
+    let map = this.metaBySession.get(session);
+    if (!map) {
+      map = new Map();
+      this.metaBySession.set(session, map);
+    }
+    return map;
+  }
+
+  // 現在読み込まれている拡張機能のメタデータを控えておく(list/setEnabledで使う)
+  _cacheMeta(session) {
+    const map = this._metaMapFor(session);
+    for (const e of session.extensions?.getAllExtensions() ?? []) {
+      map.set(e.id, {
+        id: e.id,
+        name: e.name,
+        version: e.version,
+        description: e.manifest?.description ?? '',
+        icon: iconDataFor(e),
+        path: e.path,
+        permissions: [...new Set([...(e.manifest?.permissions ?? []), ...(e.manifest?.host_permissions ?? [])])],
+        optionsUrl: optionsUrlFor(e),
+      });
+    }
+    return map;
+  }
+
+  // セッションに拡張機能サポートを取り付け、保存済み拡張を読み込む。
+  // disabledIds に含まれるものは一度読み込んでメタデータを控えたうえで、すぐ外す
+  // (=次回起動時に有効化していないものが勝手に動き出さない)
+  async attach(session, profileId, disabledIds = []) {
     if (this.bySession.has(session)) return;
 
     // crx://<id>/... のアイコン配信(ツールバーの <browser-action-list> 用)。
@@ -65,6 +98,11 @@ class ExtensionSupport {
       extensionsPath: this.extensionsDir(profileId),
     });
 
+    this._cacheMeta(session);
+    for (const id of disabledIds) {
+      if (session.extensions?.getExtension(id)) session.extensions.removeExtension(id);
+    }
+
     // 取り付け完了前に開かれたタブも拡張機能システムへ登録する
     for (const tab of this.tabManager?.tabs ?? []) {
       if (tab.view.webContents.session === session) this.addTab(tab.view.webContents);
@@ -84,27 +122,47 @@ class ExtensionSupport {
   // ウェブストアの拡張IDを指定してインストールする
   async install(session, profileId, extensionId) {
     await this.attach(session, profileId);
-    return installExtension(extensionId, {
+    const ext = await installExtension(extensionId, {
       session,
       extensionsPath: this.extensionsDir(profileId),
     });
+    this._cacheMeta(session);
+    return ext;
   }
 
-  // インストール済み拡張の一覧(管理画面用)。
-  // アイコンは chrome-extension:// だと web_accessible_resources 制限で
-  // 通常ページから読めないため、ファイルから読んでdata URIにして渡す
+  // インストール済み拡張の一覧(管理画面用)。無効化中のものも(直前まで持っていた
+  // メタデータのまま)出す。enabled は「今読み込まれているか」で判定する
   list(session) {
-    return (session.extensions?.getAllExtensions() ?? []).map((e) => ({
-      id: e.id,
-      name: e.name,
-      version: e.version,
-      description: e.manifest?.description ?? '',
-      icon: iconDataFor(e),
+    const map = this._cacheMeta(session);
+    return [...map.values()].map((m) => ({
+      id: m.id,
+      name: m.name,
+      version: m.version,
+      description: m.description,
+      icon: m.icon,
+      permissions: m.permissions,
+      optionsUrl: m.optionsUrl,
+      enabled: !!session.extensions?.getExtension(m.id),
     }));
+  }
+
+  // 削除せずに有効/無効を切り替える(Electron自体には「無効化」の概念が無いため、
+  // 無効化は読み込み解除、有効化はディスク上のパスから読み込み直すことで実現する)
+  async setEnabled(session, profileId, extensionId, enabled) {
+    if (enabled) {
+      if (session.extensions?.getExtension(extensionId)) return;
+      const meta = this._metaMapFor(session).get(extensionId);
+      if (!meta?.path) return;
+      await session.extensions.loadExtension(meta.path);
+      this._cacheMeta(session);
+    } else if (session.extensions?.getExtension(extensionId)) {
+      session.extensions.removeExtension(extensionId);
+    }
   }
 
   async remove(session, profileId, extensionId) {
     await uninstallExtension(extensionId, { session, extensionsPath: this.extensionsDir(profileId) });
+    this.metaBySession.get(session)?.delete(extensionId);
   }
 }
 
@@ -126,6 +184,12 @@ function iconDataFor(extension) {
   } catch {
     return null;
   }
+}
+
+// MV2(options_page)/MV3(options_ui.page)どちらの形式にも対応する
+function optionsUrlFor(extension) {
+  const page = extension.manifest?.options_page || extension.manifest?.options_ui?.page;
+  return page ? `chrome-extension://${extension.id}/${page}` : null;
 }
 
 module.exports = ExtensionSupport;

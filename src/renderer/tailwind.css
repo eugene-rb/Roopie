@@ -1191,6 +1191,109 @@ select.row-btn {
 
 .ext-actions {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 無効化した拡張はアイコン/本文を薄くして一目で分かるようにする */
+.ext-card.ext-disabled .ext-icon,
+.ext-card.ext-disabled .ext-main {
+  opacity: 0.5;
+}
+
+.ext-details-toggle {
+  margin-top: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ext-details-toggle:hover {
+  text-decoration: underline;
+}
+
+.ext-details {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ext-details-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.ext-details-row code {
+  color: var(--text-dim);
+  font-size: 11px;
+  word-break: break-all;
+}
+
+.ext-details-label {
+  flex-shrink: 0;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.ext-perm-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.ext-perm-chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--card-hover);
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+/* 設定画面の一覧に出すピン留めボタン。#ext-menu .ext-pin と同じ見た目 */
+#extensions-list .ext-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  color: var(--text-dim);
+  opacity: 0.55;
+}
+
+#extensions-list .ext-pin:hover {
+  background: var(--card-hover);
+  color: var(--text);
+  opacity: 1;
+}
+
+#extensions-list .ext-pin.active {
+  color: var(--accent);
+  opacity: 1;
+}
+
+#extensions-list .ext-pin svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#extensions-list .ext-pin.active svg {
+  fill: currentColor;
 }
 
 .date-heading {

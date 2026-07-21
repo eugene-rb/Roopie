@@ -820,9 +820,18 @@ const extensionIdEl = document.getElementById('extension-id');
 const extensionInstallBtn = document.getElementById('extension-install-btn');
 const extensionsListEl = document.getElementById('extensions-list');
 
+const EXT_PIN_SVG =
+  '<svg viewBox="0 0 24 24"><path d="M12 16v6"/><path d="M9 4h6l1 6 2.5 3.5h-13L8 10z"/></svg>';
+
+let lastExtensions = [];
+let pinnedExtensionIds = [];
+let openExtensionDetailsId = null; // 「詳細」を開いたままにしたい拡張のID(再描画をまたいで維持)
+
+// items省略時は直前のデータのまま再描画する(ピン留め状態だけ変わった場合など)
 function renderExtensions(items) {
+  if (items) lastExtensions = items;
   extensionsListEl.textContent = '';
-  if (!items.length) {
+  if (!lastExtensions.length) {
     const empty = document.createElement('div');
     empty.className = 'empty-inline';
     empty.textContent = 'インストール済みの拡張機能はありません';
@@ -830,9 +839,12 @@ function renderExtensions(items) {
     return;
   }
 
-  for (const ext of items) {
+  for (const ext of lastExtensions) {
+    const enabled = ext.enabled !== false;
+    const pinned = pinnedExtensionIds.includes(ext.id);
+
     const card = document.createElement('div');
-    card.className = 'ext-card';
+    card.className = 'ext-card' + (enabled ? '' : ' ext-disabled');
 
     if (ext.icon) {
       const icon = document.createElement('img');
@@ -865,10 +877,93 @@ function renderExtensions(items) {
       desc.textContent = ext.description;
       main.appendChild(desc);
     }
+
+    const detailsToggle = document.createElement('button');
+    detailsToggle.className = 'ext-details-toggle';
+    detailsToggle.textContent = openExtensionDetailsId === ext.id ? '詳細を閉じる' : '詳細';
+    detailsToggle.addEventListener('click', () => {
+      openExtensionDetailsId = openExtensionDetailsId === ext.id ? null : ext.id;
+      renderExtensions();
+    });
+    main.appendChild(detailsToggle);
+
+    if (openExtensionDetailsId === ext.id) {
+      const details = document.createElement('div');
+      details.className = 'ext-details';
+
+      const idRow = document.createElement('div');
+      idRow.className = 'ext-details-row';
+      const idLabel = document.createElement('span');
+      idLabel.className = 'ext-details-label';
+      idLabel.textContent = 'ID';
+      idRow.appendChild(idLabel);
+      const idCode = document.createElement('code');
+      idCode.textContent = ext.id;
+      idRow.appendChild(idCode);
+      details.appendChild(idRow);
+
+      if (ext.permissions?.length) {
+        const permRow = document.createElement('div');
+        permRow.className = 'ext-details-row';
+        const permLabel = document.createElement('span');
+        permLabel.className = 'ext-details-label';
+        permLabel.textContent = '権限';
+        permRow.appendChild(permLabel);
+        const permList = document.createElement('div');
+        permList.className = 'ext-perm-list';
+        for (const p of ext.permissions) {
+          const chip = document.createElement('span');
+          chip.className = 'ext-perm-chip';
+          chip.textContent = p;
+          permList.appendChild(chip);
+        }
+        permRow.appendChild(permList);
+        details.appendChild(permRow);
+      }
+
+      if (ext.optionsUrl) {
+        const optionsBtn = document.createElement('button');
+        optionsBtn.className = 'row-btn';
+        optionsBtn.textContent = 'オプション';
+        optionsBtn.addEventListener('click', () => window.roopieInternal.openExtensionOptions(ext.id));
+        details.appendChild(optionsBtn);
+      }
+
+      main.appendChild(details);
+    }
+
     card.appendChild(main);
 
     const actions = document.createElement('div');
     actions.className = 'ext-actions';
+
+    // ピン留め(ツールバーに直接表示。パズルボタンのメニューと同じ設定を操作する)
+    const pinBtn = document.createElement('button');
+    pinBtn.className = 'ext-pin' + (pinned ? ' active' : '');
+    pinBtn.title = pinned ? 'ツールバーに表示しない' : 'ツールバーに表示';
+    pinBtn.innerHTML = EXT_PIN_SVG;
+    pinBtn.addEventListener('click', () => {
+      const next = pinned ? pinnedExtensionIds.filter((id) => id !== ext.id) : [...pinnedExtensionIds, ext.id];
+      window.roopieInternal.setPinnedExtensions(next);
+    });
+    actions.appendChild(pinBtn);
+
+    // 有効/無効(削除せずに一時停止)
+    const enableLabel = document.createElement('label');
+    enableLabel.className = 'switch ext-enable-switch';
+    enableLabel.title = enabled ? '無効にする' : '有効にする';
+    const enableInput = document.createElement('input');
+    enableInput.type = 'checkbox';
+    enableInput.checked = enabled;
+    enableInput.addEventListener('change', () => {
+      window.roopieInternal.setExtensionEnabled(ext.id, enableInput.checked);
+    });
+    enableLabel.appendChild(enableInput);
+    const slider = document.createElement('span');
+    slider.className = 'slider';
+    enableLabel.appendChild(slider);
+    actions.appendChild(enableLabel);
+
     const removeBtn = document.createElement('button');
     removeBtn.className = 'row-btn danger';
     removeBtn.textContent = '削除';
@@ -1725,6 +1820,9 @@ window.roopieInternal.onSettings((settings) => {
   renderDownloadPath(settings.downloadPath);
   renderToolbarItems(settings.toolbarItems);
   startIconSizeInput.value = settings.startIconSize || 96;
+  // ピン留め状態はパズルボタンのメニュー等、他の画面からも変わりうるので都度反映する
+  pinnedExtensionIds = settings.pinnedExtensions ?? [];
+  renderExtensions();
 });
 
 // 別タブでログインして戻ってきたときに「ログイン中」表示を更新する
@@ -1745,6 +1843,7 @@ document.addEventListener('visibilitychange', () => {
       window.roopieInternal.getKeybindings(),
     ]);
   if (tor) torStatus = tor;
+  pinnedExtensionIds = settings.pinnedExtensions ?? [];
   renderExtensions(extensions);
   state = { ...profileState, googleAccounts: accounts };
   searchEngineSelect.value = settings.searchEngine || 'google';

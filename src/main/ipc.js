@@ -735,6 +735,29 @@ function registerIpc() {
     await browser.extensions.remove(session, profile.id, extensionId);
     browser.sendExtensionsFor(profile.id);
   });
+  // 削除せずに一時的に有効/無効を切り替える(設定画面のトグルから)
+  ipcMain.on('extensions:set-enabled', async (e, extensionId, enabled) => {
+    const profile = profileOf(e);
+    const session = browser.profiles.sessionFor(profile);
+    await browser.extensions.setEnabled(session, profile.id, extensionId, !!enabled);
+    const bundle = bundleOf(e);
+    if (bundle) {
+      const ids = new Set(bundle.settings.data.disabledExtensions ?? []);
+      if (enabled) ids.delete(extensionId);
+      else ids.add(extensionId);
+      bundle.settings.data.disabledExtensions = [...ids];
+      bundle.settings.save();
+    }
+    browser.sendExtensionsFor(profile.id);
+  });
+  // 拡張機能自身のオプションページを新しいタブで開く
+  ipcMain.on('extensions:open-options', (e, extensionId) => {
+    const ctx = ctxOf(e);
+    if (!ctx) return;
+    const session = browser.profiles.sessionFor(profileOf(e));
+    const ext = browser.extensions.list(session).find((x) => x.id === extensionId);
+    if (ext?.optionsUrl) ctx.tabManager.createTab(ext.optionsUrl);
+  });
 
   // ---- テーマ ----
   ipcMain.handle('theme:get', (e) => bundleOf(e)?.theme.data ?? { ...browser.DEFAULT_THEME });

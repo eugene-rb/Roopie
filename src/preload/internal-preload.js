@@ -194,6 +194,8 @@ if (location.protocol === 'roopie:') {
     listExtensions: () => ipcRenderer.invoke('extensions:list'),
     removeExtension: (extensionId) => ipcRenderer.send('extensions:remove', extensionId),
     onExtensionsState: (cb) => ipcRenderer.on('extensions:state', (_e, items) => cb(items)),
+    setExtensionEnabled: (extensionId, enabled) => ipcRenderer.send('extensions:set-enabled', extensionId, enabled),
+    openExtensionOptions: (extensionId) => ipcRenderer.send('extensions:open-options', extensionId),
 
     // テーマ
     getTheme: () => ipcRenderer.invoke('theme:get'),

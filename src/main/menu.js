@@ -79,6 +79,8 @@ function setupMenu() {
       label: '表示',
       submenu: [
         { label: '再読み込み', accelerator: accel('reload'), click: () => tabs()?.reload() },
+        // F5はChrome/Edge同様、設定で変更できる再読み込み(Ctrl+R)とは別に常に効かせる
+        { label: '再読み込み ', accelerator: 'F5', visible: false, click: () => tabs()?.reload() },
         { label: '戻る', accelerator: accel('back'), click: () => tabs()?.goBack() },
         { label: '進む', accelerator: accel('forward'), click: () => tabs()?.goForward() },
         { type: 'separator' },

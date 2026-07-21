@@ -251,8 +251,9 @@ class TabManager {
     }
   }
 
-  // background: true なら開くだけで表示は今のタブのまま(ホイールクリック/Ctrl+クリック)
-  createTab(url = NEW_TAB_URL, { background = false } = {}) {
+  // background: true なら開くだけで表示は今のタブのまま(ホイールクリック/Ctrl+クリック)。
+  // initialTitle/initialFavicon はセッション復元専用(restoreTabs参照)。休止中の仮表示に使う
+  createTab(url = NEW_TAB_URL, { background = false, initialTitle = '', initialFavicon = null } = {}) {
     const id = nextTabId++;
     const isInternal = isInternalUrl(url);
     const view = new WebContentsView({
@@ -271,19 +272,25 @@ class TabManager {
     });
 
     // hasInternalPreload はタブ生成時に固定される(preloadは後から変えられない)
+    const hibernated = background && !isInternal;
     const tab = {
       id,
       view,
       isInternal,
       hasInternalPreload: isInternal,
-      favicon: null,
+      // 休止中(まだ読み込んでいない)タブは、渡されたfavicon(セッション復元時の実データ)か、
+      // 無ければ同じオリジンの履歴から仮に推測しておく。実際に読み込まれれば
+      // page-favicon-updated で正しいものに置き換わる
+      favicon: hibernated ? initialFavicon || this.history.faviconForOrigin?.(url) || null : null,
       bookmarkHint: false, // 「Ctrl+Dでブックマーク」の案内を出しているか
       bookmarkHintListener: null, // 案内を出している間だけ張る input-event のリスナ
       mediaTimer: null, // 再生中に全フレームを見に行くタイマー
       isAudible: false, // 音声再生中か(タブのスピーカーアイコン用)
       // バックグラウンドで開いたタブは、実際に選ぶまで読み込まない(「タブを休止する」と同じ復元経路 = switchTab内)
-      hibernated: background && !isInternal,
-      hibernatedUrl: background && !isInternal ? url : null,
+      hibernated,
+      hibernatedUrl: hibernated ? url : null,
+      // 休止中に見せる仮タイトル(セッション復元時の実データ)。読み込まれれば実タイトルが優先される
+      hibernatedTitle: hibernated && initialTitle ? initialTitle : null,
       // ホイールクリック等で裏に開いた/セッション復元・休止復帰したタブが、見ていない/まだ
       // 触れていない間に自動再生を始めてしまわないよう、そのタブ自身への操作があるまでは
       // 再生が始まった瞬間に一時停止し続ける(ミュートはしない。ユーザーが触れれば以後は通常どおり)
@@ -960,24 +967,32 @@ class TabManager {
     this.isSwitchingProfile = false;
   }
 
-  // 現在開いているタブのURLとアクティブなタブを記録する(プロファイル切り替え前に呼ぶ)
+  // 現在開いているタブのURL・タイトル・favicon・アクティブなタブを記録する
+  // (プロファイル切り替え前に呼ぶ。タイトル/faviconは休止中タブの仮表示に使う)
   snapshotTabs() {
     return {
       tabs: this.tabs.map((tab) => ({
         url: tab.view.webContents.getURL(),
+        title: tab.view.webContents.getTitle(),
+        favicon: tab.favicon,
         active: tab.id === this.activeTabId,
       })),
     };
   }
 
   // snapshotTabs() で記録した構成を再現する(URLからの再読み込みで復元する)。
-  // フォーカスするタブ以外は裏で開いたタブと同じ扱い(不活性化+自動ミュート)にし、
-  // 見ていないタブが復帰直後に勝手に音を鳴らし始めないようにする
+  // フォーカスするタブ以外は裏で開いたタブと同じ扱い(不活性化+自動一時停止)にし、
+  // 見ていないタブが復帰直後に勝手に自動再生を始めないようにする。タイトル/faviconは
+  // 記録済みの実データをそのまま仮表示に使うので、読み込まなくてもURLではなく見た目が揃う
   restoreTabs(entries) {
     let activeId = null;
     for (const entry of entries ?? []) {
       if (!entry?.url) continue;
-      const tab = this.createTab(entry.url, { background: !entry.active });
+      const tab = this.createTab(entry.url, {
+        background: !entry.active,
+        initialTitle: entry.title,
+        initialFavicon: entry.favicon,
+      });
       if (entry.active) activeId = tab.id;
     }
     if (activeId) this.switchTab(activeId);
@@ -1176,7 +1191,7 @@ class TabManager {
         const savedAnywhere = isBookmarked || (!t.isInternal && this.bookmarks.existsAnywhere(url));
         return {
           id: t.id,
-          title: wc.getTitle() || (t.hibernated ? hostnameOf(t.hibernatedUrl) : '新しいタブ'),
+          title: wc.getTitle() || t.hibernatedTitle || (t.hibernated ? hostnameOf(t.hibernatedUrl) : '新しいタブ'),
           // 新しいタブページではアドレスバーを空にする(Chromeと同じ挙動)
           url: isNewTabUrl(url) ? '' : url,
           favicon: t.favicon,

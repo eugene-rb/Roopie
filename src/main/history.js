@@ -53,6 +53,26 @@ class History {
     this.store.save();
   }
 
+  // 同じオリジンの直近の履歴からfaviconを推測する(まだ読み込んでいない休止中タブの
+  // 仮アイコン用。完全一致より緩いが、faviconはオリジン単位でほぼ固定なので実用上十分)
+  faviconForOrigin(url) {
+    let origin;
+    try {
+      origin = new URL(url).origin;
+    } catch {
+      return null;
+    }
+    const entry = this.entries.find((e) => {
+      if (!e.favicon) return false;
+      try {
+        return new URL(e.url).origin === origin;
+      } catch {
+        return false;
+      }
+    });
+    return entry?.favicon ?? null;
+  }
+
   list(query = '', limit = 300) {
     const q = query.trim().toLowerCase();
     const matched = q

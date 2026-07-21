@@ -46,6 +46,8 @@ const DEFAULT_SETTINGS = {
   toolbarItems: defaultToolbarItems(), // ツールバーのユーティリティ項目の表示/順序
   // ツールバーに直接表示する拡張機能のID(Edge風。それ以外はパズルボタンのメニューから使う)
   pinnedExtensions: [],
+  // 削除せずに一時的に無効化している拡張機能のID(設定画面のトグルから)
+  disabledExtensions: [],
   // 自動入力(住所・個人情報/お支払い方法)のON/OFF
   autofillAddresses: true,
   autofillCards: true,
@@ -427,7 +429,7 @@ browser.createWindow = ({ incognito = false, url, x, y, profileId, restoreTabs }
     tabManager.onTabCreated = (tab) => browser.extensions.addTab(tab.view.webContents);
     tabManager.onTabSelected = (tab) => browser.extensions.selectTab(tab.view.webContents);
     browser.extensions
-      .attach(session, profile.id)
+      .attach(session, profile.id, bundle.settings.data.disabledExtensions ?? [])
       .catch((err) => console.error('拡張機能サポートの初期化に失敗:', err));
   }
 
