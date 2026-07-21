@@ -1,19 +1,21 @@
 // バックグラウンドで開いたタブ(ホイールクリック等)がユーザーの見ていない/まだ触れていない間に
-// 勝手に音を鳴らし始めないことの検証(再利用可能)。実行: npx electron scripts/test-autoplay-policy.js
+// 自動再生を始めても、始まった瞬間に一時停止されることの検証(再利用可能)。
+// 実行: npx electron scripts/test-autoplay-policy.js
 //
 // 検証の結果、Electronの autoplayPolicy: 'document-user-activation-required' は
 // メインプロセスからの loadURL() による遷移(=タブの新規作成やタブ復帰)には効かず、
 // 実際のサイト(http/https)では自動再生を止められないことが分かった
 // (data: URLでは効くが、これは実運用では起きないケース)。
-// そのため、裏で開いたタブは作成時にミュートしておき、そのタブ自身への実際の操作
-// (クリック・キー入力)があった時点で初めて解除する方式(tab.autoMuted)で確実に抑える。
+// ミュートで塞ぐ方式も試したが「勝手にミュートにされるのは嫌」というフィードバックにより、
+// 実際に再生を止める(pause)方式に変更した。media-started-playing をきっかけに
+// video/audioを一時停止し、そのタブ自身への実際の操作(クリック等)があるまでそれを続ける。
 const { app } = require('electron');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const http = require('http');
 
-const PORT = 8947;
+const PORT = 8951;
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'roopie-ui-'));
 app.setPath('userData', tmp);
 
@@ -27,11 +29,21 @@ function check(name, actual, expected) {
   if (!ok) failed++;
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const js = (wc, code) => wc.executeJavaScript(code, false);
 
 function clickAt(wc, x, y) {
   wc.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 });
   wc.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount: 1 });
 }
+
+// YouTubeなど実サイトが行うのと同じ「ページ自身のスクリプトが読み込み時にplay()を呼ぶ」形を
+// 再現する(<audio autoplay>属性はブラウザネイティブの、より厳格な自動再生ゲートを通るため、
+// document-user-activation-requiredでもloadURL()由来のナビゲーションでは素通りしてしまう
+// script実行由来のplay()とは挙動が違う。実際のバグ報告と同じ経路で検証する)
+const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+const AUTOPLAY_PAGE = `<!doctype html><meta charset="utf-8"><title>autoplay</title>
+<audio id="a" loop src="${SILENT_WAV}"></audio>
+<script>document.getElementById('a').play().catch(() => {});</script>`;
 
 app.whenReady().then(async () => {
   try {
@@ -41,7 +53,7 @@ app.whenReady().then(async () => {
     const server = http
       .createServer((req, res) => {
         res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-        res.end(`<!doctype html><meta charset="utf-8"><title>ページ${req.url}</title>本文`);
+        res.end(AUTOPLAY_PAGE);
       })
       .listen(PORT);
 
@@ -51,36 +63,46 @@ app.whenReady().then(async () => {
     await sleep(300);
     const initialActiveId = tm.activeTabId;
 
-    // ホイールクリック相当: background:true で裏に開いたタブは作成直後からミュートされる
+    // ホイールクリック相当: background:true で裏に開いたタブは、切り替えるまで読み込まれない
     const bg = tm.createTab(`http://localhost:${PORT}/bg`, { background: true });
-    check('裏で開いた直後からミュートされる', bg.view.webContents.isAudioMuted(), true);
-    check('自動ミュート中フラグが立つ', bg.autoMuted, true);
+    check('自動一時停止フラグが立つ', bg.autoPauseMedia, true);
     check('裏で開いてもアクティブタブは変わらない', tm.activeTabId, initialActiveId);
 
-    // タブへ切り替えて読み込ませても、ページ自身への操作がなければミュートのまま
+    // タブへ切り替える → ここで初めて読み込まれ、ページのaudio autoplayが動き出す
     tm.switchTab(bg.id);
     await Promise.race([new Promise((r) => bg.view.webContents.once('did-finish-load', r)), sleep(6000)]);
-    await sleep(300);
-    check('切り替えて読み込んだだけではミュート解除されない', bg.view.webContents.isAudioMuted(), true);
+    await sleep(500); // media-started-playing → 一時停止までの反映を待つ
 
-    // そのタブの中身へ実際に触れる(クリック)と、そこで初めてミュートが解ける
+    const pausedAfterAutoplay = await js(bg.view.webContents, `document.getElementById('a').paused`);
+    check('自動再生されても一時停止される(ミュートはしない)', pausedAfterAutoplay, true);
+    check('ミュートはされていない', bg.view.webContents.isAudioMuted(), false);
+
+    // そのタブの中身へ実際に触れる(クリック)と、以後は自動一時停止の対象から外れる
     clickAt(bg.view.webContents, 10, 10);
     await sleep(200);
-    check('タブの中身をクリックするとミュートが解ける', bg.view.webContents.isAudioMuted(), false);
-    check('自動ミュートフラグも下りる', bg.autoMuted, false);
+    check('クリックすると自動一時停止フラグが下りる', bg.autoPauseMedia, false);
 
-    // 比較用: 裏で開かず(前面で)普通に作ったタブは自動ミュートしない
+    // 以後、その要素を自分で再生してももう止められない
+    await js(bg.view.webContents, `document.getElementById('a').play()`);
+    await sleep(400);
+    const playingAfterInteraction = await js(bg.view.webContents, `!document.getElementById('a').paused`);
+    check('操作後に自分で再生すればそのまま再生され続ける', playingAfterInteraction, true);
+
+    // 比較用: 前面で開いた通常のタブは自動一時停止の対象にならない。
+    // (このテスト用オリジンは自動再生ポリシー自体にも阻まれ実際には再生できないため、
+    //  再生の有無ではなく「一時停止処理が呼ばれないこと」を直接確かめる)
+    let pauseCalled = false;
+    const originalPause = tm.pauseAutoplayedMedia.bind(tm);
+    tm.pauseAutoplayedMedia = (t) => {
+      pauseCalled = true;
+      return originalPause(t);
+    };
     const fg = tm.createTab(`http://localhost:${PORT}/fg`);
-    check('前面で開いたタブは自動ミュートしない', fg.view.webContents.isAudioMuted(), false);
-    check('前面タブに自動ミュートフラグは立たない', fg.autoMuted, false);
-
-    // 手動でミュートボタンを押した場合は、自動ミュートの管理から外れる
-    // (裏で別タブを開いて手動ミュート→そのままクリックしても再生し始めたりしない)
-    const bg2 = tm.createTab(`http://localhost:${PORT}/bg2`, { background: true });
-    tm.toggleMute(bg2.id); // ミュート→解除(手動操作)
-    tm.toggleMute(bg2.id); // 解除→再ミュート
-    check('手動トグル後は自動ミュート管理から外れる', bg2.autoMuted, false);
-    check('手動操作の結果どおりミュートされている', bg2.view.webContents.isAudioMuted(), true);
+    check('前面で開いたタブに自動一時停止フラグは立たない', fg.autoPauseMedia, false);
+    fg.view.webContents.emit('media-started-playing'); // 実際に再生が始まった状況を模す
+    await sleep(200);
+    check('前面タブでは一時停止処理が呼ばれない', pauseCalled, false);
+    tm.pauseAutoplayedMedia = originalPause;
 
     server.close();
     browser.flushAll();

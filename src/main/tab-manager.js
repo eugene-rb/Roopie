@@ -61,6 +61,19 @@ const MEDIA_PROBE = `(() => {
   };
 })()`;
 
+// 裏で開いた/復元・休止復帰したタブが、まだ触れられていないうちに自動再生を始めた瞬間に
+// 流し込む。再生中のvideo/audioを全フレーム(shadow DOM含む)から探して止める
+// 既にミュートされている(装飾目的の無音背景動画など)ものまで止めると余計な副作用になるため、
+// 音を伴って再生されうるものだけを対象にする
+const PAUSE_ALL_MEDIA = `(() => {
+  const walk = (root, depth) => {
+    if (!root || depth > 8) return;
+    for (const el of root.querySelectorAll('video, audio')) if (!el.paused && !el.muted) el.pause();
+    for (const el of root.querySelectorAll('*')) if (el.shadowRoot) walk(el.shadowRoot, depth + 1);
+  };
+  walk(document, 0);
+})()`;
+
 // 1フレームへの問い合わせに待つ上限。応答を返さないフレーム(広告等)があるため必須
 const PROBE_TIMEOUT = 800;
 
@@ -272,14 +285,13 @@ class TabManager {
       hibernated: background && !isInternal,
       hibernatedUrl: background && !isInternal ? url : null,
       // ホイールクリック等で裏に開いた/セッション復元・休止復帰したタブが、見ていない/まだ
-      // 触れていない間に勝手に音を鳴らし始めないようにする(autoplayPolicyだけでは、
-      // メインプロセスからのloadURLによる遷移では自動再生が止まらないため、ミュートで抑える)
-      autoMuted: background,
-      autoMutedListener: null,
+      // 触れていない間に自動再生を始めてしまわないよう、そのタブ自身への操作があるまでは
+      // 再生が始まった瞬間に一時停止し続ける(ミュートはしない。ユーザーが触れれば以後は通常どおり)
+      autoPauseMedia: background,
+      autoPauseListener: null,
     };
     this.tabs.push(tab);
     this.window.contentView.addChildView(view);
-    if (tab.autoMuted) view.webContents.setAudioMuted(true);
 
     this.attachEvents(tab);
     const prevActiveTabId = this.activeTabId;
@@ -294,7 +306,7 @@ class TabManager {
     if (background && this.activeTabId !== prevActiveTabId) {
       this.switchTab(prevActiveTabId);
     }
-    if (tab.autoMuted) this.armAutoUnmute(tab);
+    if (tab.autoPauseMedia) this.armAutoPauseRelease(tab);
     if (!tab.hibernated) view.webContents.loadURL(url);
     if (background) {
       // 見えない位置に置いたままタブバーにだけ足す(今見ているページから離れない)
@@ -424,7 +436,11 @@ class TabManager {
 
     // Chromiumが再生の開始/停止を教えてくれる(iframeの中でもshadow DOMの中でも飛ぶ)。
     // これをきっかけに全フレームを見に行く
-    wc.on('media-started-playing', () => this.startMediaWatch(tab));
+    wc.on('media-started-playing', () => {
+      // まだ触れていない裏タブ/復元タブが自動再生を始めた瞬間に止める(ミュートはしない)
+      if (tab.autoPauseMedia) this.pauseAutoplayedMedia(tab);
+      this.startMediaWatch(tab);
+    });
     wc.on('media-paused', () => this.probeMedia(tab));
 
     // タブのスピーカーアイコン用。実際に音が鳴っているかどうかはこちらの方が正確
@@ -594,27 +610,34 @@ class TabManager {
     }
   }
 
-  // 裏で開いた/復元・休止復帰したタブのミュートを、そのタブ自身への実際の操作
-  // (クリック・キー入力)があった時点で自動的に解除する。タブバー側のクリック(切り替え)は
+  // 裏で開いた/復元・休止復帰したタブが自動再生を始めても、そのタブ自身への実際の操作
+  // (クリック・キー入力)があるまでは一時停止し続ける。タブバー側のクリック(切り替え)は
   // ページへの操作ではないため対象外(=切り替えただけでは解除されない)
-  armAutoUnmute(tab) {
+  armAutoPauseRelease(tab) {
     const wc = tab.view.webContents;
-    tab.autoMutedListener = (_e, input) => {
-      if (input.type === 'mouseDown' || input.type === 'keyDown') this.disarmAutoUnmute(tab);
+    tab.autoPauseListener = (_e, input) => {
+      if (input.type === 'mouseDown' || input.type === 'keyDown') this.disarmAutoPause(tab);
     };
-    wc.on('input-event', tab.autoMutedListener);
+    wc.on('input-event', tab.autoPauseListener);
   }
 
-  disarmAutoUnmute(tab) {
-    if (!tab.autoMuted) return;
-    tab.autoMuted = false;
+  disarmAutoPause(tab) {
+    if (!tab.autoPauseMedia) return;
+    tab.autoPauseMedia = false;
     const wc = tab.view.webContents;
-    if (!wc.isDestroyed()) {
-      wc.setAudioMuted(false);
-      if (tab.autoMutedListener) wc.off('input-event', tab.autoMutedListener);
+    if (!wc.isDestroyed() && tab.autoPauseListener) wc.off('input-event', tab.autoPauseListener);
+    tab.autoPauseListener = null;
+  }
+
+  // autoPauseMedia中のタブで再生が始まった瞬間に呼ぶ。全フレーム(shadow DOM含む)を
+  // 見て、再生中のvideo/audioを一時停止する(ミュートと違い実際に止めるので、
+  // 切り替えて見たときに「一時停止中」の状態から自分で再生ボタンを押せる)
+  pauseAutoplayedMedia(tab) {
+    const wc = tab.view.webContents;
+    if (wc.isDestroyed()) return;
+    for (const frame of wc.mainFrame?.framesInSubtree ?? []) {
+      frame.executeJavaScript(PAUSE_ALL_MEDIA, true).catch(() => {});
     }
-    tab.autoMutedListener = null;
-    this.sendState();
   }
 
   // ---- 閉じたタブを開き直す(Chromeの Ctrl+Shift+T 相当) ----
@@ -660,15 +683,8 @@ class TabManager {
   }
 
   toggleMute(id) {
-    const tab = this.getTab(id);
-    const wc = tab?.view.webContents;
+    const wc = this.getTab(id)?.view.webContents;
     if (!wc || wc.isDestroyed()) return;
-    // 手動で切り替えたら、自動ミュートの管理下からは外す(以後は自動で解除されない)
-    if (tab.autoMuted) {
-      tab.autoMuted = false;
-      if (tab.autoMutedListener) wc.off('input-event', tab.autoMutedListener);
-      tab.autoMutedListener = null;
-    }
     wc.setAudioMuted(!wc.isAudioMuted());
     this.sendState();
   }
