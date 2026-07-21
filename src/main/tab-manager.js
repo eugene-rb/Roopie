@@ -1,4 +1,4 @@
-const { WebContentsView } = require('electron');
+const { WebContentsView, screen } = require('electron');
 const path = require('path');
 const { attachContextMenu } = require('./context-menu');
 const { searchUrl, DEFAULT_ENGINE } = require('./search-engines');
@@ -11,6 +11,10 @@ const DEFAULT_CHROME_HEIGHT = 84;
 // Zen Browser風のレイアウト: ページを角丸のカードとして浮かせ、周囲に余白(額縁)を作る
 const CONTENT_MARGIN = 8;
 const CONTENT_RADIUS = 10;
+// F11などOS全画面中、上端からこの距離まで近づいたらタブバー/ツールバーを表示する。
+// 一度表示したら、この距離(ツールバーの高さぶん余裕を持たせる)より離れるまで隠さない
+const FULLSCREEN_REVEAL_ZONE = 6;
+const FULLSCREEN_HIDE_MARGIN = 24;
 const ZOOM_LEVELS = [-3, -2, -1.5, -1, -0.5, 0, 0.5, 1, 1.5, 2, 2.5, 3];
 
 const INTERNAL_PRELOAD = path.join(__dirname, '..', 'preload', 'internal-preload.js');
@@ -183,9 +187,53 @@ class TabManager {
     this.overlayVisible = false;
     this.htmlFullscreenTabId = null; // ページ側の全画面(YouTube等)にしているタブ
     this.closedTabs = []; // 閉じたタブの履歴({ url, index })。新しいものが末尾
+    this.fullscreenChromeRevealed = false; // OS全画面(F11)中、マウス接近でタブバー/ツールバーを一時表示しているか
+    this._fullscreenPollTimer = null;
 
-    for (const event of ['resize', 'maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen']) {
+    for (const event of ['resize', 'maximize', 'unmaximize']) {
       window.on(event, () => this.layout());
+    }
+    window.on('enter-full-screen', () => {
+      this.fullscreenChromeRevealed = false;
+      this.startFullscreenChromeWatch();
+      this.layout();
+    });
+    window.on('leave-full-screen', () => {
+      this.stopFullscreenChromeWatch();
+      this.fullscreenChromeRevealed = false;
+      this.layout();
+    });
+    window.on('closed', () => this.stopFullscreenChromeWatch());
+  }
+
+  // OS全画面(F11)中はページを画面いっぱいに広げ、タブバー/ツールバーを隠す。
+  // マウスカーソルが上端に近づいた間だけ layout() を通じて一時的に出す
+  startFullscreenChromeWatch() {
+    this.stopFullscreenChromeWatch();
+    this._fullscreenPollTimer = setInterval(() => {
+      if (this.window.isDestroyed() || !this.window.isFullScreen()) {
+        this.stopFullscreenChromeWatch();
+        return;
+      }
+      const bounds = this.window.getBounds();
+      const cursor = screen.getCursorScreenPoint();
+      const withinWindow = cursor.x >= bounds.x && cursor.x <= bounds.x + bounds.width;
+      const relativeY = cursor.y - bounds.y;
+      // 一度出したら、隠すときはツールバーの高さぶん余裕を持たせて判定する(端でのちらつき防止)
+      const shouldReveal = this.fullscreenChromeRevealed
+        ? withinWindow && relativeY < this.chromeHeight + FULLSCREEN_HIDE_MARGIN
+        : withinWindow && relativeY < FULLSCREEN_REVEAL_ZONE;
+      if (shouldReveal !== this.fullscreenChromeRevealed) {
+        this.fullscreenChromeRevealed = shouldReveal;
+        this.layout();
+      }
+    }, 80);
+  }
+
+  stopFullscreenChromeWatch() {
+    if (this._fullscreenPollTimer) {
+      clearInterval(this._fullscreenPollTimer);
+      this._fullscreenPollTimer = null;
     }
   }
 
@@ -215,6 +263,9 @@ class TabManager {
       bookmarkHintListener: null, // 案内を出している間だけ張る input-event のリスナ
       mediaTimer: null, // 再生中に全フレームを見に行くタイマー
       isAudible: false, // 音声再生中か(タブのスピーカーアイコン用)
+      // バックグラウンドで開いたタブは、実際に選ぶまで読み込まない(「タブを休止する」と同じ復元経路 = switchTab内)
+      hibernated: background && !isInternal,
+      hibernatedUrl: background && !isInternal ? url : null,
     };
     this.tabs.push(tab);
     this.window.contentView.addChildView(view);
@@ -228,7 +279,7 @@ class TabManager {
     if (background && this.activeTabId !== prevActiveTabId) {
       this.switchTab(prevActiveTabId);
     }
-    view.webContents.loadURL(url);
+    if (!tab.hibernated) view.webContents.loadURL(url);
     if (background) {
       // 見えない位置に置いたままタブバーにだけ足す(今見ているページから離れない)
       this.updateVisibility();
@@ -901,10 +952,12 @@ class TabManager {
     // ページ側の全画面(YouTube等の全画面ボタン)の間は、ページだけをウィンドウ一杯に広げる。
     // 余白・角丸・ツールバー・タブバー・サイドパネルの領域をすべて0にすれば同じ経路で描ける
     const fs = this.htmlFullscreenTabId != null;
+    // OS全画面(F11)中も同様にタブバー/ツールバーを隠すが、マウスが上端に近づいている間だけは出す
+    const hideChrome = fs || (this.window.isFullScreen() && !this.fullscreenChromeRevealed);
     const m = fs ? 0 : this.margin;
     const radius = fs ? 0 : m ? CONTENT_RADIUS : 0;
-    const chromeLeft = fs ? 0 : this.chromeLeft;
-    const chromeHeight = fs ? 0 : this.chromeHeight;
+    const chromeLeft = hideChrome ? 0 : this.chromeLeft;
+    const chromeHeight = hideChrome ? 0 : this.chromeHeight;
 
     // ページ・サイドパネルを載せる領域(周囲に余白を残す。縦タブ時は左側にも余白を空ける)
     const areaX = m + chromeLeft;
@@ -1047,6 +1100,7 @@ class TabManager {
       activeTabId: this.activeTabId,
       splitTabId: this.splitTabId,
       splitDirection: this.splitDirection,
+      windowId: this.window.id,
       tabs: this.tabs.map((t) => {
         const wc = t.view.webContents;
         const url = wc.getURL();
@@ -1055,7 +1109,7 @@ class TabManager {
         const savedAnywhere = isBookmarked || (!t.isInternal && this.bookmarks.existsAnywhere(url));
         return {
           id: t.id,
-          title: wc.getTitle() || '新しいタブ',
+          title: wc.getTitle() || (t.hibernated ? hostnameOf(t.hibernatedUrl) : '新しいタブ'),
           // 新しいタブページではアドレスバーを空にする(Chromeと同じ挙動)
           url: isNewTabUrl(url) ? '' : url,
           favicon: t.favicon,
@@ -1078,6 +1132,15 @@ class TabManager {
 
 function isInternalUrl(url) {
   return typeof url === 'string' && url.startsWith(INTERNAL_SCHEME);
+}
+
+// 未読み込み(休止中)のタブに出す仮のタイトル。読み込めば実際のタイトルに置き換わる
+function hostnameOf(url) {
+  try {
+    return new URL(url).hostname || url;
+  } catch {
+    return url;
+  }
 }
 
 // roopie:// はstandardスキームのため、読み込み後は末尾に "/" が付く

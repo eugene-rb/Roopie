@@ -17,6 +17,12 @@ const findCount = $('find-count');
 
 let tabState = { tabs: [], activeTabId: null };
 let bookmarks = [];
+let mediaList = []; // タブバーの再生ボタン用(どのタブが再生/一時停止中か)
+
+window.roopie.onMediaState((next) => {
+  mediaList = next || [];
+  renderTabs();
+});
 
 // ---- タブ ----
 window.roopie.onTabsState((state) => {
@@ -70,6 +76,21 @@ function renderTabs() {
     title.className = 'title';
     title.textContent = tab.title;
     tabEl.appendChild(title);
+
+    const mediaEntry = mediaList.find((m) => m.tabId === tab.id);
+    if (mediaEntry) {
+      const playBtn = document.createElement('button');
+      playBtn.className = 'play-btn';
+      playBtn.title = mediaEntry.playing ? 'クリックで一時停止' : 'クリックで再生';
+      playBtn.innerHTML = mediaEntry.playing
+        ? '<svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>'
+        : '<svg viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></svg>';
+      playBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        window.roopie.mediaToggle(tab.id);
+      });
+      tabEl.appendChild(playBtn);
+    }
 
     if (tab.isAudible || tab.isMuted) {
       const audioBtn = document.createElement('button');
@@ -194,6 +215,9 @@ function attachTabDrag(tabEl, tab) {
     // FirefoxやChromiumでdragを成立させるにはデータが必要。
     // ページ領域のドロップゾーン(オーバーレイ)はこのIDを読んで分割対象を決める
     e.dataTransfer.setData('text/plain', String(tab.id));
+    // 別ウィンドウのタブバーへドロップされたとき、どのウィンドウのどのタブかを伝える
+    // (draggingId はレンダラーごとのローカル変数のため、ウィンドウをまたぐと相手側からは見えない)
+    e.dataTransfer.setData('application/x-roopie-tab', JSON.stringify({ tabId: tab.id, windowId: tabState.windowId }));
     // つまみ上げたタブは畳んで隙間を消す。ドラッグ画像を撮り終える次フレームで畳む
     requestAnimationFrame(() => tabEl.classList.add('dragging', 'drag-collapsed'));
     // ページ領域にドロップゾーンを出す(分割 or 切り離しの受け皿)
@@ -215,6 +239,8 @@ function attachTabDrag(tabEl, tab) {
 // どちらも同じスロットで挿入先をプレビューし、既存タブの間に差し込める
 function dragMode(e) {
   if (draggingId !== null) return 'reorder';
+  // 自分のIDが無いのに専用MIMEがある = 別ウィンドウから来たタブそのもの
+  if ([...e.dataTransfer.types].includes('application/x-roopie-tab')) return 'foreign-tab';
   if ([...e.dataTransfer.types].includes('text/plain')) return 'search';
   return null;
 }
@@ -237,7 +263,7 @@ tabBarEl.addEventListener('dragover', (e) => {
   const mode = dragMode(e);
   if (!mode) return;
   e.preventDefault();
-  e.dataTransfer.dropEffect = mode === 'reorder' ? 'move' : 'copy';
+  e.dataTransfer.dropEffect = mode === 'search' ? 'copy' : 'move';
   // 検索ドロップのときはバー全体もハイライトして「ここに落とせる」と分かるようにする
   tabBarEl.classList.toggle('drag-search', mode === 'search');
   showDropSlot(computeSlotIndex(e));
@@ -259,6 +285,11 @@ tabBarEl.addEventListener('drop', (e) => {
     // 残りの後始末(dragging解除・draggingId=null)は直後の dragend が行う
     justDroppedId = String(draggingId);
     window.roopie.moveTab(draggingId, index);
+    hideDropSlot();
+    tabBarEl.classList.remove('drag-search');
+  } else if (mode === 'foreign-tab') {
+    const { tabId, windowId } = JSON.parse(e.dataTransfer.getData('application/x-roopie-tab'));
+    window.roopie.moveTabFromWindow(windowId, tabId, index);
     hideDropSlot();
     tabBarEl.classList.remove('drag-search');
   } else {

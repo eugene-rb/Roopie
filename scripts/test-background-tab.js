@@ -74,27 +74,49 @@ app.whenReady().then(async () => {
   // 大きさが 0x0 のままだと、幅0のビューポートで読み込まれてレイアウトが崩れる
   const openedBounds = opened.view.getBounds();
   check('裏で開いたタブにもページと同じ大きさが与えられる', openedBounds.width > 100 && openedBounds.height > 100, true);
-  // 注: 非表示のViewへ executeJavaScript を投げると返ってこないことがあるため、
-  // ここではビューポートをページ側に問い合わせず、Viewの大きさだけを確認する
-  // (この性質があるので probeMedia の問い合わせにはタイムアウトが必須)
-  check('裏で開いたタブもURLを読み込む', opened.view.webContents.getURL().endsWith('/other'), true);
+  // 裏で開いたタブは、実際にそのタブへ移るまで読み込まない(不活性化)
+  check('裏で開いた直後はまだ読み込まない', opened.view.webContents.getURL(), '');
+  check('休止扱いになっている', opened.hibernated, true);
+  check('復元用のURLを覚えている', opened.hibernatedUrl.endsWith('/other'), true);
 
   // 通常の左クリック+target=_blank相当(スクリプトのwindow.open)→ 手前で開く
   await first.view.webContents.executeJavaScript(`window.open('http://localhost:${PORT}/other', '_blank')`, true);
   await sleep(600);
   check('window.openで開いたタブは手前に来る', tabManager.activeTabId, tabManager.tabs[2].id);
 
-  // 裏のタブへは手動で切り替えられる
+  // 裏のタブへは手動で切り替えられる → その時点で初めて読み込まれる
   tabManager.switchTab(opened.id);
-  await sleep(600);
+  await Promise.race([new Promise((r) => opened.view.webContents.once('did-finish-load', r)), sleep(8000)]);
+  await sleep(300);
   check('裏のタブへ切り替えられる', tabManager.activeTabId, opened.id);
   check('切り替えたタブが表示される', opened.view.getVisible(), true);
+  check('切り替えを機にURLが読み込まれる', opened.view.webContents.getURL().endsWith('/other'), true);
+  check('休止フラグも解除される', opened.hibernated, false);
   // 表に出したらページ側のビューポートも正しい大きさになっている
   const viewport = await Promise.race([
     opened.view.webContents.executeJavaScript('[window.innerWidth, window.innerHeight]', true),
     sleep(4000).then(() => [0, 0]),
   ]);
   check('表に出したタブのビューポートが0でない', viewport[0] > 100 && viewport[1] > 100, true);
+
+  // ---- 休止中タブの仮タイトル(このハーネスはchrome UIのHTMLを読み込んでいないため、
+  //      DOMではなくtabs:stateの送信内容そのものを見る) ----
+  let lastState = null;
+  const originalSend = window.webContents.send.bind(window.webContents);
+  window.webContents.send = (channel, payload) => {
+    if (channel === 'tabs:state') lastState = payload;
+    return originalSend(channel, payload);
+  };
+  const dormant = tabManager.createTab(`http://localhost:${PORT}/other`, { background: true });
+  await sleep(300);
+  const dormantState = lastState?.tabs.find((t) => t.id === dormant.id);
+  check('休止中タブはホスト名を仮タイトルに使う', dormantState?.title, 'localhost');
+  window.webContents.send = originalSend;
+
+  // ---- 内部ページは裏で開いても休止させない ----
+  const internalBg = tabManager.createTab('roopie://newtab', { background: true });
+  await sleep(300);
+  check('内部ページは裏で開いても休止しない', internalBg.hibernated, false);
 
   server.close();
   console.log(failed ? `\n${failed}件失敗` : '\n全テスト成功');

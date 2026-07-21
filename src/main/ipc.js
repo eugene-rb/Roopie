@@ -163,12 +163,17 @@ function registerIpc() {
     const ctx = ctxOf(e);
     if (!ctx) return;
     ctx.tabManager.hideDropZones();
-    // split:drop が別Viewから遅れて届く可能性があるため、確定を少し遅らせる
+    // split:drop や tabs:move-from-window が別Viewから遅れて届く可能性があるため、確定を少し遅らせる
     setTimeout(() => {
       const tabManager = ctx.tabManager;
       const zone = ctx.pendingSplitZone;
       ctx.pendingSplitZone = null;
       ctx.draggingTabId = null;
+      if (ctx.tabConsumedBy === id) {
+        // 別ウィンドウのタブバーへドロップされ、そちら側で既に処理済み(タブは閉じられている)
+        ctx.tabConsumedBy = null;
+        return;
+      }
       if (zone) {
         tabManager.dropSplit(id, zone);
       } else if (info?.belowBar && tabManager.getTab(id) && tabManager.tabs.length > 1) {
@@ -178,6 +183,23 @@ function registerIpc() {
         browser.createWindow({ url, x: info.screenX, y: info.screenY, profileId: ctx.profileId });
       }
     }, 40);
+  });
+
+  // 別ウィンドウのタブバーへドロップされたタブを、このウィンドウへ移す
+  // (WebContentsViewはウィンドウをまたいで再利用できないため、URLだけ引き継いで元は閉じ・こちらで開き直す)
+  ipcMain.on('tabs:move-from-window', (e, sourceWindowId, sourceTabId, toIndex) => {
+    const targetCtx = ctxOf(e);
+    if (!targetCtx) return;
+    const sourceCtx = windows.all().find((c) => c.window.id === sourceWindowId);
+    if (!sourceCtx || sourceCtx === targetCtx) return;
+    const tab = sourceCtx.tabManager.getTab(sourceTabId);
+    if (!tab) return;
+    const url = tab.view.webContents.getURL();
+    sourceCtx.tabConsumedBy = sourceTabId;
+    sourceCtx.tabManager.closeTab(sourceTabId);
+    const newTab = targetCtx.tabManager.createTab(url);
+    targetCtx.tabManager.moveTab(newTab.id, toIndex);
+    targetCtx.window.focus();
   });
   ipcMain.on('tabs:navigate', (e, input) => tabsOf(e)?.navigate(input));
   ipcMain.on('tabs:back', (e) => tabsOf(e)?.goBack());

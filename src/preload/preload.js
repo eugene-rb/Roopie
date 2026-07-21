@@ -427,6 +427,8 @@ contextBridge.exposeInMainWorld('roopie', {
   closeTab: (id) => ipcRenderer.send('tabs:close', id),
   switchTab: (id) => ipcRenderer.send('tabs:switch', id),
   moveTab: (id, toIndex) => ipcRenderer.send('tabs:move', id, toIndex),
+  moveTabFromWindow: (sourceWindowId, tabId, toIndex) =>
+    ipcRenderer.send('tabs:move-from-window', sourceWindowId, tabId, toIndex),
   toggleMuteTab: (id) => ipcRenderer.send('tabs:toggle-mute', id),
   // タブのドラッグ開始/終了(ページ領域のドロップゾーン表示と、分割 or 切り離しの確定)
   tabDragStart: (id) => ipcRenderer.send('tabs:drag-start', id),
@@ -477,6 +479,9 @@ contextBridge.exposeInMainWorld('roopie', {
 
   // メインプロセスからの通知
   onTabsState: (cb) => ipcRenderer.on('tabs:state', (_e, state) => cb(state)),
+  // タブバーの再生ボタン用(どのタブが再生中かだけ知れればよい)
+  onMediaState: (cb) => ipcRenderer.on('media:state', (_e, state) => cb(state)),
+  mediaToggle: (tabId) => ipcRenderer.send('media:control', tabId, 'toggle'),
   onBookmarksState: (cb) => ipcRenderer.on('bookmarks:state', (_e, items) => cb(items)),
   onProfilesState: (cb) => ipcRenderer.on('profiles:state', (_e, state) => cb(state)),
   onDownloadsState: (cb) => ipcRenderer.on('downloads:state', (_e, state) => cb(state)),
