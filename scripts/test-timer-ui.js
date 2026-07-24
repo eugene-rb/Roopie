@@ -210,6 +210,16 @@ app.whenReady().then(async () => {
     await sleep(400);
     check('フロートのラップボタンで記録が増える', bundle.timers.find(sw.id).laps.length, 2);
 
+    // カウントダウンもフロートから直接一時停止・再開できる(行が消えないこと)
+    await clickIn(ctx.timerPanel.view, `.timerp-row[data-type="countdown"] .timerp-circle`);
+    await sleep(500);
+    check('フロートからカウントダウンを一時停止できる', bundle.timers.find(preset.id).status, 'paused');
+    check('一時停止してもカウントダウンの行は残る', await exists(fWc, `.timerp-row[data-type="countdown"]`), true);
+    check('一時停止中は再開ボタンになる', await exists(fWc, `.timerp-row[data-type="countdown"] .timerp-circle.paused`), true);
+    await clickIn(ctx.timerPanel.view, `.timerp-row[data-type="countdown"] .timerp-circle`);
+    await sleep(500);
+    check('フロートからそのまま再開できる', bundle.timers.find(preset.id).status, 'running');
+
     // フロート上で一時停止しても行は消えない(消えると再開できなくなる)
     await clickIn(ctx.timerPanel.view, `.timerp-row[data-type="stopwatch"] .timerp-circle`);
     await sleep(500);

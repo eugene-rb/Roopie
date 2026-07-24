@@ -4042,6 +4042,9 @@ select.row-btn {
   width: 34px;
   height: 34px;
   transform: rotate(-90deg);
+  /* SVGのルート要素は矩形全体でクリックを受けるため、これが無いと下の一時停止ボタンを
+     覆ってしまい「カウントダウンだけフロートから止められない」状態になる */
+  pointer-events: none;
 }
 
 .timerp-ring-track {
