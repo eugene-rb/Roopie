@@ -88,14 +88,24 @@ function showWebPanelMenu(panel, id) {
 function showTimerMenu(bundle, id) {
   const timer = bundle?.timers.list().find((t) => t.id === id);
   if (!timer) return;
+  const kind = timer.type === 'clock' ? 'アラーム' : timer.type === 'stopwatch' ? 'ストップウォッチ' : 'タイマー';
   const menu = new Menu();
   if (timer.status !== 'idle') {
     menu.append(new MenuItem({ label: 'リセット', click: () => bundle.timers.reset(id) }));
   }
+  // フローティング表示への明示ピン。ONにすると格納中/他セクション表示中でも隅に出し続ける
+  menu.append(
+    new MenuItem({
+      label: 'フローティング表示に固定',
+      type: 'checkbox',
+      checked: !!timer.float,
+      click: () => bundle.timers.update(id, { float: !timer.float }),
+    })
+  );
   menu.append(
     new MenuItem({
       label: '複製',
-      click: () => bundle.timers.add({ ...timer, name: `${timer.name || 'タイマー'}のコピー` }),
+      click: () => bundle.timers.add({ ...timer, name: `${timer.name || kind}のコピー` }),
     })
   );
   menu.append(new MenuItem({ type: 'separator' }));

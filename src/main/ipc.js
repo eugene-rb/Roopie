@@ -473,12 +473,19 @@ function registerIpc() {
 
   // ---- タイマー(プロファイル単位のデータCRUD) ----
   ipcMain.handle('timer:list', (e) => bundleOf(e)?.timers.list() ?? []);
-  ipcMain.on('timer:add', (e, payload) => bundleOf(e)?.timers.add(payload));
+  // プリセット(1分/3分…)やストップウォッチの「スタート」は追加と同時に走り出す
+  ipcMain.on('timer:add', (e, payload) => {
+    const timers = bundleOf(e)?.timers;
+    const created = timers?.add(payload);
+    if (created && payload?.autoStart) timers.start(created.id);
+  });
   ipcMain.on('timer:update', (e, id, patch) => bundleOf(e)?.timers.update(id, patch));
   ipcMain.on('timer:remove', (e, id) => bundleOf(e)?.timers.remove(id));
   ipcMain.on('timer:start', (e, id) => bundleOf(e)?.timers.start(id));
   ipcMain.on('timer:pause', (e, id) => bundleOf(e)?.timers.pause(id));
   ipcMain.on('timer:reset', (e, id) => bundleOf(e)?.timers.reset(id));
+  ipcMain.on('timer:lap', (e, id) => bundleOf(e)?.timers.lap(id));
+  ipcMain.on('timer:add-time', (e, id, deltaMs) => bundleOf(e)?.timers.addTime(id, deltaMs));
   // 危険アクション(ウィンドウを閉じる/シャットダウン)無しの発火(音のみ等)を確認して止める
   ipcMain.on('timer:acknowledge', (e, id) => bundleOf(e)?.timers.acknowledge(id));
   // 危険アクション付きの発火をユーザーが猶予中にキャンセルする

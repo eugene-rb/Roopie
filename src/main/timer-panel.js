@@ -5,7 +5,8 @@ const PANEL_URL = 'roopie://timerpanel';
 const INTERNAL_PRELOAD = path.join(__dirname, '..', 'preload', 'internal-preload.js');
 
 const WIDTH = 280;
-const ROW_HEIGHT = 46;
+// 行の高さ44px + 行間6px(CSSの .timerp-row / #timerp-rows と対応させる)
+const ROW_HEIGHT = 50;
 const TOOLS_HEIGHT = 30;
 const MARGIN = 12;
 const MAX_HEIGHT = 320; // これを超える件数はパネル内でスクロール
@@ -48,6 +49,9 @@ class TimerPanel {
     this.view.setBackgroundColor('#00000000');
     this.window.contentView.addChildView(this.view);
     this.view.webContents.loadURL(PANEL_URL);
+    // 読み込み完了直後は push を取りこぼす(mediaplayer/timerpanelで既知)。
+    // ロード後に一度レイアウトし直して現在のフロート対象行を確実に届ける
+    this.view.webContents.on('did-finish-load', () => this.tabManager.layout());
     this.view.webContents.on('context-menu', () => {
       Menu.buildFromTemplate([{ label: '一時的に非表示', click: () => this.hideTemporarily() }]).popup({
         window: this.window,
@@ -66,13 +70,22 @@ class TimerPanel {
     this.tabManager.layout();
   }
 
+  // 機能別のフロート対象条件。カウントダウン/ストップウォッチは実行中(と一時停止中。
+  // フロート上で一時停止した行が消えて再開できなくなるのを防ぐ)、アラーム(clock)は
+  // 予約中に常時フロートし続けると邪魔なので、鳴動中か📌で固定したときだけ出す
+  activeFor(t) {
+    if (t.type === 'clock') return !!t.ringing || (!!t.float && t.status === 'running');
+    return t.status === 'running' || t.status === 'paused' || !!t.ringing;
+  }
+
   setState(timers) {
     this.timers = timers || [];
     const hasRinging = this.timers.some((t) => t.ringing);
     if (this.tempHidden && !hasRinging) this.tempHidden = false;
-    const hasActive = this.timers.some((t) => t.status === 'running' || t.ringing);
-    if (hasActive && !this.docked) this.ensureView();
-    this.sendToPanel('timer:state', this.timers);
+    // フロートし得るタイマー(鳴動 or 📌ピン or 自動フロート可能)があればViewを用意。
+    // 実際にどの行を出すかは layout()/visibleRows() が決める
+    const mayFloat = this.timers.some((t) => this.activeFor(t) && (t.ringing || t.float || !this.docked));
+    if (mayFloat) this.ensureView();
     this.tabManager.layout();
   }
 
@@ -96,20 +109,27 @@ class TimerPanel {
     this.sendToPanel('timer:ring-clear', fireId);
   }
 
+  // 実際にフローティング表示すべき行。鳴動中は必ず・📌ピンは常時・それ以外は
+  // 「格納/一時非表示/タイマーセクションを開いている」でないときだけ自動フロート。
+  // アクティブセクションの開閉やピン切替でも中身が変わるため layout() のたびに算出する
+  visibleRows() {
+    const sectionOpen = !!this.tabManager.sidePanel?.open && this.tabManager.sidePanel.activeSection === 'timers';
+    const auto = !this.docked && !this.tempHidden && !sectionOpen;
+    return this.timers.filter((t) => this.activeFor(t) && (t.ringing || t.float || auto));
+  }
+
   // TabManager.layout() から呼ばれる。area はページ全体の領域、panelInset はサイドパネルが
   // 開いている側の隅に余白を空けるための値
   layout(area, radius, panelInset = { left: 0, right: 0 }) {
     this.lastArea = area;
     if (!this.view) return;
-    const visibleTimers = this.timers.filter((t) => t.status === 'running' || t.ringing);
-    const hasRinging = visibleTimers.some((t) => t.ringing);
-    const timersSectionOpen = !!this.tabManager.sidePanel?.open && this.tabManager.sidePanel.activeSection === 'timers';
-    const visible = visibleTimers.length > 0 && (hasRinging || (!this.docked && !this.tempHidden && !timersSectionOpen));
+    const rows = this.visibleRows();
+    this.sendToPanel('timer:state', rows);
+    const visible = rows.length > 0;
     this.view.setVisible(visible);
     if (!visible) return;
 
-    const rows = Math.max(1, visibleTimers.length);
-    const height = Math.min(MAX_HEIGHT, TOOLS_HEIGHT + rows * ROW_HEIGHT);
+    const height = Math.min(MAX_HEIGHT, TOOLS_HEIGHT + rows.length * ROW_HEIGHT);
     const bounds = this.boundsFor(this.corner, area, panelInset, height, this.mediaPlayerOffset());
     this.view.setBounds(bounds);
     this.view.setBorderRadius(Math.min(radius || MAX_RADIUS, MAX_RADIUS));

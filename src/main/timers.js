@@ -141,6 +141,34 @@ class Timers {
     t.elapsedAtPauseMs = null;
     t.nextFireAt = null;
     t._nextAfterRing = null;
+    t.laps = [];
+    this.changed();
+  }
+
+  // カウントダウンの「+1分」。実行中は次回発火を後ろへ、停止中は残り/設定時間そのものを伸ばす
+  addTime(id, deltaMs) {
+    const t = this.find(id);
+    if (!t || t.type !== 'countdown' || !Number.isFinite(deltaMs)) return;
+    const delta = clamp(Math.round(deltaMs), -3600_000, 3600_000);
+    const now = Date.now();
+    if (t.status === 'running') {
+      t.nextFireAt = Math.max(now + 1000, (t.nextFireAt ?? now) + delta);
+    } else if (t.status === 'paused') {
+      t.remainingAtPauseMs = clamp((t.remainingAtPauseMs || 0) + delta, 1000, 24 * 3600_000);
+    } else {
+      // 未開始(idle/finished)は設定時間そのものを変える=次に開始したときも伸びたまま
+      t.durationMs = clamp((t.durationMs || 0) + delta, 1000, 24 * 3600_000);
+      t.status = 'idle';
+    }
+    this.changed();
+  }
+
+  // ストップウォッチのラップ。押した瞬間の累積経過ミリ秒を積む(通算値。表示側で差分=各ラップを計算)
+  lap(id) {
+    const t = this.find(id);
+    if (!t || t.type !== 'stopwatch' || t.status !== 'running') return;
+    const elapsed = Date.now() - (t.startedAt ?? Date.now()) + (t.elapsedAtPauseMs || 0);
+    t.laps = [...(t.laps || []), elapsed];
     this.changed();
   }
 
@@ -305,11 +333,16 @@ function sanitize(input, existing) {
         nextFireAt: null,
         lastFiredAt: null,
         _nextAfterRing: null,
+        laps: [],
       };
 
   t.type = type;
   t.name = typeof input?.name === 'string' ? input.name.trim().slice(0, MAX_NAME) : t.name || '';
   t.updatedAt = now;
+  // フローティング表示の明示ピン(ユーザーが📌でこのタイマーを常時フロートさせる)。永続。
+  t.float = input?.float !== undefined ? !!input.float : t.float ?? false;
+  // ラップは lap()/reset() が更新する。update時は input(=既存を含む)から素通し、なければ既存維持
+  t.laps = Array.isArray(input?.laps) ? input.laps.filter((n) => Number.isFinite(n)) : t.laps || [];
 
   if (type === 'countdown') {
     t.durationMs = Number.isFinite(input?.durationMs) ? clamp(Math.round(input.durationMs), 1000, 24 * 3600_000) : t.durationMs || DEFAULT_DURATION_MS;

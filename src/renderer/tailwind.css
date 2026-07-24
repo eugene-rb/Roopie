@@ -3079,13 +3079,448 @@ select.row-btn {
   font-weight: 400;
 }
 
-/* タイマー */
-.timers-add {
-  width: 100%;
-  margin-bottom: 8px;
+/* =========================================================
+   タイマー — 機能ごとに画面を分ける(タイマー/アラーム/ストップウォッチ)
+   ========================================================= */
+.timer-topbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
-/* iOSの時計アプリ「タイマー」タブ風: 大きい数字+小さい説明+丸い再生/一時停止ボタン */
+.timer-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 10px;
+  background: var(--card);
+  flex: 1;
+  min-width: 0;
+}
+
+.timer-tab {
+  flex: 1;
+  padding: 6px 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 11.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.timer-tab:hover {
+  color: var(--text);
+}
+
+.timer-tab.active {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.timer-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 8px;
+}
+
+.timers-add {
+  width: 100%;
+  flex-shrink: 0;
+}
+
+/* よく使う長さは押した瞬間に走り出す(モーダルを開かせない) */
+.timer-presets {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.timer-preset {
+  padding: 7px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.timer-preset:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+
+/* 実行中のカウントダウンは残りをリングで大きく見せる */
+.cd-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 10px 12px;
+  border-radius: 14px;
+  background: var(--card);
+  flex-shrink: 0;
+}
+
+.cd-card.ringing {
+  outline: 1px solid #ff3b30;
+  background: color-mix(in srgb, #ff3b30 14%, var(--card));
+}
+
+.cd-ring {
+  position: relative;
+  width: 132px;
+  height: 132px;
+}
+
+.cd-ring svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.cd-ring-track {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 6;
+}
+
+.cd-ring-prog {
+  fill: none;
+  stroke: #ff9f0a;
+  stroke-width: 6;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.3s linear;
+}
+
+.cd-card.paused .cd-ring-prog {
+  stroke: var(--text-dim);
+}
+
+.cd-card.ringing .cd-ring-prog {
+  stroke: #ff3b30;
+}
+
+.cd-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 14px;
+}
+
+.cd-time {
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.cd-card.ringing .cd-time {
+  color: #ff3b30;
+}
+
+.cd-sub {
+  max-width: 100%;
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cd-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.cd-corner {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+
+.timer-flat-btn {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.timer-flat-btn:hover:not(:disabled) {
+  background: var(--card-hover);
+}
+
+.timer-flat-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* 📌 フローティング表示への固定 */
+.timer-pin-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.timer-pin-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.timer-pin-btn:hover {
+  background: var(--card-hover);
+  color: var(--text);
+}
+
+.timer-pin-btn.on {
+  color: var(--accent);
+}
+
+/* ---- アラーム: 時刻とON/OFFスイッチ ---- */
+.alarm-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.alarm-item:hover {
+  background: var(--card-hover);
+}
+
+.alarm-item.off .alarm-time,
+.alarm-item.off .alarm-sub {
+  opacity: 0.45;
+}
+
+.alarm-item.ringing {
+  outline: 1px solid #ff3b30;
+  background: color-mix(in srgb, #ff3b30 14%, transparent);
+}
+
+.alarm-item.ringing .alarm-time {
+  color: #ff3b30;
+}
+
+.alarm-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.alarm-time {
+  font-size: 27px;
+  font-weight: 600;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.alarm-sub {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.timer-switch {
+  position: relative;
+  width: 40px;
+  height: 24px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--border);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.timer-switch.on {
+  background: #30d158;
+}
+
+.timer-switch .knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s ease;
+}
+
+.timer-switch.on .knob {
+  transform: translateX(16px);
+}
+
+/* ---- ストップウォッチ: 1/100秒まで出す大きい表示とラップ ---- */
+.sw-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 10px;
+}
+
+.sw-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.sw-chip {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.sw-chip.running {
+  color: #64d2ff;
+  border-color: color-mix(in srgb, #64d2ff 50%, transparent);
+}
+
+.sw-chip.active {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.sw-time {
+  padding: 10px 0 2px;
+  font-size: 38px;
+  font-weight: 300;
+  line-height: 1.1;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5px;
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+.sw-time.running {
+  color: #64d2ff;
+}
+
+.sw-controls {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.sw-btn {
+  flex: 1;
+  padding: 10px 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.sw-btn:hover:not(:disabled) {
+  background: var(--card-hover);
+}
+
+.sw-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.sw-btn.start {
+  border-color: transparent;
+  background: #30d158;
+  color: #06210f;
+  font-weight: 600;
+}
+
+.sw-btn.stop {
+  border-color: transparent;
+  background: #ff9f0a;
+  color: #2b1400;
+  font-weight: 600;
+}
+
+.sw-laps {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.sw-lap {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 4px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.sw-lap.current {
+  color: #64d2ff;
+}
+
+.sw-lap-value {
+  margin-left: auto;
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.sw-lap.current .sw-lap-value {
+  color: #64d2ff;
+}
+
+.sw-lap-total {
+  width: 68px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+}
+
+/* 未開始のタイマーは1行で軽く見せる(大きい数字+小さい説明+丸い開始ボタン) */
 .timer-item {
   gap: 10px;
   padding: 9px 8px;
@@ -3170,29 +3605,21 @@ select.row-btn {
   filter: brightness(1.08);
 }
 
+/* 実行中カード内の主ボタンは大きめ */
+.timer-circle-btn.lg {
+  width: 44px;
+  height: 44px;
+}
+
+.timer-circle-btn.lg svg {
+  width: 18px;
+  height: 18px;
+}
+
 .modal.timer-modal {
   max-width: 360px;
   max-height: 82vh;
   overflow-y: auto;
-}
-
-.timer-type-tabs {
-  display: flex;
-  gap: 4px;
-}
-
-.timer-type-btn {
-  flex: 1;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  text-align: center;
-  visibility: visible;
-}
-
-.timer-type-btn.active {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .timer-fields {
@@ -3584,15 +4011,60 @@ select.row-btn {
   padding: 6px 6px 0;
 }
 
-/* iOSのロック画面ライブアクティビティ(タイマー)風の黒い丸ピル */
+/* iOSのロック画面ライブアクティビティ(タイマー)風の黒い丸ピル。
+   高さは固定(timer-panel.js の ROW_HEIGHT と対応。ずれると行が見切れてクリック位置も狂う) */
 .timerp-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 12px 5px 5px;
+  height: 44px;
+  box-sizing: border-box;
+  padding: 0 12px 0 5px;
   border-radius: 999px;
   background: #1c1c1e;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+}
+
+/* カウントダウンの残り割合リング(ボタンの周りを囲む。行の高さは変えない) */
+.timerp-btnwrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+}
+
+.timerp-ring {
+  position: absolute;
+  inset: 0;
+  width: 34px;
+  height: 34px;
+  transform: rotate(-90deg);
+}
+
+.timerp-ring-track {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.16);
+  stroke-width: 3;
+}
+
+.timerp-ring-prog {
+  fill: none;
+  stroke: #ff9f0a;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.timerp-btnwrap .timerp-circle {
+  width: 26px;
+  height: 26px;
+}
+
+.timerp-btnwrap .timerp-circle svg {
+  width: 11px;
+  height: 11px;
 }
 
 .timerp-row.ringing {
@@ -3623,6 +4095,47 @@ select.row-btn {
   color: #2b0705;
 }
 
+/* 機能ごとに色を分ける: カウントダウン=オレンジ / ストップウォッチ=青 / アラーム=紫 */
+.timerp-row[data-type='stopwatch'] .timerp-circle {
+  background: #64d2ff;
+  color: #06212b;
+}
+
+/* 予約中のアラームはボタンではなくベルの表示(押しても予定を消さない) */
+.timerp-circle.alarm {
+  background: color-mix(in srgb, #bf5af2 26%, transparent);
+  color: #d8a6f7;
+  cursor: grab;
+}
+
+.timerp-circle.alarm svg {
+  width: 15px;
+  height: 15px;
+}
+
+.timerp-lap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  cursor: pointer;
+}
+
+.timerp-lap svg {
+  width: 13px;
+  height: 13px;
+}
+
+.timerp-lap:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+
 .timerp-info {
   flex: 1;
   min-width: 0;
@@ -3643,6 +4156,14 @@ select.row-btn {
   font-variant-numeric: tabular-nums;
   color: #ff9f0a;
   white-space: nowrap;
+}
+
+.timerp-row[data-type='stopwatch'] .timerp-time {
+  color: #64d2ff;
+}
+
+.timerp-row[data-type='clock'] .timerp-time {
+  color: #d8a6f7;
 }
 
 .timerp-row.ringing .timerp-time {

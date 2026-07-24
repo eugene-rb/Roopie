@@ -584,10 +584,19 @@ window.roopieInternal.onReadlistState((items) => {
   renderReadlist();
 });
 
-// ---- タイマー(カウントダウン/時刻指定/ストップウォッチ) ----
+// ---- タイマー(機能別に3画面: タイマー/アラーム/ストップウォッチ) ----
+// 3種を1つのリストに混ぜると「開始ボタン」の意味が種類ごとに違って分かりにくいため、
+// iOSの時計アプリと同じく機能ごとに画面を分け、それぞれに最適な操作だけを置く:
+//   タイマー      = プリセット(1分/3分…)+ 残りを示す進捗リング + 「+1分」
+//   アラーム      = 時刻の一覧とON/OFFスイッチ(開始/停止ではなく「有効/無効」)
+//   ストップウォッチ = 1/100秒まで出す大きい表示 + ラップ
 const WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
+const TIMER_PRESETS = [1, 3, 5, 10, 15, 30]; // 分
+const TIMER_TAB_TYPES = ['countdown', 'clock', 'stopwatch'];
 let timers = [];
 let timersReceivedAt = Date.now(); // 受信時刻からの経過分を差し引いて残り/経過時間をローカル再計算する(IPCを毎秒飛ばさない)
+let timerTab = 'countdown';
+let swSelectedId = null; // ストップウォッチ画面で大きく表示している対象
 
 function formatDuration(ms) {
   if (ms == null) return '';
@@ -603,8 +612,17 @@ function formatClockTime(t) {
   return `${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}`;
 }
 
-// iOSの時計アプリ「タイマー」タブ風: 大きい数字+小さい説明+丸い再生/一時停止ボタンのみ。
-// リセットは行が煩雑になるため右クリックメニューへ移した(showTimerMenuに追加)
+// ストップウォッチ専用。1/100秒まで出す(この桁があると「動いている感」が出る)
+function formatStopwatch(ms) {
+  const total = Math.max(0, Math.round(ms ?? 0));
+  const h = Math.floor(total / 3_600_000);
+  const m = Math.floor((total % 3_600_000) / 60_000);
+  const s = Math.floor((total % 60_000) / 1000);
+  const cs = Math.floor((total % 1000) / 10);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${h > 0 ? `${h}:` : ''}${pad(m)}:${pad(s)}.${pad(cs)}`;
+}
+
 function formatDurationNice(ms) {
   const total = Math.max(0, Math.round((ms ?? 0) / 1000));
   const h = Math.floor(total / 3600);
@@ -615,90 +633,446 @@ function formatDurationNice(ms) {
   return `${s}秒`;
 }
 
-function timerBigTime(t, elapsed) {
-  if (t.ringing) return '00:00';
-  if (t.type === 'stopwatch') {
-    return formatDuration(t.status === 'running' ? t.elapsedMs + elapsed : t.elapsedMs);
-  }
-  if (t.type === 'countdown') {
-    if (t.status !== 'running' && t.status !== 'paused') return formatDuration(t.durationMs);
-    const ms = t.status === 'running' ? t.remainingMs - elapsed : t.remainingMs;
-    return formatDuration(Math.max(0, ms));
-  }
-  // clock: 開始済みなら残り時間、そうでなければ指定時刻そのものを大きく出す
-  if (t.status === 'running' && t.remainingMs != null) {
-    return formatDuration(Math.max(0, t.remainingMs - elapsed));
-  }
-  return formatClockTime(t.clockTime);
-}
-
-function timerSmallSub(t) {
-  if (t.ringing) {
-    const remainMs = t.graceEndsAt ? Math.max(0, t.graceEndsAt - Date.now()) : null;
-    return remainMs != null ? `あと${Math.ceil(remainMs / 1000)}秒で自動実行` : '時間になりました';
-  }
-  if (t.name) return t.name; // 名前を付けていればそれを優先(iOSの元の長さ表示の代わり)
-  if (t.type === 'countdown') return formatDurationNice(t.durationMs);
-  if (t.type === 'stopwatch') return 'ストップウォッチ';
-  // clock
-  const repeatText = t.repeat?.enabled ? t.repeat.weekdays.map((on, i) => (on ? WEEKDAY_LABELS[i] : '')).join('') : '';
-  return repeatText ? `毎週${repeatText}` : '時刻指定';
-}
-
 function timerCircleIcon(kind) {
   if (kind === 'play') return '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5l12 7-12 7z"/></svg>';
   if (kind === 'pause') return '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>';
   return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
 }
 
+const PIN_ICON =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M15 3l6 6-3 1-4 4-1 5-6-6-4.5 1.5L9 9l4-4z"/><path d="M7 17l-4 4"/></svg>';
+
+function remainingMsOf(t, elapsed) {
+  if (t.remainingMs == null) return 0;
+  return Math.max(0, t.status === 'running' ? t.remainingMs - elapsed : t.remainingMs);
+}
+
+function elapsedMsOf(t, elapsed) {
+  return t.status === 'running' ? (t.elapsedMs || 0) + elapsed : t.elapsedMs || 0;
+}
+
+// 発火中の共通サブ表示(猶予つきの危険アクションは残り秒を出す)
+function ringingSub(t) {
+  const remainMs = t.graceEndsAt ? Math.max(0, t.graceEndsAt - Date.now()) : null;
+  return remainMs != null ? `あと${Math.ceil(remainMs / 1000)}秒で自動実行` : '時間になりました';
+}
+
+function repeatTextOf(t) {
+  if (!t.repeat?.enabled) return '';
+  const days = t.repeat.weekdays.map((on, i) => (on ? WEEKDAY_LABELS[i] : '')).join('');
+  return days ? `毎週${days}` : '';
+}
+
+// 「止める/一時停止/開始」の丸ボタン。3画面で共通の意味を持たせる
+function makeCircleBtn(t, { size } = {}) {
+  const ringing = !!t.ringing;
+  const running = t.status === 'running';
+  const btn = document.createElement('button');
+  btn.className = 'timer-circle-btn ' + (ringing ? 'ringing' : running ? 'running' : 'idle') + (size === 'lg' ? ' lg' : '');
+  btn.title = ringing ? '止める' : running ? '一時停止' : t.status === 'paused' ? '再開' : '開始';
+  btn.innerHTML = timerCircleIcon(ringing ? 'stop' : running ? 'pause' : 'play');
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (ringing) {
+      if (t.fireId) window.roopieInternal.cancelTimerFire(t.fireId);
+      else window.roopieInternal.acknowledgeTimer(t.id);
+    } else if (running) {
+      window.roopieInternal.pauseTimer(t.id);
+    } else {
+      window.roopieInternal.startTimer(t.id);
+    }
+  });
+  return btn;
+}
+
+// 📌 フローティング表示への固定トグル(右クリックメニューと同じ操作を目に見える形でも置く)
+function makePinBtn(t) {
+  const btn = document.createElement('button');
+  btn.className = 'timer-pin-btn' + (t.float ? ' on' : '');
+  btn.title = t.float ? 'フローティング表示の固定を解除' : 'フローティング表示に固定';
+  btn.innerHTML = PIN_ICON;
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    window.roopieInternal.updateTimer(t.id, { float: !t.float });
+  });
+  return btn;
+}
+
+function attachTimerMenu(el, t) {
+  el.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    window.roopieInternal.timerContextMenu(t.id);
+  });
+}
+
+// ---- タブ切り替え ----
+function setTimerTab(tab) {
+  timerTab = TIMER_TAB_TYPES.includes(tab) ? tab : 'countdown';
+  for (const btn of document.querySelectorAll('.timer-tab')) {
+    btn.classList.toggle('active', btn.dataset.tt === timerTab);
+  }
+  $('tv-countdown').classList.toggle('hidden', timerTab !== 'countdown');
+  $('tv-clock').classList.toggle('hidden', timerTab !== 'clock');
+  $('tv-stopwatch').classList.toggle('hidden', timerTab !== 'stopwatch');
+  renderTimers();
+}
+
+for (const btn of document.querySelectorAll('.timer-tab')) {
+  btn.addEventListener('click', () => setTimerTab(btn.dataset.tt));
+}
+
+// フローティング表示のON/OFF(設定 timerDocked の裏返し)。
+// フロート側の「格納」を押すと消えてしまうため、戻す口をここに置く
+let timerDocked = false;
+function applyTimerDocked(docked) {
+  timerDocked = !!docked;
+  const btn = $('timer-float-toggle');
+  btn.classList.toggle('on', !timerDocked);
+  btn.title = timerDocked ? 'フローティング表示にする' : 'フローティング表示をやめる';
+}
+$('timer-float-toggle').addEventListener('click', () => {
+  applyTimerDocked(!timerDocked);
+  window.roopieInternal.setSetting('timerDocked', timerDocked);
+});
+
 function renderTimers() {
+  if (timerTab === 'countdown') renderCountdowns();
+  else if (timerTab === 'clock') renderAlarms();
+  else renderStopwatch();
+  updateSwTicker();
+}
+
+// ---- タイマー(カウントダウン) ----
+// プリセットは押した瞬間に作って走り出す(よく使う長さをいちいちモーダルで作らせない)
+function renderPresets() {
+  const el = $('timer-presets');
+  el.textContent = '';
+  for (const min of TIMER_PRESETS) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'timer-preset';
+    chip.textContent = `${min}分`;
+    chip.addEventListener('click', () => {
+      window.roopieInternal.addTimer({ type: 'countdown', durationMs: min * 60_000, autoStart: true });
+    });
+    el.appendChild(chip);
+  }
+}
+renderPresets();
+
+const RING_R = 46;
+const RING_C = 2 * Math.PI * RING_R;
+
+// 残り時間の割合を示すリング。上から時計回りに減っていく
+function ringEl(fraction) {
+  const f = Math.max(0, Math.min(1, fraction));
+  const wrap = document.createElement('div');
+  wrap.className = 'cd-ring';
+  wrap.innerHTML =
+    '<svg viewBox="0 0 108 108">' +
+    `<circle class="cd-ring-track" cx="54" cy="54" r="${RING_R}"/>` +
+    `<circle class="cd-ring-prog" cx="54" cy="54" r="${RING_R}" stroke-dasharray="${(RING_C * f).toFixed(2)} ${RING_C.toFixed(2)}"/>` +
+    '</svg>';
+  return wrap;
+}
+
+function countdownCard(t, elapsed) {
+  const card = document.createElement('div');
+  card.className = 'cd-card' + (t.ringing ? ' ringing' : '') + (t.status === 'paused' ? ' paused' : '');
+
+  const remain = remainingMsOf(t, elapsed);
+  const ring = ringEl(t.ringing ? 0 : remain / (t.durationMs || 1));
+  const center = document.createElement('div');
+  center.className = 'cd-center';
+  const time = document.createElement('div');
+  time.className = 'cd-time';
+  time.textContent = t.ringing ? '00:00' : formatDuration(remain);
+  const sub = document.createElement('div');
+  sub.className = 'cd-sub';
+  sub.textContent = t.ringing ? ringingSub(t) : t.name || formatDurationNice(t.durationMs);
+  center.appendChild(time);
+  center.appendChild(sub);
+  ring.appendChild(center);
+  card.appendChild(ring);
+
+  const controls = document.createElement('div');
+  controls.className = 'cd-controls';
+
+  const resetBtn = document.createElement('button');
+  resetBtn.className = 'timer-flat-btn';
+  resetBtn.textContent = 'リセット';
+  resetBtn.addEventListener('click', () => window.roopieInternal.resetTimer(t.id));
+  controls.appendChild(resetBtn);
+
+  controls.appendChild(makeCircleBtn(t, { size: 'lg' }));
+
+  const plusBtn = document.createElement('button');
+  plusBtn.className = 'timer-flat-btn';
+  plusBtn.textContent = '+1分';
+  plusBtn.disabled = !!t.ringing;
+  plusBtn.addEventListener('click', () => window.roopieInternal.addTimerTime(t.id, 60_000));
+  controls.appendChild(plusBtn);
+
+  card.appendChild(controls);
+
+  const corner = document.createElement('div');
+  corner.className = 'cd-corner';
+  corner.appendChild(makePinBtn(t));
+  card.appendChild(corner);
+
+  attachTimerMenu(card, t);
+  return card;
+}
+
+// 未開始のタイマーは1行で軽く見せる(走っているものだけを大きく出したい)
+function countdownRow(t) {
+  const item = document.createElement('div');
+  item.className = 'panel-item timer-item';
+
+  const main = document.createElement('div');
+  main.className = 'timer-item-main';
+  const time = document.createElement('div');
+  time.className = 'timer-item-time';
+  time.textContent = formatDuration(t.durationMs);
+  const sub = document.createElement('div');
+  sub.className = 'timer-item-sub';
+  sub.textContent = t.name || (t.status === 'finished' ? '終了しました' : formatDurationNice(t.durationMs));
+  main.appendChild(time);
+  main.appendChild(sub);
+  main.addEventListener('click', () => openTimerModal(t.id));
+  item.appendChild(main);
+  item.appendChild(makeCircleBtn(t));
+  attachTimerMenu(item, t);
+  return item;
+}
+
+function renderCountdowns() {
   timersListEl.textContent = '';
-  if (!timers.length) {
-    timersListEl.appendChild(emptyNote('タイマーはまだありません', 'clock'));
+  const list = timers.filter((t) => t.type === 'countdown');
+  if (!list.length) {
+    timersListEl.appendChild(emptyNote('上のプリセットか「カスタムタイマー」から作れます', 'clock'));
     return;
   }
   const elapsed = Date.now() - timersReceivedAt;
-  for (const t of timers) {
-    const item = document.createElement('div');
-    item.className = 'panel-item timer-item' + (t.ringing ? ' ringing' : '');
+  // 動いているものを上に、大きく
+  const active = list.filter((t) => t.ringing || t.status === 'running' || t.status === 'paused');
+  const rest = list.filter((t) => !active.includes(t));
+  for (const t of active) timersListEl.appendChild(countdownCard(t, elapsed));
+  for (const t of rest) timersListEl.appendChild(countdownRow(t));
+}
 
-    const main = document.createElement('div');
-    main.className = 'timer-item-main';
-    const time = document.createElement('div');
-    time.className = 'timer-item-time';
-    time.textContent = timerBigTime(t, elapsed);
-    const sub = document.createElement('div');
-    sub.className = 'timer-item-sub';
-    sub.textContent = timerSmallSub(t);
-    main.appendChild(time);
-    main.appendChild(sub);
-    main.addEventListener('click', () => openTimerModal(t.id));
-    item.appendChild(main);
+// ---- アラーム(時刻指定) ----
+// 開始/停止ではなく「有効/無効」のスイッチで扱う(目覚まし時計と同じ操作感)
+function alarmRow(t, elapsed) {
+  const item = document.createElement('div');
+  item.className = 'alarm-item' + (t.ringing ? ' ringing' : '') + (t.status === 'running' ? '' : ' off');
 
-    const circleKind = t.ringing ? 'stop' : t.status === 'running' ? 'pause' : 'play';
-    const circleBtn = document.createElement('button');
-    circleBtn.className = 'timer-circle-btn ' + (t.ringing ? 'ringing' : t.status === 'running' ? 'running' : 'idle');
-    circleBtn.title = t.ringing ? '止める' : t.status === 'running' ? '一時停止' : '開始';
-    circleBtn.innerHTML = timerCircleIcon(circleKind);
-    circleBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (t.ringing) {
-        if (t.fireId) window.roopieInternal.cancelTimerFire(t.fireId);
-        else window.roopieInternal.acknowledgeTimer(t.id);
-      } else if (t.status === 'running') {
-        window.roopieInternal.pauseTimer(t.id);
-      } else {
-        window.roopieInternal.startTimer(t.id);
-      }
-    });
-    item.appendChild(circleBtn);
-
-    item.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      window.roopieInternal.timerContextMenu(t.id);
-    });
-    timersListEl.appendChild(item);
+  const main = document.createElement('div');
+  main.className = 'alarm-main';
+  const time = document.createElement('div');
+  time.className = 'alarm-time';
+  time.textContent = formatClockTime(t.clockTime);
+  const sub = document.createElement('div');
+  sub.className = 'alarm-sub';
+  if (t.ringing) {
+    sub.textContent = ringingSub(t);
+  } else {
+    const parts = [t.name, repeatTextOf(t) || '繰り返しなし'].filter(Boolean);
+    if (t.status === 'running') parts.push(`あと${formatDurationNice(remainingMsOf(t, elapsed))}`);
+    sub.textContent = parts.join(' · ');
   }
+  main.appendChild(time);
+  main.appendChild(sub);
+  main.addEventListener('click', () => openTimerModal(t.id));
+  item.appendChild(main);
+
+  if (t.ringing) {
+    item.appendChild(makeCircleBtn(t));
+  } else {
+    const sw = document.createElement('button');
+    sw.className = 'timer-switch' + (t.status === 'running' ? ' on' : '');
+    sw.setAttribute('role', 'switch');
+    sw.setAttribute('aria-checked', String(t.status === 'running'));
+    sw.title = t.status === 'running' ? 'アラームを止める' : 'アラームを有効にする';
+    sw.innerHTML = '<span class="knob"></span>';
+    sw.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (t.status === 'running') window.roopieInternal.resetTimer(t.id);
+      else window.roopieInternal.startTimer(t.id);
+    });
+    item.appendChild(sw);
+  }
+
+  attachTimerMenu(item, t);
+  return item;
+}
+
+function renderAlarms() {
+  const listEl = $('alarm-list');
+  listEl.textContent = '';
+  const list = timers
+    .filter((t) => t.type === 'clock')
+    .sort((a, b) => a.clockTime.hour * 60 + a.clockTime.minute - (b.clockTime.hour * 60 + b.clockTime.minute));
+  if (!list.length) {
+    listEl.appendChild(emptyNote('アラームはまだありません', 'clock'));
+    return;
+  }
+  const elapsed = Date.now() - timersReceivedAt;
+  for (const t of list) listEl.appendChild(alarmRow(t, elapsed));
+}
+
+// ---- ストップウォッチ ----
+// 1台を大きく出す方式。データは配列のままなので、2台以上あるときは上部のチップで切り替える
+let swTimeEl = null;
+let swLapEl = null;
+let swRunning = null; // 高頻度更新の対象(実行中のストップウォッチ)
+let swLapBase = 0;
+let swFastTimer = null;
+
+function swElapsed(t) {
+  return elapsedMsOf(t, Date.now() - timersReceivedAt);
+}
+
+function renderStopwatch() {
+  const body = $('sw-body');
+  body.textContent = '';
+  swTimeEl = null;
+  swLapEl = null;
+  swRunning = null;
+
+  const list = timers.filter((t) => t.type === 'stopwatch');
+  const sw = list.find((t) => t.id === swSelectedId) || list.find((t) => t.status === 'running') || list[list.length - 1] || null;
+  swSelectedId = sw?.id ?? null;
+
+  // 2台以上あるときだけ切り替えチップを出す(1台しか使わない人には見せない)
+  const head = document.createElement('div');
+  head.className = 'sw-head';
+  if (list.length > 1) {
+    for (const [i, t] of list.entries()) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'sw-chip' + (t.id === swSelectedId ? ' active' : '') + (t.status === 'running' ? ' running' : '');
+      chip.textContent = t.name || `#${i + 1}`;
+      chip.addEventListener('click', () => {
+        swSelectedId = t.id;
+        renderStopwatch();
+      });
+      head.appendChild(chip);
+    }
+  }
+  const spacer = document.createElement('div');
+  spacer.className = 'spacer';
+  head.appendChild(spacer);
+  if (sw) head.appendChild(makePinBtn(sw));
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'timer-flat-btn';
+  addBtn.textContent = '+ 追加';
+  addBtn.addEventListener('click', () => window.roopieInternal.addTimer({ type: 'stopwatch', autoStart: true }));
+  head.appendChild(addBtn);
+  body.appendChild(head);
+
+  const elapsedMs = sw ? swElapsed(sw) : 0;
+  const laps = sw?.laps || [];
+
+  const time = document.createElement('div');
+  time.className = 'sw-time' + (sw?.status === 'running' ? ' running' : '');
+  time.textContent = formatStopwatch(elapsedMs);
+  body.appendChild(time);
+  swTimeEl = time;
+  if (sw?.status === 'running') {
+    swRunning = sw;
+    swLapBase = laps.length ? laps[laps.length - 1] : 0;
+  }
+  if (sw) attachTimerMenu(time, sw);
+
+  // 操作は2つだけ: 左=ラップ/リセット、右=スタート/停止(iOSのストップウォッチと同じ配置)
+  const controls = document.createElement('div');
+  controls.className = 'sw-controls';
+  const running = sw?.status === 'running';
+  const started = !!sw && (running || elapsedMs > 0);
+
+  const leftBtn = document.createElement('button');
+  leftBtn.className = 'sw-btn';
+  leftBtn.textContent = running ? 'ラップ' : 'リセット';
+  leftBtn.disabled = !started;
+  leftBtn.addEventListener('click', () => {
+    if (!sw) return;
+    if (running) window.roopieInternal.lapTimer(sw.id);
+    else window.roopieInternal.resetTimer(sw.id);
+  });
+  controls.appendChild(leftBtn);
+
+  const rightBtn = document.createElement('button');
+  rightBtn.className = 'sw-btn ' + (running ? 'stop' : 'start');
+  rightBtn.textContent = running ? '停止' : started ? '再開' : 'スタート';
+  rightBtn.addEventListener('click', () => {
+    if (!sw) {
+      // まだ1台も無いときは押した瞬間に作って走り出す(空のストップウォッチを溜めない)
+      window.roopieInternal.addTimer({ type: 'stopwatch', autoStart: true });
+      return;
+    }
+    if (running) window.roopieInternal.pauseTimer(sw.id);
+    else window.roopieInternal.startTimer(sw.id);
+  });
+  controls.appendChild(rightBtn);
+  body.appendChild(controls);
+
+  const lapList = document.createElement('div');
+  lapList.className = 'sw-laps';
+  if (running) {
+    const row = document.createElement('div');
+    row.className = 'sw-lap current';
+    const label = document.createElement('span');
+    label.textContent = `ラップ ${laps.length + 1}`;
+    const value = document.createElement('span');
+    value.className = 'sw-lap-value';
+    value.textContent = formatStopwatch(elapsedMs - swLapBase);
+    swLapEl = value;
+    const total = document.createElement('span'); // 記録済みの行と桁位置をそろえるための空欄
+    total.className = 'sw-lap-total';
+    row.appendChild(label);
+    row.appendChild(value);
+    row.appendChild(total);
+    lapList.appendChild(row);
+  }
+  // 通算値で持っているので、隣との差=そのラップの所要時間
+  for (let i = laps.length - 1; i >= 0; i--) {
+    const row = document.createElement('div');
+    row.className = 'sw-lap';
+    const label = document.createElement('span');
+    label.textContent = `ラップ ${i + 1}`;
+    const value = document.createElement('span');
+    value.className = 'sw-lap-value';
+    value.textContent = formatStopwatch(laps[i] - (i > 0 ? laps[i - 1] : 0));
+    const total = document.createElement('span');
+    total.className = 'sw-lap-total';
+    total.textContent = formatStopwatch(laps[i]);
+    row.appendChild(label);
+    row.appendChild(value);
+    row.appendChild(total);
+    lapList.appendChild(row);
+  }
+  body.appendChild(lapList);
+}
+
+// 1/100秒表示は1秒間隔では止まって見えるため、実行中だけ50msで数字だけ差し替える
+// (DOMの作り直しはしない。表示していない/止まっているときはタイマーごと止める)
+function updateSwTicker() {
+  const need = state.activeSection === 'timers' && timerTab === 'stopwatch' && !!swRunning && !!swTimeEl;
+  if (need && !swFastTimer) swFastTimer = setInterval(tickStopwatch, 50);
+  else if (!need && swFastTimer) {
+    clearInterval(swFastTimer);
+    swFastTimer = null;
+  }
+}
+
+function tickStopwatch() {
+  if (!swRunning || !swTimeEl) return;
+  const ms = swElapsed(swRunning);
+  swTimeEl.textContent = formatStopwatch(ms);
+  if (swLapEl) swLapEl.textContent = formatStopwatch(ms - swLapBase);
 }
 
 window.roopieInternal.onTimerState((items) => {
@@ -711,9 +1085,10 @@ window.roopieInternal.listTimers().then((items) => {
   timersReceivedAt = Date.now();
   renderTimers();
 });
-// 残り/経過時間の表示だけをローカルで1秒ごとに更新する(データはpush購読のみでIPCは飛ばさない)
+// 残り/経過時間の表示だけをローカルで1秒ごとに更新する(データはpush購読のみでIPCは飛ばさない)。
+// ストップウォッチ画面は上の50msティッカーが担当するので、ここでは作り直さない
 setInterval(() => {
-  if (state.activeSection === 'timers') renderTimers();
+  if (state.activeSection === 'timers' && timerTab !== 'stopwatch') renderTimers();
 }, 1000);
 
 // ---- タイマーの追加/編集モーダル ----
@@ -741,18 +1116,16 @@ let timerEditId = null; // nullなら新規追加
 let timerEditType = 'countdown';
 let timerEditWeekdays = Array(7).fill(false);
 
+// 種類はどの画面から開いたかで決まる。入力欄の出し分けだけを行う
 function setTimerType(type) {
   timerEditType = type;
-  for (const btn of document.querySelectorAll('.timer-type-btn')) {
-    btn.classList.toggle('active', btn.dataset.type === type);
-  }
   $('timer-fields-countdown').classList.toggle('hidden', type !== 'countdown');
   $('timer-fields-clock').classList.toggle('hidden', type !== 'clock');
   timerActionsBlock.classList.toggle('hidden', type === 'stopwatch');
 }
 
-for (const btn of document.querySelectorAll('.timer-type-btn')) {
-  btn.addEventListener('click', () => setTimerType(btn.dataset.type));
+function timerKindLabel(type) {
+  return type === 'clock' ? 'アラーム' : type === 'stopwatch' ? 'ストップウォッチ' : 'タイマー';
 }
 
 function renderWeekdayChips() {
@@ -780,14 +1153,15 @@ actShutdown.addEventListener('change', () => {
   if (!actShutdown.checked) actShutdownConfirm.checked = false;
 });
 
-function openTimerModal(id) {
+function openTimerModal(id, type) {
   const existing = id ? timers.find((t) => t.id === id) : null;
+  const kind = existing?.type || type || 'countdown';
   timerEditId = id || null;
   timerEditError.classList.add('hidden');
-  timerEditTitle.textContent = existing ? 'タイマーを編集' : '新しいタイマー';
+  timerEditTitle.textContent = `${timerKindLabel(kind)}を${existing ? '編集' : '追加'}`;
   timerNameInput.value = existing?.name || '';
 
-  setTimerType(existing?.type || 'countdown');
+  setTimerType(kind);
 
   const total = Math.round((existing?.type === 'countdown' ? existing.durationMs : 5 * 60_000) / 1000);
   timerHInput.value = Math.floor(total / 3600);
@@ -870,7 +1244,8 @@ function applyTimerEdit() {
   closeTimerModal();
 }
 
-$('timer-add-btn').addEventListener('click', () => openTimerModal(null));
+$('timer-add-btn').addEventListener('click', () => openTimerModal(null, 'countdown'));
+$('alarm-add-btn').addEventListener('click', () => openTimerModal(null, 'clock'));
 $('timer-edit-apply').addEventListener('click', applyTimerEdit);
 $('timer-edit-cancel').addEventListener('click', closeTimerModal);
 timerEditModal.addEventListener('click', (e) => {
@@ -1258,6 +1633,7 @@ window.roopieInternal.onMediaState((next) => {
 
 window.roopieInternal.onSettings((settings) => {
   applySidePanelSide(settings.sidePanelPosition);
+  applyTimerDocked(settings.timerDocked);
 });
 
 // ---- トラッキング分析 ----
@@ -1526,6 +1902,7 @@ window.roopieInternal.onSidePanelState((next) => {
   ]);
   if (next) state = next;
   applySidePanelSide(settings.sidePanelPosition);
+  applyTimerDocked(settings.timerDocked);
   render();
   refreshBookmarks();
   refreshReadlist();

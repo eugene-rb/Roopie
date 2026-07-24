@@ -3,10 +3,15 @@ const panelEl = document.getElementById('timerp');
 const dockBtn = document.getElementById('timerp-dock');
 const dismissBtn = document.getElementById('timerp-dismiss');
 
+// main(timer-panel.js)側でフロート対象に絞った行だけが届く。ここでは受け取った行を
+// 機能別(カウントダウン=進捗リング / ストップウォッチ=経過 / アラーム=鳴動のみ)に描画する。
 let timers = [];
 let receivedAt = Date.now();
 let audioCtx = null;
 let beepTimer = null;
+
+const RING_R = 13;
+const RING_C = 2 * Math.PI * RING_R;
 
 function formatDuration(ms) {
   const total = Math.max(0, Math.round((ms ?? 0) / 1000));
@@ -17,54 +22,123 @@ function formatDuration(ms) {
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
 }
 
+function remainingOf(t, elapsed) {
+  if (t.remainingMs == null) return 0;
+  return Math.max(0, t.status === 'running' ? t.remainingMs - elapsed : t.remainingMs);
+}
+
+function elapsedOf(t, elapsed) {
+  return t.status === 'running' ? (t.elapsedMs || 0) + elapsed : t.elapsedMs || 0;
+}
+
 function rowTime(t, elapsed) {
-  if (t.type === 'stopwatch') return formatDuration(t.status === 'running' ? t.elapsedMs + elapsed : t.elapsedMs);
-  if (t.remainingMs == null) return '';
-  return formatDuration(Math.max(0, t.remainingMs - elapsed));
+  if (t.type === 'stopwatch') return formatDuration(elapsedOf(t, elapsed));
+  return formatDuration(remainingOf(t, elapsed));
 }
 
 function defaultName(t) {
-  return t.type === 'clock' ? '時刻指定タイマー' : t.type === 'stopwatch' ? 'ストップウォッチ' : 'カウントダウン';
+  return t.type === 'clock' ? 'アラーム' : t.type === 'stopwatch' ? 'ストップウォッチ' : 'タイマー';
 }
 
 const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>';
+const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5l12 7-12 7z"/></svg>';
 const ICON_STOP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+const ICON_BELL =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>';
+const ICON_LAP =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M4 21V4h9l-1 3h8v9h-8l-1-3H4"/></svg>';
+
+function formatClockTime(t) {
+  return `${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}`;
+}
+
+// カウントダウンの残り割合をリングで表す。時間が減るとアークも短くなる(上から時計回り)
+function progressRing(fraction) {
+  const f = Math.max(0, Math.min(1, fraction));
+  const wrap = document.createElement('span');
+  wrap.className = 'timerp-btnwrap';
+  wrap.innerHTML =
+    `<svg class="timerp-ring" viewBox="0 0 34 34">` +
+    `<circle class="timerp-ring-track" cx="17" cy="17" r="${RING_R}"/>` +
+    `<circle class="timerp-ring-prog" cx="17" cy="17" r="${RING_R}" ` +
+    `stroke-dasharray="${(RING_C * f).toFixed(2)} ${RING_C.toFixed(2)}"/>` +
+    `</svg>`;
+  return wrap;
+}
 
 function render() {
   rowsEl.textContent = '';
   const elapsed = Date.now() - receivedAt;
-  const visible = timers.filter((t) => t.status === 'running' || t.ringing);
 
-  for (const t of visible) {
+  for (const t of timers) {
     const row = document.createElement('div');
     row.className = 'timerp-row' + (t.ringing ? ' ringing' : '');
+    row.dataset.type = t.type;
 
-    const btn = document.createElement('button');
-    btn.className = 'timerp-circle' + (t.ringing ? ' ringing' : '');
-    btn.innerHTML = t.ringing ? ICON_STOP : ICON_PAUSE;
+    // 左のボタンは機能ごとに意味を変える:
+    //   鳴動中 = 止める / カウントダウン・ストップウォッチ = 一時停止・再開 /
+    //   予約中のアラーム = 押しても止めないベル表示(誤操作で予定を消さないため)
+    const alarmIdle = t.type === 'clock' && !t.ringing;
+    const btn = document.createElement(alarmIdle ? 'div' : 'button');
+    btn.className = 'timerp-circle' + (t.ringing ? ' ringing' : '') + (alarmIdle ? ' alarm' : '');
     if (t.ringing) {
+      btn.innerHTML = ICON_STOP;
       btn.title = '止める';
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         if (t.fireId) window.roopieInternal.cancelTimerFire(t.fireId);
         else window.roopieInternal.acknowledgeTimer(t.id);
       });
+    } else if (alarmIdle) {
+      btn.innerHTML = ICON_BELL;
+    } else if (t.status === 'paused') {
+      btn.innerHTML = ICON_PLAY;
+      btn.classList.add('paused');
+      btn.title = '再開';
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        window.roopieInternal.startTimer(t.id);
+      });
     } else {
+      btn.innerHTML = ICON_PAUSE;
       btn.title = '一時停止';
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         window.roopieInternal.pauseTimer(t.id);
       });
     }
-    row.appendChild(btn);
+
+    if (t.type === 'countdown' && !t.ringing && t.durationMs) {
+      const wrap = progressRing(remainingOf(t, elapsed) / t.durationMs);
+      wrap.appendChild(btn);
+      row.appendChild(wrap);
+    } else {
+      row.appendChild(btn);
+    }
 
     const info = document.createElement('div');
     info.className = 'timerp-info';
     const name = document.createElement('div');
     name.className = 'timerp-name';
-    name.textContent = t.name || defaultName(t);
+    // アラームは名前より「何時に鳴るか」が主役なので時刻を出す
+    name.textContent = alarmIdle ? `${formatClockTime(t.clockTime)} ${t.name || ''}`.trim() : t.name || defaultName(t);
     info.appendChild(name);
     row.appendChild(info);
+
+    // ストップウォッチは実行中だけラップを打てるようにする(フロートしたまま計測できる)
+    if (t.type === 'stopwatch' && t.status === 'running' && !t.ringing) {
+      const lap = document.createElement('button');
+      lap.className = 'timerp-lap';
+      lap.innerHTML = ICON_LAP;
+      lap.title = 'ラップ';
+      lap.addEventListener('click', (e) => {
+        e.stopPropagation();
+        window.roopieInternal.lapTimer(t.id);
+      });
+      row.appendChild(lap);
+    }
 
     const time = document.createElement('div');
     time.className = 'timerp-time';
@@ -117,13 +191,6 @@ window.roopieInternal.onTimerState((items) => {
   receivedAt = Date.now();
   render();
 });
-// このViewは表示されるまで作られないため、直後に状態変化が無いと何も描画されないまま
-// になっていた(pushのみでpull無し)。表示された時点の状態を明示的に取得しておく
-window.roopieInternal.listTimers().then((items) => {
-  timers = items;
-  receivedAt = Date.now();
-  render();
-});
 
 setInterval(render, 1000);
 
@@ -132,7 +199,6 @@ dismissBtn.addEventListener('click', () => window.roopieInternal.timerDismiss())
 
 // ---- ドラッグで四隅に移動(mediaplayer.jsと同型。Viewの再配置に影響されない
 // movementX/Y の積算値を送る) ----
-const DRAG_THRESHOLD = 4;
 let dragging = false;
 let accX = 0;
 let accY = 0;

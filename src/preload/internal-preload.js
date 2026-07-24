@@ -155,6 +155,8 @@ if (location.protocol === 'roopie:') {
     startTimer: (id) => ipcRenderer.send('timer:start', id),
     pauseTimer: (id) => ipcRenderer.send('timer:pause', id),
     resetTimer: (id) => ipcRenderer.send('timer:reset', id),
+    lapTimer: (id) => ipcRenderer.send('timer:lap', id),
+    addTimerTime: (id, deltaMs) => ipcRenderer.send('timer:add-time', id, deltaMs),
     acknowledgeTimer: (id) => ipcRenderer.send('timer:acknowledge', id),
     cancelTimerFire: (fireId) => ipcRenderer.send('timer:cancel-fire', fireId),
     timerContextMenu: (id) => ipcRenderer.send('timer:context-menu', id),
