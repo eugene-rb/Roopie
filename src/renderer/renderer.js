@@ -30,6 +30,7 @@ window.roopie.onTabsState((state) => {
   tabState = state;
   renderTabs();
   renderToolbar();
+  syncExtensionActionsTab();
 });
 
 function renderTabs() {
@@ -444,6 +445,19 @@ function renderExtensionActions(partition) {
   // 非同期で生えるため、追加を監視して都度フィルタを適用する
   new MutationObserver(applyExtensionPinning).observe(list.shadowRoot, { childList: true });
   applyExtensionPinning();
+  syncExtensionActionsTab();
+}
+
+// このウィンドウのアクティブタブを <browser-action-list> に明示する。
+// 指定しないと「最後にフォーカスされたウィンドウのアクティブタブ」が使われるため、
+// 複数ウィンドウを開いていると別ウィンドウのタブの状態(アイコン/バッジ)が映ってしまう
+function syncExtensionActionsTab() {
+  const list = document.getElementById('extensions-list');
+  if (!list) return;
+  const active = tabState.tabs.find((t) => t.id === tabState.activeTabId);
+  if (!Number.isFinite(active?.wcId)) return;
+  if (list.getAttribute('tab') === String(active.wcId)) return;
+  list.setAttribute('tab', String(active.wcId));
 }
 
 // ---- 拡張機能(Edge風: ピン留め+パズルボタンのメニュー) ----

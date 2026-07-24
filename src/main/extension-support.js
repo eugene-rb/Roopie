@@ -1,5 +1,5 @@
 const path = require('path');
-const { app, session: electronSession, nativeImage } = require('electron');
+const { app, session: electronSession, nativeImage, BrowserWindow } = require('electron');
 const { ElectronChromeExtensions } = require('electron-chrome-extensions');
 const { installChromeWebStore, installExtension, uninstallExtension } = require('electron-chrome-web-store');
 
@@ -18,21 +18,47 @@ class ExtensionSupport {
     // 消えて情報が引けなくなる(名前もパスも)ため、読み込まれるたびにここへ控えておく。
     // 一覧表示(無効化中も出す)と再有効化(パスが要る)の両方に使う
     this.metaBySession = new Map();
-    this.tabManager = null;
-    this.window = null;
+    // 開いているウィンドウ(1つのExtensionSupportを全ウィンドウで共有するため、
+    // 「最後に作られたウィンドウ」1つだけを覚えていると、後から作ったタブが別ウィンドウの
+    // ものとして拡張機能システムに登録されてしまい、ツールバーのアイコンが
+    // 別ウィンドウのタブの状態(アイコン/バッジ)を映してしまう)
+    this.contexts = new Set(); // { tabManager, window }
   }
 
   setBrowser({ tabManager, window }) {
-    this.tabManager = tabManager;
-    this.window = window;
+    const entry = { tabManager, window };
+    this.contexts.add(entry);
+    window.on('closed', () => this.contexts.delete(entry));
+  }
+
+  liveContexts() {
+    return [...this.contexts].filter((c) => !c.window.isDestroyed());
+  }
+
+  // このwebContents(タブ)を持っているウィンドウ
+  contextForTab(wc) {
+    return this.liveContexts().find((c) => c.tabManager.tabs.some((t) => t.view.webContents === wc)) ?? null;
+  }
+
+  // 拡張機能からの新規タブ作成先。指定が無ければフォーカス中(なければ最後に作られた)ウィンドウ
+  contextForWindowId(windowId) {
+    const live = this.liveContexts();
+    const byId = typeof windowId === 'number' ? live.find((c) => c.window.id === windowId) : null;
+    if (byId) return byId;
+    const focused = BrowserWindow.getFocusedWindow();
+    return live.find((c) => c.window === focused) ?? live[live.length - 1] ?? null;
   }
 
   extensionsDir(profileId) {
     return path.join(app.getPath('userData'), 'profiles', profileId, 'extensions');
   }
 
+  // タブとその持ち主のウィンドウをまとめて引く(ウィンドウをまたいで探す)
   findTab(wc) {
-    return this.tabManager?.tabs.find((t) => t.view.webContents === wc) ?? null;
+    const ctx = this.contextForTab(wc);
+    if (!ctx) return null;
+    const tab = ctx.tabManager.tabs.find((t) => t.view.webContents === wc);
+    return tab ? { tab, tabManager: ctx.tabManager, window: ctx.window } : null;
   }
 
   _metaMapFor(session) {
@@ -78,16 +104,18 @@ class ExtensionSupport {
       license: 'GPL-3.0',
       session,
       createTab: async (details) => {
-        const tab = this.tabManager.createTab(details.url || undefined);
-        return [tab.view.webContents, this.window];
+        const target = this.contextForWindowId(details.windowId);
+        if (!target) throw new Error('タブを開けるウィンドウがありません');
+        const tab = target.tabManager.createTab(details.url || undefined);
+        return [tab.view.webContents, target.window];
       },
       selectTab: (wc) => {
-        const tab = this.findTab(wc);
-        if (tab) this.tabManager.switchTab(tab.id);
+        const found = this.findTab(wc);
+        if (found) found.tabManager.switchTab(found.tab.id);
       },
       removeTab: (wc) => {
-        const tab = this.findTab(wc);
-        if (tab) this.tabManager.closeTab(tab.id);
+        const found = this.findTab(wc);
+        if (found) found.tabManager.closeTab(found.tab.id);
       },
     });
     this.bySession.set(session, extensions);
@@ -103,15 +131,21 @@ class ExtensionSupport {
       if (session.extensions?.getExtension(id)) session.extensions.removeExtension(id);
     }
 
-    // 取り付け完了前に開かれたタブも拡張機能システムへ登録する
-    for (const tab of this.tabManager?.tabs ?? []) {
-      if (tab.view.webContents.session === session) this.addTab(tab.view.webContents);
+    // 取り付け完了前に開かれたタブも拡張機能システムへ登録する(全ウィンドウ分)
+    for (const ctx of this.liveContexts()) {
+      for (const tab of ctx.tabManager.tabs) {
+        if (tab.view.webContents.session === session) this.addTab(tab.view.webContents);
+      }
     }
   }
 
-  // タブ作成時に呼ぶ(chrome.tabs APIで見えるようにする)
+  // タブ作成時に呼ぶ(chrome.tabs APIで見えるようにする)。
+  // 「どのウィンドウのタブか」を間違えると、そのウィンドウのアクティブタブが
+  // 追跡できなくなり、ツールバーのアイコンが別タブの状態を映してしまう
   addTab(wc) {
-    this.bySession.get(wc.session)?.addTab(wc, this.window);
+    const ctx = this.contextForTab(wc);
+    if (!ctx) return;
+    this.bySession.get(wc.session)?.addTab(wc, ctx.window);
   }
 
   // アクティブタブの変更を通知する

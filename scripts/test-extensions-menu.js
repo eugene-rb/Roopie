@@ -32,7 +32,19 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const js = (wc, code) => wc.executeJavaScript(code, true);
 
 async function shot(wc, name) {
-  const image = await wc.capturePage();
+  // capturePage は初回に UnknownVizError を返すことがあるので数回試す(検証本体には影響しない)
+  let image = null;
+  for (let i = 0; i < 4 && !image; i++) {
+    try {
+      image = await wc.capturePage();
+    } catch (err) {
+      if (i === 3) {
+        console.log(`   (スクショ失敗: ${name} ${err.message})`);
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 400));
+    }
+  }
   const file = path.join(shotDir, name);
   fs.writeFileSync(file, image.toPNG());
   console.log(`   📸 ${file}`);

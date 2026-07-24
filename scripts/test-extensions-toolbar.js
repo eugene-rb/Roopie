@@ -23,7 +23,9 @@ function check(name, actual, expected) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const js = (wc, code) => wc.executeJavaScript(code, true);
 
-// アクション(ツールバーアイコン)を持つ最小の拡張機能を作る
+// アクション(ツールバーアイコン)を持つ最小の拡張機能を作る。
+// 実物の拡張(uBlock等)と同じく、アクティブタブが変わるたびに chrome.action.setIcon({tabId})
+// でタブ単位のアイコンを設定する = ツールバー側が「今どのタブか」を正しく持てているかを試せる
 function makeFixture(name) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'roopie-ext-act-'));
   // 16x16の単色BGRAビットマップからPNGを作る(外部ファイルに依存しない)
@@ -45,9 +47,21 @@ function makeFixture(name) {
       description: 'ツールバー表示の検証用',
       icons: { 16: 'icon.png' },
       action: { default_icon: { 16: 'icon.png' }, default_title: name, default_popup: 'popup.html' },
+      permissions: ['tabs'],
+      background: { service_worker: 'bg.js' },
     })
   );
   fs.writeFileSync(path.join(dir, 'popup.html'), '<!doctype html><title>popup</title>ポップアップ');
+  // アクティブタブが変わるたびにタブ単位のアイコン・バッジを設定する
+  fs.writeFileSync(
+    path.join(dir, 'bg.js'),
+    `const mark = (tabId) => {
+       chrome.action.setIcon({ tabId, path: { 16: 'icon.png' } });
+       chrome.action.setBadgeText({ tabId, text: String(tabId).slice(-2) });
+     };
+     chrome.tabs.onActivated.addListener(({ tabId }) => mark(tabId));
+     chrome.tabs.onUpdated.addListener((tabId) => mark(tabId));`
+  );
   return dir;
 }
 
@@ -62,6 +76,9 @@ const toolbarState = (wc) =>
          listExists: !!list,
          actions: nodes.length,
          shown: nodes.filter((n) => n.style.display !== 'none').length,
+         // no-icon = アイコンの読み込みに失敗して灰色の文字アイコンになっている状態
+         noIcon: nodes.filter((n) => n.classList.contains('no-icon')).length,
+         tab: nodes[0]?.getAttribute('tab') ?? null,
          puzzleHidden: document.getElementById('extensions-menu-btn').classList.contains('hidden'),
        };
      })()`
@@ -85,10 +102,13 @@ app.whenReady().then(async () => {
     browser.sendExtensionsFor(ctx.profileId);
     await sleep(1500);
 
+    const wcIdOf = (tab) => String(tab.view.webContents.id);
+
     const initial = await toolbarState(uiWc);
     console.log('   初期:', JSON.stringify(initial));
     check('ツールバーにアイコンが出る', initial.shown, 1);
     check('パズルボタンが出る', initial.puzzleHidden, false);
+    check('アイコンの読み込みに失敗していない', initial.noIcon, 0);
 
     // 通常ページのタブと内部ページのタブを用意して行き来する
     const tabA = ctx.tabManager.tabs[0];
@@ -98,12 +118,15 @@ app.whenReady().then(async () => {
     console.log('   内部ページ:', JSON.stringify(onInternal));
     check('内部ページのタブでもアイコンが残る', onInternal.shown, 1);
     check('内部ページのタブでもパズルボタンが残る', onInternal.puzzleHidden, false);
+    check('内部ページのタブでもアイコンが読める', onInternal.noIcon, 0);
+    check('アイコンが今のタブを指している(内部ページ)', onInternal.tab, wcIdOf(tabB));
 
     ctx.tabManager.switchTab(tabA.id);
     await sleep(1200);
     const backToA = await toolbarState(uiWc);
     console.log('   戻り:', JSON.stringify(backToA));
     check('元のタブへ戻してもアイコンが残る', backToA.shown, 1);
+    check('アイコンが今のタブを指している(戻り)', backToA.tab, wcIdOf(tabA));
 
     // 裏で開いたタブ(休止中=未読み込み)へ切り替える
     const tabC = ctx.tabManager.createTab('https://example.com', { background: true });
@@ -113,27 +136,50 @@ app.whenReady().then(async () => {
     const onHibernated = await toolbarState(uiWc);
     console.log('   休止復帰:', JSON.stringify(onHibernated));
     check('休止から復帰したタブでもアイコンが残る', onHibernated.shown, 1);
+    check('アイコンが今のタブを指している(休止復帰)', onHibernated.tab, wcIdOf(tabC));
 
     // 2つ目のウィンドウを開いてから、1つ目のウィンドウでタブを切り替える
+    // (拡張機能システムへのタブ登録がウィンドウ単位で正しくないと、ここで参照するタブがずれる)
     const ctx2 = browser.createWindow();
-    await sleep(2000);
+    await sleep(2500);
     ctx.window.focus();
     ctx.tabManager.switchTab(tabB.id);
-    await sleep(1200);
+    await sleep(1500);
     const afterSecondWindow = await toolbarState(uiWc);
     console.log('   2窓目あり(1窓目):', JSON.stringify(afterSecondWindow));
     check('2つ目のウィンドウを開いた後も1つ目にアイコンが残る', afterSecondWindow.shown, 1);
+    check('2つ目のウィンドウを開いた後もアイコンが読める', afterSecondWindow.noIcon, 0);
+    check('1窓目のアイコンが1窓目の今のタブを指している', afterSecondWindow.tab, wcIdOf(tabB));
+
     const secondWindowState = await toolbarState(ctx2.window.webContents);
     console.log('   2窓目:', JSON.stringify(secondWindowState));
     check('2つ目のウィンドウにもアイコンが出る', secondWindowState.shown, 1);
+    check('2窓目のアイコンが2窓目のタブを指している', secondWindowState.tab, wcIdOf(ctx2.tabManager.tabs[0]));
+
+    // 1窓目で新しいタブを開いて切り替える(2窓目ができた後に作られたタブの登録先が正しいか)
+    const tabD = ctx.tabManager.createTab('https://example.org');
+    await sleep(1500);
+    const afterNewTab = await toolbarState(uiWc);
+    console.log('   2窓目あり+新タブ:', JSON.stringify(afterNewTab));
+    check('後から開いたタブでもアイコンが今のタブを指している', afterNewTab.tab, wcIdOf(tabD));
+    check('後から開いたタブでもアイコンが読める', afterNewTab.noIcon, 0);
 
     for (const [name, wc] of [
       ['ext-toolbar-win1.png', uiWc],
       ['ext-toolbar-win2.png', ctx2.window.webContents],
     ]) {
-      const image = await wc.capturePage();
-      fs.writeFileSync(path.join(shotDir, name), image.toPNG());
-      console.log(`   📸 ${path.join(shotDir, name)}`);
+      // 初回は UnknownVizError になることがあるので数回試す(検証本体には影響しない)
+      for (let i = 0; i < 4; i++) {
+        try {
+          const image = await wc.capturePage();
+          fs.writeFileSync(path.join(shotDir, name), image.toPNG());
+          console.log(`   📸 ${path.join(shotDir, name)}`);
+          break;
+        } catch (err) {
+          if (i === 3) console.log(`   (スクショ失敗: ${name} ${err.message})`);
+          await sleep(400);
+        }
+      }
     }
 
     console.log(failed ? `\n${failed}件失敗` : '\n全テスト成功');

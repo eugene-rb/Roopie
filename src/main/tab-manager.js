@@ -1191,6 +1191,9 @@ class TabManager {
         const savedAnywhere = isBookmarked || (!t.isInternal && this.bookmarks.existsAnywhere(url));
         return {
           id: t.id,
+          // 拡張機能システム(electron-chrome-extensions)から見たタブID。
+          // ツールバーの <browser-action-list> に「このウィンドウの今のタブ」を教えるのに使う
+          wcId: wc.id,
           title: wc.getTitle() || t.hibernatedTitle || (t.hibernated ? hostnameOf(t.hibernatedUrl) : '新しいタブ'),
           // 新しいタブページではアドレスバーを空にする(Chromeと同じ挙動)
           url: isNewTabUrl(url) ? '' : url,
