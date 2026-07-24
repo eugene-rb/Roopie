@@ -174,6 +174,16 @@ app.whenReady().then(async () => {
     check('ラップ一覧に行が出る(実行中の現在ラップ+記録1件)', await js(panelWc, `document.querySelectorAll('.sw-lap').length`), 2);
     await shot(panelWc, 'timer-stopwatch.png');
 
+    // 他のセクションへ移ったらストップウォッチの50msティッカーを止める(実行中のまま離れても回り続けない)
+    const ticking = () => js(panelWc, 'swFastTimer !== null');
+    check('ストップウォッチ表示中はティッカーが回る', await ticking(), true);
+    ctx.sidePanel.openSection('bookmarks');
+    await sleep(500);
+    check('他のセクションへ移るとティッカーが止まる', await ticking(), false);
+    ctx.sidePanel.openSection('timers');
+    await sleep(500);
+    check('戻ると再開する', await ticking(), true);
+
     // ---- フローティング表示 ----
     ctx.sidePanel.setOpen(false);
     await sleep(700);

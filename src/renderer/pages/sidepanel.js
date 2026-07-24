@@ -1060,7 +1060,7 @@ function renderStopwatch() {
 // 1/100秒表示は1秒間隔では止まって見えるため、実行中だけ50msで数字だけ差し替える
 // (DOMの作り直しはしない。表示していない/止まっているときはタイマーごと止める)
 function updateSwTicker() {
-  const need = state.activeSection === 'timers' && timerTab === 'stopwatch' && !!swRunning && !!swTimeEl;
+  const need = state.open && state.activeSection === 'timers' && timerTab === 'stopwatch' && !!swRunning && !!swTimeEl;
   if (need && !swFastTimer) swFastTimer = setInterval(tickStopwatch, 50);
   else if (!need && swFastTimer) {
     clearInterval(swFastTimer);
@@ -1884,6 +1884,9 @@ function render() {
   if (state.activeSection === 'downloads') refreshDownloads();
   if (state.activeSection === 'trackers') refreshTrackers();
   if (state.activeSection === 'timers') renderTimers();
+  // 他のセクションへ移った/パネルを閉じたときにストップウォッチの50msティッカーを止める
+  // (renderTimers()はタイマー表示中しか走らないため、離脱時はここで確実に判定し直す)
+  updateSwTicker();
 
   renderPinnedWebPanels();
   // 入力中のメモは上書きしない
