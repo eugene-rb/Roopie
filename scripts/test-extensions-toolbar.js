@@ -164,6 +164,21 @@ app.whenReady().then(async () => {
     check('後から開いたタブでもアイコンが今のタブを指している', afterNewTab.tab, wcIdOf(tabD));
     check('後から開いたタブでもアイコンが読める', afterNewTab.noIcon, 0);
 
+    // タブを2窓目へ移す(WebContentsViewごと載せ替える)。拡張機能システム側の
+    // 「どのウィンドウのタブか」も付け替えないと、ツールバーが別ウィンドウのタブを映す
+    await js(ctx2.window.webContents, `window.roopie.moveTabFromWindow(${ctx.window.id}, ${tabD.id}, 0)`);
+    await sleep(2000);
+    const movedTarget = await toolbarState(ctx2.window.webContents);
+    console.log('   移動先(2窓目):', JSON.stringify(movedTarget));
+    check('移動先でもアイコンが出る', movedTarget.shown, 1);
+    check('移動先のアイコンが移ってきたタブを指している', movedTarget.tab, wcIdOf(tabD));
+    check('移動先でもアイコンが読める', movedTarget.noIcon, 0);
+    check('移動してもWebContentsは同じ(再読み込みされない)', ctx2.tabManager.tabs[0]?.id, tabD.id);
+
+    const movedSource = await toolbarState(uiWc);
+    console.log('   移動元(1窓目):', JSON.stringify(movedSource));
+    check('移動元のアイコンは残りのタブを指す', movedSource.tab, wcIdOf(ctx.tabManager.getTab(ctx.tabManager.activeTabId)));
+
     for (const [name, wc] of [
       ['ext-toolbar-win1.png', uiWc],
       ['ext-toolbar-win2.png', ctx2.window.webContents],

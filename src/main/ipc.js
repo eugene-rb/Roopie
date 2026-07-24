@@ -192,29 +192,55 @@ function registerIpc() {
       });
       if (detach && tabManager.getTab(id) && tabManager.tabs.length > 1) {
         // ページ領域かウィンドウの外へ落とした = 新しいウィンドウへ切り離す(同じプロファイルのまま)。
-        // 元のウィンドウと同じ大きさで、カーソル位置に開く
-        const url = tabManager.getTab(id).view.webContents.getURL();
+        // 元のウィンドウと同じ大きさで、カーソル位置に開く。
+        // タブはURLで作り直さずWebContentsViewごと引き渡す(再読み込みされないので再生が続く)
         const { width, height } = ctx.window.getBounds();
-        tabManager.closeTab(id);
-        browser.createWindow({ url, x: point.x, y: point.y, width, height, profileId: ctx.profileId });
+        const tab = tabManager.releaseTab(id);
+        if (!tab) return;
+        browser.createWindow({
+          adoptTab: tab,
+          x: point.x,
+          y: point.y,
+          width,
+          height,
+          profileId: ctx.profileId,
+          incognito: ctx.incognito,
+          session: ctx.session, // 同じセッションでなければViewを載せられない
+        });
       }
     }, 40);
   });
 
-  // 別ウィンドウのタブバーへドロップされたタブを、このウィンドウへ移す
-  // (WebContentsViewはウィンドウをまたいで再利用できないため、URLだけ引き継いで元は閉じ・こちらで開き直す)
+  // 別ウィンドウのタブバーへドロップされたタブを、このウィンドウへ移す。
+  // WebContentsViewはウィンドウをまたいで載せ替えられるので、Viewごと引き渡す
+  // (URLで作り直すと再読み込みになり再生が止まる。まだ読み込んでいないタブは
+  //  getURL()が空で「新しいタブ」に化けてしまう)。
+  // プロファイル(セッション)が違うウィンドウへは載せ替えられないので、その時だけURLを引き継ぐ
   ipcMain.on('tabs:move-from-window', (e, sourceWindowId, sourceTabId, toIndex) => {
     const targetCtx = ctxOf(e);
     if (!targetCtx) return;
-    const sourceCtx = windows.all().find((c) => c.window.id === sourceWindowId);
+    // 元ウィンドウの drag-end が先に走って既に切り離されていることがあるため、
+    // そのIDのタブを実際に持っているウィンドウを全体から探す(タブIDは全ウィンドウで一意)
+    const sourceCtx =
+      windows.all().find((c) => c.window.id === sourceWindowId && c.tabManager.getTab(sourceTabId)) ??
+      windows.all().find((c) => c.tabManager.getTab(sourceTabId));
     if (!sourceCtx || sourceCtx === targetCtx) return;
     const tab = sourceCtx.tabManager.getTab(sourceTabId);
     if (!tab) return;
-    const url = tab.view.webContents.getURL();
-    sourceCtx.tabConsumedBy = sourceTabId;
-    sourceCtx.tabManager.closeTab(sourceTabId);
-    const newTab = targetCtx.tabManager.createTab(url);
-    targetCtx.tabManager.moveTab(newTab.id, toIndex);
+    sourceCtx.tabConsumedBy = sourceTabId; // 元ウィンドウの drag-end に二重処理させない
+
+    if (targetCtx.tabManager.canAdopt(tab)) {
+      const wasLastTab = sourceCtx.tabManager.tabs.length === 1;
+      sourceCtx.tabManager.releaseTab(sourceTabId);
+      targetCtx.tabManager.adoptTab(tab, toIndex);
+      // 最後の1枚を渡したら元のウィンドウは用済み(引き取った後に閉じる)
+      if (wasLastTab) sourceCtx.window.close();
+    } else {
+      const url = sourceCtx.tabManager.tabUrl(tab);
+      sourceCtx.tabManager.closeTab(sourceTabId);
+      const newTab = targetCtx.tabManager.createTab(url || undefined);
+      targetCtx.tabManager.moveTab(newTab.id, toIndex);
+    }
     targetCtx.window.focus();
   });
   ipcMain.on('tabs:navigate', (e, input) => tabsOf(e)?.navigate(input));

@@ -4,6 +4,35 @@
 
 ## 進捗記録
 
+### 2026-07-24: タブのウィンドウ間移動を「Viewごと引き渡す」方式に変更(化ける・再読み込みされるの2件を修正)
+
+ユーザー報告: 「別のウィンドウにタブをドラッグしたり、タブをドラッグして新しいウィンドウを開いたりした時に、そのタブが新しいタブに化けることがある」「ドラッグ&ドロップしたタブを再読み込みせず、YouTubeの再生などを続けてできるようにして」。
+
+**原因(1件の設計に起因する2症状)**
+
+タブの移動は `tabs:move-from-window`(別ウィンドウのタブバーへドロップ)も切り離し(`tabs:drag-end`)も、**URLだけ引き継いで元のタブを閉じ、移動先で `createTab(url)` し直す**実装だった(「WebContentsViewはウィンドウをまたいで再利用できない」というコメント付き)。そのため
+
+- **新しいタブに化ける**: 移動元で `webContents.getURL()` を読むが、**裏で開いた/セッション復元した休止中のタブ**(`hibernated`)や**まだ最初の遷移が確定していないタブ**では空文字が返る。`createTab('')` になり「新しいタブ」相当の空タブが出来ていた。
+- **必ず再読み込みされる**: 別のWebContentsを作って読み込み直すので、当然YouTube等の再生は最初から。
+
+**修正: WebContentsView ごとウィンドウを載せ替える**
+
+Electron 43 では `windowA.contentView.removeChildView(view)` → `windowB.contentView.addChildView(view)` でViewをウィンドウ間で移せる(webContents はそのまま生き続けるので再読み込みも再生の中断も起きない)ことを最小スクリプトで先に確認してから実装した。コメントの記述は古かった。
+
+- `TabManager#releaseTab(id)` / `TabManager#adoptTab(tab, toIndex)` を追加。`releaseTab` は `closeTab` から「破棄」を抜いたもの(分割の解体・アクティブタブの繰り上げ・ページ全画面の解除・メディア監視の停止・`onTabClosed` は同じ)。**Viewを外してから**元ウィンドウを閉じるので、最後の1枚を渡しても巻き添えで壊れない。
+- タブに載せたリスナは `tab.wcListeners`([イベント名, 関数])に控え、`detachEvents` で外して移動先で `attachEvents` し直す。**古いTabManager(=古いウィンドウ)を指したままのリスナが残らないようにするのが肝**。`attachContextMenu` も `tabManager` をクロージャで抱えているので、リスナを返すようにして同じ仕組みに乗せた。
+- `adoptTab` では `armAutoPauseRelease` / ブックマーク案内も張り直し、再生したまま運ばれてきたタブを移動先のミニプレイヤーへ映すため `startMediaWatch` を呼ぶ(再生が途切れないので `media-started-playing` は二度と飛ばない)。
+- 拡張機能システム: `store.addTab` は**登録済みのタブだと何もしない**ので、`removeTab`+`addTab` しないと「どのウィンドウのタブか」が古いまま=ツールバーのアイコンが別ウィンドウのタブを映す。`ExtensionSupport#moveTab` を追加。ただし `store.removeTab` は**こちらの `removeTab` 実装(=タブを閉じる)を呼び返す**ため、`movingTabs` フラグで移動中だけ閉じないようにしている(ここを踏むとタブが消える)。
+- `browser.createWindow({ adoptTab, session })`: 切り離し先のウィンドウは初期タブを作らず、**画面(タブバー)の読み込みを待たずに**引き取る(Viewが宙に浮く時間を短くする)。`session` は切り離し元がシークレットのときに同じセッションを共有するため。合わせて、シークレットのセッション破棄は**同じセッションを使うウィンドウが全部閉じてから**に変えた(従来はシークレットから切り離すと通常ウィンドウになってしまっていた)。
+- **プロファイル(セッション)が違うウィンドウへはViewを移せない**ので、そこだけ従来どおりURLを引き継ぐ。その際の `TabManager#tabUrl(tab)` は `getURL() || hibernatedUrl` を返すので、休止中のタブでも「新しいタブ」に化けない。
+- `tabs:move-from-window` は、元ウィンドウの `drag-end` が先に走って既に切り離されていた場合に備え、**そのタブIDを実際に持っているウィンドウを全体から探す**ようにした(タブIDは全ウィンドウで一意)。
+
+**検証**
+
+- 新規 `scripts/test-tab-move-live.js`: 再生中のタブ(canvasのcaptureStreamを流す`<video>`)を①別ウィンドウのタブバーへ移す ②新しいウィンドウへ切り離す の両方で、WebContentsのIDが同じ・`did-start-loading` が飛ばない・`performance.now()` の起点が同じ・`video.currentTime` が進み続ける ことを確認。休止中タブが「新しいタブ」に化けないこと、最後の1枚を渡すと元ウィンドウが閉じてタブは生き残ること、別プロファイルへはURL引き継ぎにフォールバックすることも見る。移動後のタブを `capturePage` して真っ白にならないことも残す(`BrowserWindow.capturePage` はUI側しか撮らないのでタブのViewを直接撮る)。
+- `scripts/test-tab-detach.js` / `scripts/test-tab-cross-window.js` に「WebContentsが作り直されていない」「再読み込みが走らない」「ページのJS変数が残っている」を追加。
+- `scripts/test-extensions-toolbar.js` にタブを2窓目へ移すケースを追加(移動先のアイコンが移ってきたタブを、移動元のアイコンが残ったタブを指すこと)。
+
 ### 2026-07-24: フロートの一時停止・タブ切り離し・拡張機能ツールバーの3件を修正
 
 いずれもユーザー報告からの修正。3件は独立しているのでコミットも分けた。

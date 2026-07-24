@@ -296,6 +296,9 @@ class TabManager {
       // 再生が始まった瞬間に一時停止し続ける(ミュートはしない。ユーザーが触れれば以後は通常どおり)
       autoPauseMedia: background,
       autoPauseListener: null,
+      // attachEvents で張った webContents のリスナ([イベント名, 関数])。
+      // 別ウィンドウへ移すとき、古いTabManagerを指すリスナを外して張り直すために覚えておく
+      wcListeners: [],
     };
     this.tabs.push(tab);
     this.window.contentView.addChildView(view);
@@ -408,19 +411,24 @@ class TabManager {
     else this.activeWebContents()?.focus();
   }
 
+  // 張ったリスナは tab.wcListeners に控える(detachEvents で外して別ウィンドウへ張り直せるように)
   attachEvents(tab) {
     const wc = tab.view.webContents;
     const update = () => this.sendState();
+    const on = (event, listener) => {
+      wc.on(event, listener);
+      tab.wcListeners.push([event, listener]);
+    };
 
-    wc.on('page-title-updated', (_e, title) => {
+    on('page-title-updated', (_e, title) => {
       this.history.update(wc.getURL(), title);
       this.sendState();
     });
-    wc.on('did-start-loading', update);
-    wc.on('did-stop-loading', update);
-    wc.on('did-navigate-in-page', update);
+    on('did-start-loading', update);
+    on('did-stop-loading', update);
+    on('did-navigate-in-page', update);
 
-    wc.on('did-navigate', (_e, url) => {
+    on('did-navigate', (_e, url) => {
       tab.favicon = null;
       tab.isInternal = isInternalUrl(url);
       // ページを離れたら、前のページのメディアを「再生中」と言い続けない
@@ -443,21 +451,21 @@ class TabManager {
 
     // Chromiumが再生の開始/停止を教えてくれる(iframeの中でもshadow DOMの中でも飛ぶ)。
     // これをきっかけに全フレームを見に行く
-    wc.on('media-started-playing', () => {
+    on('media-started-playing', () => {
       // まだ触れていない裏タブ/復元タブが自動再生を始めた瞬間に止める(ミュートはしない)
       if (tab.autoPauseMedia) this.pauseAutoplayedMedia(tab);
       this.startMediaWatch(tab);
     });
-    wc.on('media-paused', () => this.probeMedia(tab));
+    on('media-paused', () => this.probeMedia(tab));
 
     // タブのスピーカーアイコン用。実際に音が鳴っているかどうかはこちらの方が正確
     // (media-started-playingは無音のvideo要素でも飛ぶため)
-    wc.on('audio-state-changed', (e) => {
+    on('audio-state-changed', (e) => {
       tab.isAudible = e.audible;
       this.sendState();
     });
 
-    wc.on('page-favicon-updated', (_e, favicons) => {
+    on('page-favicon-updated', (_e, favicons) => {
       tab.favicon = favicons[favicons.length - 1] || null;
       this.history.update(wc.getURL(), null, tab.favicon);
       this.sendState();
@@ -465,14 +473,14 @@ class TabManager {
 
     // メディアの next/prev 用wrapperをmain worldへ注入(http/httpsのみ)。
     // ページ側は再生開始のたびにハンドラを登録し直すため、dom-readyで先に仕込んでおけば拾える
-    wc.on('dom-ready', () => {
+    on('dom-ready', () => {
       const scheme = wc.getURL().split(':')[0];
       if (scheme === 'http' || scheme === 'https') {
         wc.executeJavaScript(MEDIA_HOOK, true).catch(() => {});
       }
     });
 
-    wc.on('did-fail-load', (_e, code, description, url, isMainFrame) => {
+    on('did-fail-load', (_e, code, description, url, isMainFrame) => {
       // -3 (ABORTED) はユーザー操作による中断なので無視する
       if (isMainFrame && code !== -3) {
         console.error(`読み込み失敗: ${url} (${code} ${description})`);
@@ -480,7 +488,7 @@ class TabManager {
     });
 
     // ページ内検索の結果をUIへ
-    wc.on('found-in-page', (_e, result) => {
+    on('found-in-page', (_e, result) => {
       this.window.webContents.send('find:result', {
         activeMatchOrdinal: result.activeMatchOrdinal,
         matches: result.matches,
@@ -491,7 +499,7 @@ class TabManager {
     // 通常タブから内部ページへ遷移しようとした場合は新しいタブで開く。
     // (逆方向の内部ページ→通常ページは同じタブで遷移できる。preloadは
     //  roopie:以外ではAPIを公開しないため安全)
-    wc.on('will-navigate', (event, url) => {
+    on('will-navigate', (event, url) => {
       if (isInternalUrl(url) && !tab.hasInternalPreload) {
         event.preventDefault();
         this.createTab(url);
@@ -500,7 +508,7 @@ class TabManager {
 
     // ページ側の全画面(YouTubeの全画面ボタン等)。許可した有名サイトだけを受け入れ、
     // それ以外はすぐ解除する(広告や偽の警告画面に画面を占有されないようにする)
-    wc.on('enter-html-full-screen', () => {
+    on('enter-html-full-screen', () => {
       if (!isFullscreenAllowed(wc.getURL())) {
         // Electronはこの時点で既にウィンドウを全画面にしているので、ページ側とウィンドウ側の
         // 両方を戻す(ページ側だけだとウィンドウが全画面のまま残る)
@@ -510,7 +518,7 @@ class TabManager {
       }
       this.setHtmlFullscreen(tab.id, true);
     });
-    wc.on('leave-html-full-screen', () => this.setHtmlFullscreen(tab.id, false));
+    on('leave-html-full-screen', () => this.setHtmlFullscreen(tab.id, false));
 
     // target="_blank" 等のリンクは新しいタブで開く。
     // ホイールクリック/Ctrl+クリックは disposition が background-tab で来るので、
@@ -520,7 +528,7 @@ class TabManager {
       return { action: 'deny' };
     });
 
-    attachContextMenu(wc, this);
+    tab.wcListeners.push(['context-menu', attachContextMenu(wc, this)]);
   }
 
   closeTab(id) {
@@ -563,6 +571,105 @@ class TabManager {
 
   closeActiveTab() {
     if (this.activeTabId !== null) this.closeTab(this.activeTabId);
+  }
+
+  // ---- タブをウィンドウ間で移す(切り離し / 別ウィンドウのタブバーへドロップ) ----
+  //
+  // 以前はURLだけ引き継いで元を閉じ・移動先で開き直していたため、(1)まだ読み込んでいない
+  // タブ(裏で開いた/セッション復元した休止中のタブ)は getURL() が空でそのまま
+  // 「新しいタブ」に化け、(2)必ず再読み込みになるのでYouTube等の再生が止まっていた。
+  // WebContentsView は removeChildView / addChildView でウィンドウ間を移せる
+  // (webContents はそのまま生き続けるので再読み込みも再生の中断も起きない)ので、
+  // View そのものを引き渡す。
+
+  // このTabManagerが張ったリスナを外す(古いウィンドウを指したまま残らないように)
+  detachEvents(tab) {
+    const wc = tab.view.webContents;
+    if (!wc.isDestroyed()) {
+      for (const [event, listener] of tab.wcListeners) wc.off(event, listener);
+    }
+    tab.wcListeners = [];
+  }
+
+  // このウィンドウへ引き取れるタブか(セッション=プロファイルが同じでなければViewは移せない)
+  canAdopt(tab) {
+    return !!tab && !tab.view.webContents.isDestroyed() && tab.view.webContents.session === this.session;
+  }
+
+  // タブが指しているURL。まだ読み込んでいない(休止中の)タブでも空にならない。
+  // Viewを移せない場合(プロファイルが違う)に、URLだけ引き継ぐために使う
+  tabUrl(tab) {
+    if (!tab) return null;
+    const wc = tab.view.webContents;
+    const url = wc.isDestroyed() ? '' : wc.getURL();
+    return url || tab.hibernatedUrl || null;
+  }
+
+  // タブを破棄せずにこのウィンドウから外して返す(移動先で adoptTab に渡す)。
+  // 最後の1枚を外すとタブ0枚になるが、ウィンドウを閉じるかは呼び出し側が決める
+  releaseTab(id) {
+    const index = this.tabs.findIndex((t) => t.id === id);
+    if (index === -1) return null;
+
+    if (id === this.splitTabId) this.splitTabId = null;
+
+    const [tab] = this.tabs.splice(index, 1);
+    // ブックマークの案内は移動先で出し直す(見張りのリスナは一度外す)
+    const bookmarkHint = tab.bookmarkHint;
+    this.setBookmarkHint(tab, false);
+    if (tab.autoPauseListener) {
+      if (!tab.view.webContents.isDestroyed()) tab.view.webContents.off('input-event', tab.autoPauseListener);
+      tab.autoPauseListener = null;
+    }
+    tab.pendingBookmarkHint = bookmarkHint;
+    this.stopMediaWatch(tab);
+    if (this.htmlFullscreenTabId === tab.id) this.setHtmlFullscreen(tab.id, false);
+    this.detachEvents(tab);
+    // 先にViewを外しておく(この後この窓が空になって閉じても、Viewは巻き添えにならない)
+    this.window.contentView.removeChildView(tab.view);
+    this.onTabClosed?.(tab); // このウィンドウ側の再生表示などの後始末
+
+    if (this.tabs.length === 0) {
+      this.activeTabId = null;
+      return tab;
+    }
+
+    if (this.activeTabId === id) {
+      if (this.splitTabId && this.getTab(this.splitTabId)) {
+        const promoted = this.splitTabId;
+        this.splitTabId = null;
+        this.switchTab(promoted);
+      } else {
+        const next = this.tabs[Math.min(index, this.tabs.length - 1)];
+        this.switchTab(next.id);
+      }
+    } else {
+      this.updateVisibility();
+      this.layout();
+      this.sendState();
+    }
+    return tab;
+  }
+
+  // releaseTab で外したタブをこのウィンドウへ引き取る。toIndex 省略で末尾
+  adoptTab(tab, toIndex) {
+    if (!this.canAdopt(tab) || this.window.isDestroyed()) return null;
+    const to = Number.isInteger(toIndex) ? Math.max(0, Math.min(toIndex, this.tabs.length)) : this.tabs.length;
+    this.tabs.splice(to, 0, tab);
+    this.window.contentView.addChildView(tab.view);
+    this.attachEvents(tab);
+    if (tab.autoPauseMedia) this.armAutoPauseRelease(tab);
+    if (tab.pendingBookmarkHint) this.setBookmarkHint(tab, true);
+    tab.pendingBookmarkHint = false;
+    // 拡張機能システムに「このウィンドウのタブ」として登録し直す。
+    // switchTab(→onTabSelected)より先に行わないと、選択の通知が届かない
+    this.onTabAdopted?.(tab);
+    this.switchTab(tab.id);
+    this.raiseTopViews(); // 追加したViewの上に仕切り/プレイヤー/メニューを戻す
+    // 再生したまま運ばれてきたタブを、移動先のミニプレイヤーにも映す
+    // (再生は途切れないので media-started-playing は二度と飛んでこない)
+    if (!tab.hibernated) this.startMediaWatch(tab);
+    return tab;
   }
 
   switchTab(id) {

@@ -309,14 +309,17 @@ function memoryStore(defaultValue) {
   return { data: defaultValue, save() {}, flush() {} };
 }
 
-// url を指定すると、そのURLのタブ1枚だけで開く(タブのドラッグ切り離し用)。
+// url を指定すると、そのURLのタブ1枚だけで開く。
 // x/yはタブを離した画面座標(ドラッグ切り離し時、その位置に新しいウィンドウを出すため)
 // profileId を指定するとそのプロファイルのウィンドウとして開く(Edge挙動。省略時はアクティブ)。
-// restoreTabs を渡すと初期タブの代わりにそのタブ構成を復元する
-browser.createWindow = ({ incognito = false, url, x, y, width, height, profileId, restoreTabs } = {}) => {
+// restoreTabs を渡すと初期タブの代わりにそのタブ構成を復元する。
+// adoptTab を渡すと初期タブを作らず、そのタブ(別ウィンドウから releaseTab で外したもの)を
+// そのまま引き取る(タブのドラッグ切り離し。再読み込みされないので再生が続く)。
+// session を渡すとそのセッションを使う(切り離し元がシークレットのとき、同じセッションを共有するため)
+browser.createWindow = ({ incognito = false, url, x, y, width, height, profileId, restoreTabs, adoptTab, session: presetSession } = {}) => {
   const profile = browser.profiles.list().find((p) => p.id === profileId) ?? browser.profiles.active();
   const bundle = browser.bundleFor(profile.id);
-  const session = incognito ? createIncognitoSession() : browser.profiles.sessionFor(profile);
+  const session = presetSession ?? (incognito ? createIncognitoSession() : browser.profiles.sessionFor(profile));
   const frameColor = incognito ? FRAME_COLOR_INCOGNITO : FRAME_COLOR;
 
   const window = new BrowserWindow({
@@ -429,10 +432,16 @@ browser.createWindow = ({ incognito = false, url, x, y, width, height, profileId
     browser.extensions.setBrowser({ tabManager, window });
     tabManager.onTabCreated = (tab) => browser.extensions.addTab(tab.view.webContents);
     tabManager.onTabSelected = (tab) => browser.extensions.selectTab(tab.view.webContents);
+    // 別ウィンドウから引き取ったタブは、拡張機能システム側の「どのウィンドウのタブか」も更新する
+    tabManager.onTabAdopted = (tab) => browser.extensions.moveTab(tab.view.webContents);
     browser.extensions
       .attach(session, profile.id, bundle.settings.data.disabledExtensions ?? [])
       .catch((err) => console.error('拡張機能サポートの初期化に失敗:', err));
   }
+
+  // 切り離しで運ばれてきたタブは、画面(タブバー)の読み込みを待たずに引き取る。
+  // 待つ間Viewが宙に浮くと再生が途切れかねないため、できるだけ早く新しいウィンドウへ載せる
+  if (adoptTab) tabManager.adoptTab(adoptTab);
 
   window.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
 
@@ -446,7 +455,11 @@ browser.createWindow = ({ incognito = false, url, x, y, width, height, profileId
       DefaultBrowser.markShown();
       window.webContents.send('default-browser:prompt');
     }
-    if (restoreTabs?.length) {
+    if (adoptTab) {
+      // 引き取り済みのタブをタブバーへ映すだけ(sendAllToはタブ状態を含まない)
+      tabManager.sendState();
+      if (url) tabManager.createTab(url);
+    } else if (restoreTabs?.length) {
       tabManager.restoreTabs(restoreTabs);
       // 復元と同時に開きたいページ(初回イントロ/更新後の変更点)は復元後に前面で開く
       if (url) tabManager.createTab(url);
@@ -482,9 +495,12 @@ browser.createWindow = ({ incognito = false, url, x, y, width, height, profileId
     s.flush();
   });
 
-  // シークレットのセッションはウィンドウを閉じたら破棄する
+  // シークレットのセッションはウィンドウを閉じたら破棄する。
+  // ただしタブの切り離しでセッションを共有している場合は、最後の1枚が閉じるまで残す
   window.on('closed', () => {
-    if (incognito) session.clearStorageData().catch(() => {});
+    if (!incognito) return;
+    if (windows.all().some((c) => c !== ctx && c.session === session)) return;
+    session.clearStorageData().catch(() => {});
   });
 
   return ctx;

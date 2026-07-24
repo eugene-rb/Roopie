@@ -57,6 +57,11 @@ app.whenReady().then(async () => {
     await sleep(1200);
     const before = windows.all().length;
     check('前提: タブが2枚ある', ctx.tabManager.tabs.length >= 2, true);
+    // 切り離しでWebContentsが作り直されない(=再読み込みされない)ことを見るための目印
+    const movedWcId = tab.view.webContents.id;
+    let reloads = 0;
+    tab.view.webContents.on('did-start-loading', () => reloads++);
+    await tab.view.webContents.executeJavaScript('window.__roopieMark = 42', true).catch(() => {});
 
     // ページ領域の中央にカーソルがある状態でドラッグ終了 = 切り離し
     const b = ctx.window.getContentBounds();
@@ -73,6 +78,17 @@ app.whenReady().then(async () => {
     const size = detached.window.getBounds();
     const origin = ctx.window.getBounds();
     check('切り離し先は元のウィンドウと同じ大きさ', [size.width, size.height], [origin.width, origin.height]);
+
+    // 切り離しはURLで作り直さずWebContentsViewごと引き渡す(再読み込みされない)
+    check('切り離し先のタブは同じタブID', !!detached.tabManager.getTab(tab.id), true);
+    check('WebContentsが作り直されていない', detached.tabManager.getTab(tab.id)?.view.webContents.id, movedWcId);
+    check('切り離しで再読み込みが走らない', reloads, 0);
+    check(
+      'ページの状態(JSの変数)が残っている',
+      await detached.tabManager.getTab(tab.id).view.webContents.executeJavaScript('window.__roopieMark', true).catch(() => null),
+      42
+    );
+    check('切り離し先でアクティブになる', detached.tabManager.activeTabId, tab.id);
 
     // ウィンドウの外(上側)へ落としても切り離す
     const tab2 = ctx.tabManager.createTab('https://example.org');

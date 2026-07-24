@@ -8,8 +8,10 @@ const MAX_SELECTION_LABEL = 16;
 /**
  * ページ上の右クリックメニュー(Chrome/Edge相当)。
  */
+// 取り付けたリスナを返す(タブを別ウィンドウへ移すときに外して付け直すため。
+// このリスナは tabManager をクロージャで抱えており、移動後は古いウィンドウを指してしまう)
 function attachContextMenu(webContents, tabManager) {
-  webContents.on('context-menu', (_event, params) => {
+  const listener = (_event, params) => {
     // browser は循環依存の下流にあるため、クリック時(=完全ロード後)に遅延requireする
     const browser = require('./browser');
     const menu = new Menu();
@@ -186,7 +188,9 @@ function attachContextMenu(webContents, tabManager) {
     });
 
     menu.popup();
-  });
+  };
+  webContents.on('context-menu', listener);
+  return listener;
 }
 
 module.exports = { attachContextMenu };

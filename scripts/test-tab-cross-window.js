@@ -62,14 +62,16 @@ app.whenReady().then(async () => {
     check('移動前: Aは2枚(初期タブ+/a)', ctxA.tabManager.tabs.length, 2);
     check('移動前: Bは2枚(初期タブ+/b1)', ctxB.tabManager.tabs.length, 2);
 
+    // 移動でWebContentsが作り直されない(=再読み込みされない)ことを見るための目印
+    const movedWcId = tabA.view.webContents.id;
+    let reloads = 0;
+    tabA.view.webContents.on('did-start-loading', () => reloads++);
+    await js(tabA.view.webContents, 'window.__roopieMark = 42');
+
     // Bの画面(実レンダラー)から「AのウィンドウID・タブIDを index 0 へ」と実IPCで送る
     // (ドロップ先の描画スロット計算まではDOM経由で検証済みのため、ここではIPCの配線に絞る)
     await js(ctxB.window.webContents, `window.roopie.moveTabFromWindow(${ctxA.window.id}, ${tabA.id}, 0)`);
-    await sleep(300);
-    await Promise.race([
-      new Promise((r) => ctxB.tabManager.tabs[0]?.view.webContents.once('did-finish-load', r)),
-      sleep(6000),
-    ]);
+    await sleep(500);
 
     check('Aからそのタブが消える', ctxA.tabManager.getTab(tabA.id), null);
     check('移動後もAには元の初期タブが残る', ctxA.tabManager.tabs.length, 1);
@@ -77,6 +79,12 @@ app.whenReady().then(async () => {
     check('Bの先頭(index 0)に移ってくる', ctxB.tabManager.tabs[0].view.webContents.getURL(), `http://localhost:${PORT}/a`);
     check('移動してきたタブがBでアクティブになる', ctxB.tabManager.activeTabId, ctxB.tabManager.tabs[0].id);
     check('Bのbi1タブはそのまま残る', ctxB.tabManager.tabs.some((t) => t.view.webContents.getURL() === `http://localhost:${PORT}/b1`), true);
+
+    // URLで作り直さずWebContentsViewごと運ぶので、タブIDもWebContentsも同じまま(再読み込みなし)
+    check('タブIDが変わらない', ctxB.tabManager.tabs[0].id, tabA.id);
+    check('WebContentsが作り直されていない', ctxB.tabManager.tabs[0].view.webContents.id, movedWcId);
+    check('移動で再読み込みが走らない', reloads, 0);
+    check('ページの状態(JSの変数)が残っている', await js(tabA.view.webContents, 'window.__roopieMark'), 42);
 
     // 二重処理防止ガードの確認: 元ウィンドウ(A)のtabs:drag-endが、
     // 既に移動済みの同じタブIDに対して発火しても「新しいウィンドウ」を余分に作らない

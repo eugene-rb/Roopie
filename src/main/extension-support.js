@@ -23,6 +23,9 @@ class ExtensionSupport {
     // ものとして拡張機能システムに登録されてしまい、ツールバーのアイコンが
     // 別ウィンドウのタブの状態(アイコン/バッジ)を映してしまう)
     this.contexts = new Set(); // { tabManager, window }
+    // 別ウィンドウへ移動中のタブ。electron-chrome-extensions の removeTab は
+    // こちらの removeTab 実装(= タブを閉じる)を呼び返すため、移動中だけ閉じないようにする
+    this.movingTabs = new Set();
   }
 
   setBrowser({ tabManager, window }) {
@@ -114,6 +117,7 @@ class ExtensionSupport {
         if (found) found.tabManager.switchTab(found.tab.id);
       },
       removeTab: (wc) => {
+        if (this.movingTabs.has(wc)) return; // 別ウィンドウへの移動に伴う登録解除(閉じてはいけない)
         const found = this.findTab(wc);
         if (found) found.tabManager.closeTab(found.tab.id);
       },
@@ -146,6 +150,22 @@ class ExtensionSupport {
     const ctx = this.contextForTab(wc);
     if (!ctx) return;
     this.bySession.get(wc.session)?.addTab(wc, ctx.window);
+  }
+
+  // タブが別ウィンドウへ移ったときに呼ぶ。addTab は登録済みのタブだと何もしないため、
+  // 一度外してから付け直さないと「どのウィンドウのタブか」が古いままになり、
+  // ツールバーのアイコンが別ウィンドウのタブの状態を映してしまう
+  moveTab(wc) {
+    const extensions = this.bySession.get(wc.session);
+    const ctx = this.contextForTab(wc);
+    if (!extensions || !ctx) return;
+    this.movingTabs.add(wc);
+    try {
+      extensions.removeTab(wc);
+      extensions.addTab(wc, ctx.window);
+    } finally {
+      this.movingTabs.delete(wc);
+    }
   }
 
   // アクティブタブの変更を通知する
