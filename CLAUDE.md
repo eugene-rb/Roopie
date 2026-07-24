@@ -28,6 +28,7 @@
     - ローカルで確認したいときだけ `npm run dist`(dist/ に出力、公開はしない)
   - (2026-07-19) 初回起動のイントロ(`roopie://welcome`)とアップデート後の変更点(`roopie://whatsnew`)を追加。**出し分けはアプリのバージョンではなく `src/renderer/pages/release-notes.json` の先頭エントリの version で行う**(pushごとにビルド番号が上がるため、バージョン一致だと毎回ポップアップが出てしまう)。`VERSION_BASE` を上げるときは release-notes.json に1件追加する(それが全ユーザーへの「変更点」になる)。状態は `userData/app-state.json`。検証: `npx electron scripts/test-onboarding.js`
   - (2026-07-19) インストーラーはNSISのアシスト形式(oneClick:false)。左側・ヘッダーの画像は `npx electron scripts/gen-installer-art.js` で生成(build/*.bmp。NSISは24bit BMPしか受け付けない)
+  - (2026-07-25) `webPreferences.autoplayPolicy` は**指定しない**(既定のまま)。`'document-user-activation-required'` を入れると、user activation はドキュメント単位でナビゲーションのたびに捨てられるため、**自分で押した再読み込みですら**YouTube等が止まったままになる。裏タブの勝手な再生は ①背景/セッション復元のタブはそもそも読み込まない(`hibernated`) ②読み込まれてもそのタブを触るまでは再生開始の瞬間に止める(`autoPauseMedia`)の2段構えで塞ぐ
   - (2026-07-24) タブのウィンドウ間移動は **WebContentsView ごと載せ替える**(`TabManager#releaseTab`/`#adoptTab`)。URLで作り直すと再読み込みになり再生が止まる・未読み込みのタブが「新しいタブ」に化ける。タブのwebContentsにリスナを張る新機能は、必ず `attachEvents` の `on()` 経由で `tab.wcListeners` に載せる(移動時に張り直せないと古いウィンドウを指したまま残る)。セッション(プロファイル)が違うウィンドウへは移せないのでURL引き継ぎにフォールバックする
 
 ---

@@ -90,11 +90,28 @@ app.whenReady().then(async () => {
     check('非アクティブのタブ(a)は休止中', tabA.hibernated, true);
     check('非アクティブのタブ(c)は休止中', tabC.hibernated, true);
 
-    // 後からタブaへ切り替える → ここで初めて読み込まれ、自動再生は始まった瞬間に止められる
+    // 後からタブaへ切り替える → ここで初めて読み込まれ、自動再生は始まった瞬間に止められる。
+    // 「止まるまで」はメイン側が media-started-playing を受けて全フレームへスクリプトを流す往復ぶん
+    // かかるので、固定時間で1回見るのではなく止まるまで待つ(かかった時間も出す)
+    let playStartedAt = null; // 実際に音が出てしまう時間を測る起点
+    tabA.view.webContents.once('media-started-playing', () => {
+      playStartedAt = Date.now();
+    });
     tm.switchTab(tabA.id);
     await Promise.race([new Promise((r) => tabA.view.webContents.once('did-finish-load', r)), sleep(6000)]);
-    await sleep(500);
-    const aPausedAfterSwitch = await js(tabA.view.webContents, `document.getElementById('a').paused`);
+    const pauseStart = Date.now();
+    let aPausedAfterSwitch = false;
+    while (Date.now() - pauseStart < 4000) {
+      aPausedAfterSwitch = await js(tabA.view.webContents, `document.getElementById('a').paused`);
+      if (aPausedAfterSwitch) break;
+      await sleep(50);
+    }
+    const pausedAt = Date.now();
+    console.log(
+      `   (読み込み完了から止まるまで ${pausedAt - pauseStart}ms` +
+        (playStartedAt ? ` / 実際に鳴っていたのは ${pausedAt - playStartedAt}ms` : '') +
+        ')'
+    );
     check('切り替え後、自動再生されても一時停止される', aPausedAfterSwitch, true);
     check('ミュートはされていない', tabA.view.webContents.isAudioMuted(), false);
 

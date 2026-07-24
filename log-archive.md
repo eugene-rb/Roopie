@@ -4,6 +4,38 @@
 
 ## 進捗記録
 
+### 2026-07-25: 自分で押した再読み込みでYouTubeが止まる問題(autoplayPolicyを外した)
+
+ユーザー質問「再読み込み時にyoutubeが一時停止するのはどうして?」から。
+
+**原因**
+
+`createTab()` の `webPreferences.autoplayPolicy: 'document-user-activation-required'`。**ユーザー操作あり(user activation)の状態はドキュメント単位で、ナビゲーションのたびに捨てられる**ため、自分で押した再読み込みでも新しいドキュメントは操作履歴ゼロになり、ページの `play()` が `NotAllowedError` で弾かれて一時停止のままになっていた。実測(`document-user-activation-required` vs 既定の `no-user-gesture-required`):
+
+| | 初回読み込み | reload後 | reload前にクリック→reload |
+|---|---|---|---|
+| document-user-activation-required | ❌ NotAllowedError | ❌ NotAllowedError | ❌ NotAllowedError |
+| no-user-gesture-required(既定) | ✅ | ✅ | ✅ |
+
+Chromeで同じことが起きないのは、Chromeの既定が固定ポリシーではなく Media Engagement Index(よく見るサイトほど自動再生を許す学習型ヒューリスティック)だから。Electronは3つの固定値しか持たずMEI相当は選べない。
+
+**修正**
+
+`autoplayPolicy` の指定自体を削除(既定に戻す)。この指定は「ホイールクリックで裏に開いたタブが勝手に音を鳴らす」対策で入れたものだったが、**今は裏タブがそもそも読み込まれない**(`hibernated`)ので不要になっている(ユーザー判断)。裏タブの自動再生は次の2段構えで塞いだまま:
+
+1. 背景タブ・セッション復元のタブはそもそも読み込まない(`hibernated`)
+2. 読み込まれた後も、そのタブ自身への操作(クリック/キー入力)があるまでは再生開始の瞬間に止める(`autoPauseMedia` / `pauseAutoplayedMedia`)
+
+**副作用(把握済み)**
+
+休止中タブへ切り替えたとき、以前はポリシーが再生そのものを塞いでいたので無音だったが、今は**実際に再生が始まってから止まるまで約1.1秒ぶん音が出る**(`media-started-playing` を受けて全フレームへスクリプトを流す往復ぶん)。実測値は `scripts/test-restore-autoplay.js` が毎回出力する。なおYouTube等の大手はそもそもポリシーを素通りしていた(2026-07-21の調査)ので、それらの体感は変わらない。
+
+**検証**
+
+- 新規 `scripts/test-reload-autoplay.js`: 前面タブは自動再生できる / **再読み込み後も再生できる**(連続2回も) / 裏タブは休止中で読み込まれない / 切り替えて読み込まれても触るまでは止められる / ミュートはされない / 操作後は再読み込みしても再生できる。
+- `scripts/test-restore-autoplay.js`: 「止まるまで固定500ms待って1回見る」を**止まるまでポーリング**に変更(以前はポリシーが再生自体を塞いでいたため、一時停止機構が動かなくても通ってしまっていた)。かかった時間もログに出す。
+- `scripts/test-autoplay-policy.js` は変更なしで通る(裏タブの一時停止機構そのものはこのポリシーに依存していない)。
+
 ### 2026-07-24: タブのウィンドウ間移動を「Viewごと引き渡す」方式に変更(化ける・再読み込みされるの2件を修正)
 
 ユーザー報告: 「別のウィンドウにタブをドラッグしたり、タブをドラッグして新しいウィンドウを開いたりした時に、そのタブが新しいタブに化けることがある」「ドラッグ&ドロップしたタブを再読み込みせず、YouTubeの再生などを続けてできるようにして」。

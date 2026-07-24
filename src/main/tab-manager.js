@@ -264,10 +264,14 @@ class TabManager {
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
-        // Electronの既定(no-user-gesture-required)は無条件に自動再生を許すため、
-        // ホイールクリック等で裏で開いたタブがユーザーの見ていない間に音を鳴らし始めてしまう。
-        // Chrome/Firefox既定と同じ「そのタブ自身への操作(クリック等)が要る」方式にする
-        autoplayPolicy: 'document-user-activation-required',
+        // autoplayPolicy は既定(no-user-gesture-required)のままにする。
+        // 'document-user-activation-required' にすると、ユーザー操作の有無は**ドキュメント単位**で
+        // ナビゲーションのたびに捨てられるため、自分で押した再読み込み(F5)の後ですら
+        // YouTube等が NotAllowedError で一時停止したままになる(Chromeの既定は固定ポリシーではなく
+        // よく見るサイトを学習するヒューリスティックなので、こうはならない)。
+        // 裏で開いたタブの勝手な再生は別の2段構えで塞いである:
+        //   1. ホイールクリック等の背景タブ・セッション復元のタブはそもそも読み込まない(hibernated)
+        //   2. 読み込まれた後も、そのタブ自身への操作があるまでは再生開始の瞬間に止める(autoPauseMedia)
       },
     });
 
