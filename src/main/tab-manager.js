@@ -61,19 +61,6 @@ const MEDIA_PROBE = `(() => {
   };
 })()`;
 
-// 裏で開いた/復元・休止復帰したタブが、まだ触れられていないうちに自動再生を始めた瞬間に
-// 流し込む。再生中のvideo/audioを全フレーム(shadow DOM含む)から探して止める
-// 既にミュートされている(装飾目的の無音背景動画など)ものまで止めると余計な副作用になるため、
-// 音を伴って再生されうるものだけを対象にする
-const PAUSE_ALL_MEDIA = `(() => {
-  const walk = (root, depth) => {
-    if (!root || depth > 8) return;
-    for (const el of root.querySelectorAll('video, audio')) if (!el.paused && !el.muted) el.pause();
-    for (const el of root.querySelectorAll('*')) if (el.shadowRoot) walk(el.shadowRoot, depth + 1);
-  };
-  walk(document, 0);
-})()`;
-
 // 1フレームへの問い合わせに待つ上限。応答を返さないフレーム(広告等)があるため必須
 const PROBE_TIMEOUT = 800;
 
@@ -269,9 +256,7 @@ class TabManager {
         // ナビゲーションのたびに捨てられるため、自分で押した再読み込み(F5)の後ですら
         // YouTube等が NotAllowedError で一時停止したままになる(Chromeの既定は固定ポリシーではなく
         // よく見るサイトを学習するヒューリスティックなので、こうはならない)。
-        // 裏で開いたタブの勝手な再生は別の2段構えで塞いである:
-        //   1. ホイールクリック等の背景タブ・セッション復元のタブはそもそも読み込まない(hibernated)
-        //   2. 読み込まれた後も、そのタブ自身への操作があるまでは再生開始の瞬間に止める(autoPauseMedia)
+        // 裏で開いたタブが勝手に鳴る問題は「そもそも読み込まない」(hibernated)ことで塞ぐ
       },
     });
 
@@ -295,11 +280,6 @@ class TabManager {
       hibernatedUrl: hibernated ? url : null,
       // 休止中に見せる仮タイトル(セッション復元時の実データ)。読み込まれれば実タイトルが優先される
       hibernatedTitle: hibernated && initialTitle ? initialTitle : null,
-      // ホイールクリック等で裏に開いた/セッション復元・休止復帰したタブが、見ていない/まだ
-      // 触れていない間に自動再生を始めてしまわないよう、そのタブ自身への操作があるまでは
-      // 再生が始まった瞬間に一時停止し続ける(ミュートはしない。ユーザーが触れれば以後は通常どおり)
-      autoPauseMedia: background,
-      autoPauseListener: null,
       // attachEvents で張った webContents のリスナ([イベント名, 関数])。
       // 別ウィンドウへ移すとき、古いTabManagerを指すリスナを外して張り直すために覚えておく
       wcListeners: [],
@@ -320,7 +300,6 @@ class TabManager {
     if (background && this.activeTabId !== prevActiveTabId) {
       this.switchTab(prevActiveTabId);
     }
-    if (tab.autoPauseMedia) this.armAutoPauseRelease(tab);
     if (!tab.hibernated) view.webContents.loadURL(url);
     if (background) {
       // 見えない位置に置いたままタブバーにだけ足す(今見ているページから離れない)
@@ -455,11 +434,7 @@ class TabManager {
 
     // Chromiumが再生の開始/停止を教えてくれる(iframeの中でもshadow DOMの中でも飛ぶ)。
     // これをきっかけに全フレームを見に行く
-    on('media-started-playing', () => {
-      // まだ触れていない裏タブ/復元タブが自動再生を始めた瞬間に止める(ミュートはしない)
-      if (tab.autoPauseMedia) this.pauseAutoplayedMedia(tab);
-      this.startMediaWatch(tab);
-    });
+    on('media-started-playing', () => this.startMediaWatch(tab));
     on('media-paused', () => this.probeMedia(tab));
 
     // タブのスピーカーアイコン用。実際に音が鳴っているかどうかはこちらの方が正確
@@ -621,10 +596,6 @@ class TabManager {
     // ブックマークの案内は移動先で出し直す(見張りのリスナは一度外す)
     const bookmarkHint = tab.bookmarkHint;
     this.setBookmarkHint(tab, false);
-    if (tab.autoPauseListener) {
-      if (!tab.view.webContents.isDestroyed()) tab.view.webContents.off('input-event', tab.autoPauseListener);
-      tab.autoPauseListener = null;
-    }
     tab.pendingBookmarkHint = bookmarkHint;
     this.stopMediaWatch(tab);
     if (this.htmlFullscreenTabId === tab.id) this.setHtmlFullscreen(tab.id, false);
@@ -662,7 +633,6 @@ class TabManager {
     this.tabs.splice(to, 0, tab);
     this.window.contentView.addChildView(tab.view);
     this.attachEvents(tab);
-    if (tab.autoPauseMedia) this.armAutoPauseRelease(tab);
     if (tab.pendingBookmarkHint) this.setBookmarkHint(tab, true);
     tab.pendingBookmarkHint = false;
     // 拡張機能システムに「このウィンドウのタブ」として登録し直す。
@@ -678,7 +648,7 @@ class TabManager {
 
   switchTab(id) {
     // 作成直後の背景タブに対して拡張機能システムが誤って発火させたものは無視する
-    // (createTab側の説明を参照。ここで無視しないと休止/自動ミュートの意味が無くなる)
+    // (createTab側の説明を参照。ここで無視しないと「裏では読み込まない」意味が無くなる)
     if (id === this._suppressActivationFor) return;
     const tab = this.getTab(id);
     if (!tab) return;
@@ -725,36 +695,6 @@ class TabManager {
     } else if (tab.bookmarkHintListener) {
       if (!wc.isDestroyed()) wc.off('input-event', tab.bookmarkHintListener);
       tab.bookmarkHintListener = null;
-    }
-  }
-
-  // 裏で開いた/復元・休止復帰したタブが自動再生を始めても、そのタブ自身への実際の操作
-  // (クリック・キー入力)があるまでは一時停止し続ける。タブバー側のクリック(切り替え)は
-  // ページへの操作ではないため対象外(=切り替えただけでは解除されない)
-  armAutoPauseRelease(tab) {
-    const wc = tab.view.webContents;
-    tab.autoPauseListener = (_e, input) => {
-      if (input.type === 'mouseDown' || input.type === 'keyDown') this.disarmAutoPause(tab);
-    };
-    wc.on('input-event', tab.autoPauseListener);
-  }
-
-  disarmAutoPause(tab) {
-    if (!tab.autoPauseMedia) return;
-    tab.autoPauseMedia = false;
-    const wc = tab.view.webContents;
-    if (!wc.isDestroyed() && tab.autoPauseListener) wc.off('input-event', tab.autoPauseListener);
-    tab.autoPauseListener = null;
-  }
-
-  // autoPauseMedia中のタブで再生が始まった瞬間に呼ぶ。全フレーム(shadow DOM含む)を
-  // 見て、再生中のvideo/audioを一時停止する(ミュートと違い実際に止めるので、
-  // 切り替えて見たときに「一時停止中」の状態から自分で再生ボタンを押せる)
-  pauseAutoplayedMedia(tab) {
-    const wc = tab.view.webContents;
-    if (wc.isDestroyed()) return;
-    for (const frame of wc.mainFrame?.framesInSubtree ?? []) {
-      frame.executeJavaScript(PAUSE_ALL_MEDIA, true).catch(() => {});
     }
   }
 

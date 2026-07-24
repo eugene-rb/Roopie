@@ -4,6 +4,25 @@
 
 ## 進捗記録
 
+### 2026-07-25: 裏タブの自動一時停止(autoPauseMedia)を廃止
+
+上の `autoplayPolicy` 削除に続けて、ユーザー判断で `autoPauseMedia` 機構そのものも外した。
+
+**理由**: 裏で開いたタブが `hibernated`(選ぶまで読み込まない)になった時点で、`media-started-playing` が飛ぶのは**ユーザーが切り替えた直後のタブだけ**になっていた。つまりこの機構は「見ていないタブを守る」役目を既に果たしておらず、**自分で開いた復元タブが約1.1秒鳴ってから勝手に止まる**という不自然な挙動を生むだけになっていた(Chromeならそのまま再生される場面)。
+
+**削除したもの**: `PAUSE_ALL_MEDIA` / `armAutoPauseRelease` / `disarmAutoPause` / `pauseAutoplayedMedia` と、タブの `autoPauseMedia` / `autoPauseListener`。`media-started-playing` は `startMediaWatch` を呼ぶだけになった。
+
+**残る保護は1つだけ**: 「裏で開いたタブ・セッション復元のタブはそもそも読み込まない」(`hibernated`)。読み込まれなければ音は出ようがない。切り替えた後はChromeと同じく普通に再生する。
+
+**塞がなくなったケース(承知のうえ)**: 前面で開いたタブの読み込み中に別のタブへ移り、そのタブが裏で読み込みを終えて自動再生を始める場合は素通りになる(この経路は元から `autoPauseMedia` の対象外だったので実質的な変化はない)。
+
+**テストの整理**
+
+- `scripts/test-autoplay-policy.js`: 主題を「裏タブは読み込まれないので音が出ない/切り替えれば普通に再生できる」に書き換え(経緯もヘッダに残した)。
+- `scripts/test-restore-autoplay.js`: 「復元タブは選ぶまで読み込まれない(URLも空)/選べば普通に再生できる」に書き換え。
+- `scripts/test-reload-autoplay.js`: 裏タブ切り替え後は普通に再生でき、そこから再読み込みしても再生できることを見る形に。
+- `scripts/test-media-multi.js`: `tm.disarmAutoPause()` の呼び出しを削除(関数自体が無くなったため、残すと落ちる)。
+
 ### 2026-07-25: 自分で押した再読み込みでYouTubeが止まる問題(autoplayPolicyを外した)
 
 ユーザー質問「再読み込み時にyoutubeが一時停止するのはどうして?」から。
