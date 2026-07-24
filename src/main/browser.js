@@ -313,15 +313,16 @@ function memoryStore(defaultValue) {
 // x/yはタブを離した画面座標(ドラッグ切り離し時、その位置に新しいウィンドウを出すため)
 // profileId を指定するとそのプロファイルのウィンドウとして開く(Edge挙動。省略時はアクティブ)。
 // restoreTabs を渡すと初期タブの代わりにそのタブ構成を復元する
-browser.createWindow = ({ incognito = false, url, x, y, profileId, restoreTabs } = {}) => {
+browser.createWindow = ({ incognito = false, url, x, y, width, height, profileId, restoreTabs } = {}) => {
   const profile = browser.profiles.list().find((p) => p.id === profileId) ?? browser.profiles.active();
   const bundle = browser.bundleFor(profile.id);
   const session = incognito ? createIncognitoSession() : browser.profiles.sessionFor(profile);
   const frameColor = incognito ? FRAME_COLOR_INCOGNITO : FRAME_COLOR;
 
   const window = new BrowserWindow({
-    width: 1280,
-    height: 800,
+    // タブの切り離しでは元のウィンドウと同じ大きさを引き継ぐ(指定が無ければ既定サイズ)
+    width: Number.isFinite(width) ? Math.max(500, Math.round(width)) : 1280,
+    height: Number.isFinite(height) ? Math.max(300, Math.round(height)) : 800,
     minWidth: 500,
     minHeight: 300,
     ...(Number.isFinite(x) && Number.isFinite(y) ? { x: Math.round(x - 100), y: Math.round(y - 20) } : {}),

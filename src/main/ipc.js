@@ -1,5 +1,5 @@
 const fs = require('fs');
-const { ipcMain, dialog, shell, net, clipboard } = require('electron');
+const { ipcMain, dialog, shell, net, clipboard, screen } = require('electron');
 const windows = require('./windows');
 const browser = require('./browser');
 const TabManager = require('./tab-manager');
@@ -16,6 +16,7 @@ const {
   showBookmarkBarMenu,
 } = require('./toolbar-context-menu');
 const { searchUrl } = require('./search-engines');
+const { shouldDetach } = require('./tab-drag');
 const { normalizeToolbarItems } = require('./toolbar-items');
 const { geocode, weather, fetchRss } = require('./widgets');
 const trackers = require('./trackers');
@@ -163,6 +164,11 @@ function registerIpc() {
     const ctx = ctxOf(e);
     if (!ctx) return;
     ctx.tabManager.hideDropZones();
+    // ドロップ位置はレンダラーのイベント座標ではなく、この瞬間のカーソル位置を取り直す
+    // (dragendのclientX/Yは素早いドラッグやウィンドウ外へのドロップで当てにならない)。
+    // 40ms後の確定処理まで待つとカーソルが動いてしまうため、ここで確定させておく
+    const point = screen.getCursorScreenPoint();
+    const contentBounds = ctx.window.getContentBounds();
     // split:drop や tabs:move-from-window が別Viewから遅れて届く可能性があるため、確定を少し遅らせる
     setTimeout(() => {
       const tabManager = ctx.tabManager;
@@ -176,11 +182,21 @@ function registerIpc() {
       }
       if (zone) {
         tabManager.dropSplit(id, zone);
-      } else if (info?.belowBar && tabManager.getTab(id) && tabManager.tabs.length > 1) {
-        // タブバーの下へ落とした = 新しいウィンドウへ切り離す(同じプロファイルのまま)
+        return;
+      }
+      const detach = shouldDetach({
+        contentBounds,
+        chromeHeight: tabManager.chromeHeight,
+        point,
+        reordered: !!info?.reordered,
+      });
+      if (detach && tabManager.getTab(id) && tabManager.tabs.length > 1) {
+        // ページ領域かウィンドウの外へ落とした = 新しいウィンドウへ切り離す(同じプロファイルのまま)。
+        // 元のウィンドウと同じ大きさで、カーソル位置に開く
         const url = tabManager.getTab(id).view.webContents.getURL();
+        const { width, height } = ctx.window.getBounds();
         tabManager.closeTab(id);
-        browser.createWindow({ url, x: info.screenX, y: info.screenY, profileId: ctx.profileId });
+        browser.createWindow({ url, x: point.x, y: point.y, width, height, profileId: ctx.profileId });
       }
     }, 40);
   });

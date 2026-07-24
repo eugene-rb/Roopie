@@ -154,7 +154,6 @@ function renderTabs() {
 // スロットは実体のある隙間で、ドラッグ中はカーソル位置にリアルタイムで追従し、タブの間に差し込める。
 let draggingId = null;
 let justDroppedId = null; // ドロップ直後、確定位置へFLIPで滑らせないタブID(スロット位置にそのまま出す)
-const DETACH_THRESHOLD = 40; // タブバーの下端からこれだけ離れたら切り離しと判定
 
 const tabBarEl = $('tab-bar');
 
@@ -227,12 +226,12 @@ function attachTabDrag(tabEl, tab) {
 
   tabEl.addEventListener('dragend', (e) => {
     // 分割 or 切り離しの確定はメイン側が行う(ページ領域のドロップゾーンからの分割と競合しないよう、
-    // メインで少し遅延させて判定する)。ここでは切り離し候補かどうかの目安だけ渡す
+    // メインで少し遅延させて判定する)。ドロップ位置はメイン側がカーソル位置を取り直して使うので、
+    // ここからは「タブバー内の並べ替えとして処理済みか」だけを渡す
+    // (dragendのclientX/Yは素早いドラッグやウィンドウ外へのドロップだと実際の位置とずれる)
     const reordered = e.dataTransfer.dropEffect === 'move';
-    const barBottom = tabsEl.getBoundingClientRect().bottom;
-    const belowBar = !reordered && e.clientY > barBottom + DETACH_THRESHOLD;
     cleanupDrag();
-    window.roopie.tabDragEnd(tab.id, { belowBar, screenX: e.screenX, screenY: e.screenY });
+    window.roopie.tabDragEnd(tab.id, { reordered });
   });
 }
 

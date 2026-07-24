@@ -10,6 +10,12 @@
   <!-- タブをドラッグして分割するためのドロップゾーン(ドラッグ中だけ表示) -->
   <div id="drop-zones" class="hidden">
     <div id="drop-preview"></div>
+    <!-- 中央は分割ゾーンの抜け。ここへ落とすと新しいウィンドウになるので、その目印を出す
+         (ドラッグを透過させる必要があるので pointer-events は持たせない) -->
+    <div id="drop-detach-hint">
+      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>
+      <span>新しいウィンドウで開く</span>
+    </div>
     <div class="drop-zone" data-zone="left"></div>
     <div class="drop-zone" data-zone="right"></div>
     <div class="drop-zone" data-zone="top"></div>
