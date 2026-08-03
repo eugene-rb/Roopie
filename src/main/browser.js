@@ -1,0 +1,1659 @@
+const { app, BrowserWindow, WebContentsView, protocol, net, screen, nativeTheme, session: electronSession } = require('electron');
+const crypto = require('crypto');
+const path = require('path');
+const { pathToFileURL } = require('url');
+const TabManager = require('./tab-manager');
+const History = require('./history');
+const Bookmarks = require('./bookmarks');
+const Readlist = require('./readlist');
+const Timers = require('./timers');
+const timerActions = require('./timer-actions');
+const Downloads = require('./downloads');
+const Profiles = require('./profiles');
+const GoogleAccounts = require('./google-accounts');
+const Gestures = require('./gestures');
+const gestureInput = require('./gesture-input');
+const SidePanel = require('./side-panel');
+const MediaPlayer = require('./media-player');
+const TimerPanel = require('./timer-panel');
+const ExtensionSupport = require('./extension-support');
+const AdBlock = require('./adblock');
+const Tor = require('./tor');
+const Passwords = require('./passwords');
+const Autofill = require('./autofill');
+const { Widgets } = require('./widgets');
+const Store = require('./store');
+const windows = require('./windows');
+const { defaultToolbarItems, normalizeToolbarItems } = require('./toolbar-items');
+const { Keybindings } = require('./keybindings');
+const LocalServers = require('./local-servers');
+const DefaultBrowser = require('./default-browser');
+const sitePermissions = require('./site-permissions');
+
+const PAGES_DIR = path.join(__dirname, '..', 'renderer', 'pages');
+const PRELOAD_DIR = path.join(__dirname, '..', 'preload');
+
+const DEFAULT_SETTINGS = {
+  showBookmarkBar: true,
+  adblock: true,
+  savePasswords: true,
+  mediaDocked: false,
+  mediaCorner: 'bottom-right',
+  timerDocked: false,
+  timerCorner: 'top-right', // メディアプレイヤー(既定bottom-right)と隅が重ならないように
+  downloadPath: '', // 空ならOS既定(session.setDownloadPathを呼ばない)
+  tabBarPosition: 'top', // 'top' | 'left'
+  // タブをここまでしか縮めない幅(px)。これより増えたらタブバーの横スクロールで見せる。
+  // 小さくすればたくさん並び、大きくすればタイトルが読める(横タブでのみ効く)
+  tabMinWidth: 140,
+  sidePanelPosition: 'right', // 'left' | 'right'
+  searchEngine: 'google', // 'google' | 'duckduckgo' | 'yahoo' | 'bing' | 'ecosia' | 'startpage'
+  toolbarItems: defaultToolbarItems(), // ツールバーのユーティリティ項目の表示/順序
+  // ツールバーに直接表示する拡張機能のID(Edge風。それ以外はパズルボタンのメニューから使う)
+  pinnedExtensions: [],
+  // 削除せずに一時的に無効化している拡張機能のID(設定画面のトグルから)
+  disabledExtensions: [],
+  // 自動入力(住所・個人情報/お支払い方法)のON/OFF
+  autofillAddresses: true,
+  autofillCards: true,
+  // 天気ウィジェットの既定の場所({ name, lat, lon })。null = 未設定(イントロか各ウィジェットで設定する)。
+  // 固定の初期値は持たない(勝手に他の都市の天気を出さないため)
+  weatherLocation: null,
+  // スタート画面のアイコン最大サイズ(px)。列数・行数はこれとウィンドウ幅・高さから自動計算する
+  // (ウィンドウをリサイズしてもアイコン自体の大きさは変わらず、表示できる列数・行数だけが変わる)
+  startIconSize: 96,
+  // 起動時に前回終了時のタブを復元するか。既定はOFF(これまでの挙動=新しいタブで開始)
+  restoreTabsOnStart: false,
+  // サイトごとに許可した権限。{ camera: [host], microphone: [], geolocation: [], notifications: [],
+  // fullscreen: [] }。未許可のサイトは要求のたびに確認ポップアップで尋ねる。
+  // 「ブロック」も「今回だけ許可」も覚えない(ここに載るのは「常に許可」だけ)
+  sitePermissions: { camera: [], microphone: [], geolocation: [], notifications: [], fullscreen: [] },
+  // ---- 翻訳(Edge準拠) ----
+  // 翻訳先の言語。ページ翻訳・選択テキストの翻訳で共通に使い、ドロップダウンで選び直すと更新される
+  translateTargetLang: 'ja',
+  // 読めない言語のページで翻訳を提案するか(Edgeの「翻訳を提案する」)
+  translateAutoOffer: true,
+  // 尋ねずに訳す言語 / 提案しない言語 / 提案しないサイト(ホスト名)
+  translateAlwaysLangs: [],
+  translateNeverLangs: [],
+  translateNeverSites: [],
+  // アクティブなタブを閉じた/ドラッグ&ドロップで別ウィンドウへ移した後、直前にアクティブ
+  // だったタブへ戻るか。OFF(既定)は Chrome と同じく同じ位置(右隣)のタブへ移る
+  activatePreviousTabOnClose: false,
+  // タブに付ける見た目のエフェクト(TAB_EFFECTSのいずれか)。同じ条件のタブに重ねて出せる:
+  // アクティブなタブ / メディア再生中のタブ / タブグループに属するタブ の3系統
+  activeTabEffect: 'none',
+  audioTabEffect: 'breathe',
+  groupTabEffect: 'underline',
+  // エフェクトの色。空ならアクセント色(グループはそのグループ自身の色)。色2はグラデーション系の
+  // エフェクトでのみ使い、空なら色1を白寄りにした色を自動で作る(レンダラー側のcolor-mix)
+  activeTabEffectColor: '',
+  activeTabEffectColor2: '',
+  audioTabEffectColor: '',
+  audioTabEffectColor2: '',
+  groupTabEffectColor: '',
+  groupTabEffectColor2: '',
+};
+// タブのエフェクトの種類。単色・グラデーション・アニメーション・ドット絵
+// (アクティブ/メディア再生中/タブグループの3系統で同じ一覧を使う)
+const AUDIO_TAB_EFFECTS = [
+  'none',
+  'solid',
+  'outline',
+  'underline',
+  'glow',
+  'gradient',
+  'gradient-underline',
+  'gradient-outline',
+  'pulse',
+  'breathe',
+  'flow',
+  'sweep',
+  'bars',
+  'rainbow',
+  'nyan',
+];
+const START_ICON_SIZE_RANGE = [48, 160];
+// タブの最小幅の許容範囲(px)。下限はfavicon+✕が収まる大きさ、上限は既定幅(200px)まで
+const TAB_MIN_WIDTH_RANGE = [56, 200];
+const DEFAULT_THEME = {
+  accent: '#6c8cff',
+  background: 'auto',
+  backgroundImage: '',
+  // 画像背景のぼかし(px)と暗さ(0=そのまま)。写真の上でも時計や検索欄が読めるように手で調節する
+  backgroundBlur: 0,
+  backgroundDim: 0,
+  // ビルトインのパターン背景(種類と2色)
+  backgroundPattern: 'dots',
+  patternColor: '#6c8cff',
+  patternBase: '#12162b',
+  // 自由に組めるグラデーション(角度と色の並び)。CSS文字列ではなく構造で持ち、組み立てはレンダラー側
+  gradientAngle: 165,
+  gradientStops: ['#171632', '#453667', '#e29a76'],
+  // ウィンドウ全体の不透明度(1=不透明)。下限を設けないと画面から消えて操作できなくなる
+  windowOpacity: 1,
+  customCss: '',
+
+  // ---- ウィンドウの外観(クロームUI全体。上の background は「新しいタブ」専用で別物) ----
+  // 明暗。'system' はOSの設定に追従する
+  windowMode: 'system',
+  // 面の作り。translucent/glass はWindows 11のacrylicを背後に敷く
+  windowStyle: 'solid',
+  // 面の基準色('' はモード既定)。ツールバーやタブの色はここから明るい側へ混ぜて作る
+  windowColor: '',
+  // 半透明・liquidglass・グラデ・パターンで、バーがどれだけ透けるか(0=透明, 100=不透明)
+  windowTranslucency: 62,
+  // クローム用のグラデーション(新しいタブのものとは別に持つ)
+  windowGradientAngle: 160,
+  windowGradientStops: ['#1b2340', '#2d2a55', '#123b47'],
+  // クローム用のパターン
+  windowPattern: 'dots',
+  windowPatternColor: '#6c8cff',
+};
+const THEME_BACKGROUNDS = ['auto', 'dawn', 'day', 'dusk', 'night', 'plain', 'image', 'pattern', 'gradient', 'threebody'];
+const THEME_PATTERNS = ['dots', 'grid', 'diagonal', 'crosshatch', 'hexagon', 'wave', 'circuit'];
+const WINDOW_MODES = ['system', 'dark', 'light'];
+const WINDOW_STYLES = ['solid', 'translucent', 'gradient', 'glass', 'pattern'];
+// acrylicを敷くスタイル。ウィンドウのbackgroundColorを透明にしないと見えない(実機で確認済み)
+const MATERIAL_STYLES = { translucent: 'acrylic', glass: 'acrylic' };
+const WINDOW_TRANSLUCENCY_RANGE = [20, 100];
+const MAX_CUSTOM_CSS = 50000;
+const MAX_BACKGROUND_IMAGE = 4_000_000; // data URIとして保存するため大きめに許容(4MB程度)
+const BACKGROUND_BLUR_RANGE = [0, 40];
+const BACKGROUND_DIM_RANGE = [0, 80];
+const GRADIENT_STOPS_RANGE = [2, 5];
+const WINDOW_OPACITY_RANGE = [0.3, 1]; // 0.3未満は事実上見えず操作不能になるため許可しない
+const TAB_BAR_WIDTH = 220; // 縦タブ表示時のタブバー幅(tailwind.cssの#tab-barの幅と一致させる)
+
+// ウィンドウの背景色(ページの周囲に見える「額縁」の色)
+const FRAME_COLOR = '#16181d';
+const FRAME_COLOR_INCOGNITO = '#1b1730';
+
+/**
+ * ブラウザ本体。プロファイル単位のデータと、ウィンドウの生成・状態配信を担う。
+ * IPCの受付は ipc.js、メニューは menu.js に分離してある。
+ */
+const browser = {
+  DEFAULT_SETTINGS,
+  DEFAULT_THEME,
+  THEME_BACKGROUNDS,
+  THEME_PATTERNS,
+  WINDOW_MODES,
+  WINDOW_STYLES,
+  AUDIO_TAB_EFFECTS,
+  START_ICON_SIZE_RANGE,
+  TAB_MIN_WIDTH_RANGE,
+  WINDOW_OPACITY_RANGE,
+  MAX_CUSTOM_CSS,
+
+  // プロファイル単位のデータ(全ウィンドウで共有)
+  profiles: null,
+  googleAccounts: null,
+  history: null,
+  bookmarks: null,
+  readlist: null,
+  downloads: null,
+  settings: null,
+  gestures: null,
+  theme: null,
+  passwords: null,
+  autofill: null,
+  widgets: null,
+
+  extensions: new ExtensionSupport(),
+  adblock: new AdBlock(),
+  tor: new Tor(),
+
+  // 保存確認バーで「保存する」が押されるまで、平文パスワードを一時保持する
+  pendingPassword: null,
+
+  incognitoCount: 0,
+};
+
+// ---- 内部ページ(roopie://)----
+
+// app.ready前に宣言する必要がある
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'roopie',
+    privileges: { standard: true, secure: true, supportFetchAPI: true },
+  },
+]);
+
+// roopie://<host>/<path> を src/renderer/pages 配下のファイルへ解決する
+function handleInternalRequest(request) {
+  const { host, pathname } = new URL(request.url);
+  const relative = pathname === '/' ? `${host}.html` : pathname.slice(1);
+  const filePath = path.join(PAGES_DIR, relative);
+  // ディレクトリ外への参照を防ぐ
+  if (!filePath.startsWith(PAGES_DIR)) {
+    return new Response('Forbidden', { status: 403 });
+  }
+  return net.fetch(pathToFileURL(filePath).toString());
+}
+
+// protocol.handle はセッションごとに必要(プロファイルごとにセッションが分かれるため)
+function registerInternalProtocol(session) {
+  if (session.protocol.isProtocolHandled('roopie')) return;
+  session.protocol.handle('roopie', handleInternalRequest);
+}
+
+// マウスジェスチャー / パスワード検出用のpreloadをセッション内の全ページに注入する
+// (webPreferences.preload と併用できるので、内部ページでもジェスチャーが効く)
+const pagePreloadSessions = new WeakSet();
+function registerPagePreloads(session) {
+  if (pagePreloadSessions.has(session)) return;
+  pagePreloadSessions.add(session);
+  // メディアの検出はpreloadではなくメインプロセスから行う(tab-manager.jsのprobeMedia)。
+  // preloadはメインフレームでしか走らず、プレイヤーをiframeに置くサイトを取りこぼすため
+  // translate-preload.js は分離ワールドでDOMのテキストを差し替える(指示が来るまで何もしない)
+  for (const name of ['gesture-preload.js', 'autofill-preload.js', 'media-guard-preload.js', 'translate-preload.js']) {
+    session.registerPreloadScript({ type: 'frame', filePath: path.join(PRELOAD_DIR, name) });
+  }
+  // ジェスチャーの検出はメインプロセスで行う(重いページでも止まらないようにするため)。
+  // 有効にする範囲は上のpreloadと同じ = このセッションの全ページ
+  gestureInput.enableForSession(session);
+  // カメラ・マイク・現在地・通知・全画面表示はサイトごとの許可制。
+  // 未許可のサイトから要求されたら、そのウィンドウに確認ポップアップを出して返事を待つ
+  TabManager.applyPermissionPolicy(session, (wc, permission, details) =>
+    browser.requestSitePermission(wc, permission, details)
+  );
+}
+
+// ---- データの初期化 ----
+
+// Storeは実ファイルパスで共有する。共有トグルONの項目は複数プロファイルが同じファイルを
+// 指すため、別々のStoreインスタンスを作ると書き込みが互いに巻き戻ってしまう
+const storeCache = new Map(); // filePath -> Store
+function store(profile, key, defaultValue) {
+  const file = browser.profiles.dataFile(profile, key);
+  let s = storeCache.get(file);
+  if (!s) {
+    s = new Store(file, defaultValue);
+    storeCache.set(file, s);
+  }
+  return s;
+}
+browser.store = store;
+
+// 古い形の設定を新しい形へ移す。旧キーは消すので二度目は何もしない
+// (=あとで取り消したホストが、次の起動で復活することはない)
+function migrateSettings(settings) {
+  if (sitePermissions.migrateSettings(settings.data)) settings.save();
+  return settings;
+}
+
+// プロファイルごとのデータ一式(Edge挙動: 複数プロファイルのウィンドウが同時に開くため、
+// アクティブ1つではなくプロファイル単位で保持する)。
+// インスタンスはプロファイルにつき1つを維持し(TabManager等が参照を持つ)、
+// 共有トグル変更時は setStore で保存先だけ差し替える(applyProfileStores)
+const profileData = new Map(); // profileId -> bundle
+
+browser.bundleFor = (profileId) => {
+  if (!browser.profiles) return null;
+  const existing = profileData.get(profileId);
+  if (existing) return existing;
+  const profile = browser.profiles.list().find((p) => p.id === profileId);
+  if (!profile) return null;
+  const bundle = {
+    profileId,
+    history: new History(store(profile, 'history', [])),
+    bookmarks: new Bookmarks(store(profile, 'bookmarks', []), () => browser.sendBookmarksFor(profileId)),
+    readlist: new Readlist(store(profile, 'readlist', []), () => browser.sendReadlistFor(profileId)),
+    timers: new Timers(store(profile, 'timers', []), {
+      onChange: () => browser.sendTimersFor(profileId),
+      onFire: (timer) => browser.fireTimer(profileId, timer),
+    }),
+    downloads: new Downloads(store(profile, 'downloads', []), () => browser.sendDownloadsFor(profileId)),
+    settings: migrateSettings(store(profile, 'settings', { ...DEFAULT_SETTINGS })),
+    gestures: new Gestures(store(profile, 'gestures', Gestures.defaults())),
+    theme: store(profile, 'theme', { ...DEFAULT_THEME }),
+    passwords: new Passwords(store(profile, 'passwords', [])),
+    autofill: new Autofill(store(profile, 'autofill', {})),
+    widgets: new Widgets(store(profile, 'start-widgets', {})),
+    // 「閉じたタブ/ウィンドウを再度開く」の履歴。同じプロファイルの全ウィンドウで1本を共有し、
+    // 別ウィンドウで閉じたタブも戻せるようにする(メモリのみ。再起動では消える)
+    closedTabs: [],
+  };
+  profileData.set(profileId, bundle);
+  return bundle;
+};
+
+browser.activeBundle = () => browser.bundleFor(browser.profiles?.activeId);
+
+// 互換ゲッター: browser.bookmarks 等は「アクティブ(=最後に選ばれた)プロファイル」の束を指す。
+// ウィンドウ起点の処理は必ず ctx.profileId から bundleFor で引くこと
+for (const key of [
+  'history',
+  'bookmarks',
+  'readlist',
+  'downloads',
+  'settings',
+  'gestures',
+  'theme',
+  'passwords',
+  'autofill',
+  'widgets',
+  'timers',
+]) {
+  Object.defineProperty(browser, key, {
+    get: () => browser.activeBundle()?.[key] ?? null,
+    configurable: true,
+  });
+}
+
+browser.initData = () => {
+  browser.profiles = new Profiles();
+
+  // Googleアカウント一覧はプロファイル横断で共有する
+  browser.googleAccounts = new GoogleAccounts(
+    new Store(path.join(app.getPath('userData'), 'google-accounts.json'), []),
+    () => browser.sendProfiles()
+  );
+
+  // ショートカット割り当てもブラウザ全体で共有(アプリメニューはグローバルなため)
+  browser.keybindings = new Keybindings(
+    new Store(path.join(app.getPath('userData'), 'keybindings.json'), {}),
+    () => browser.onKeybindingsChanged?.()
+  );
+
+  // ローカルサーバー検知(マシン単位。非表示ポートの記憶にストアを使う)
+  browser.localServers = new LocalServers(
+    new Store(path.join(app.getPath('userData'), 'local-servers.json'), { dismissed: [] })
+  );
+
+  browser.bundleFor(browser.profiles.activeId);
+
+  // タイマーのtickはブラウザ全体で1本。ウィンドウが開いているプロファイルの分だけ進める
+  // (ウィンドウの無いプロファイルのタイマーは鳴らない仕様)
+  setInterval(() => {
+    const profileIds = new Set(windows.all().map((ctx) => ctx.profileId));
+    for (const id of profileIds) profileData.get(id)?.timers.tick(Date.now());
+  }, 1000);
+};
+
+browser.flushAll = () => {
+  browser.profiles?.store.flush();
+  browser.googleAccounts?.store.flush();
+  browser.keybindings?.store.flush();
+  browser.localServers?.store.flush();
+  for (const s of storeCache.values()) s.flush();
+  for (const ctx of windows.all()) {
+    if (!ctx.incognito) ctx.sidePanel.store.flush();
+  }
+};
+
+// ---- ウィンドウ ----
+
+// シークレット用セッション(persist: を付けない = メモリ内のみ。閉じると消える)
+function createIncognitoSession() {
+  return electronSession.fromPartition(`incognito-${++browser.incognitoCount}`);
+}
+
+// シークレットでは履歴を残さない(Historyと同じインターフェースの空実装)。
+// Historyにメソッドを足したらここにも足すこと(足し忘れるとシークレットで落ちる)
+const NULL_HISTORY = {
+  add() {},
+  update() {},
+  has: () => false, // 「前にも来たページ」の判定。シークレットでは常に初回扱い
+  list: () => [],
+  remove() {},
+  clear() {},
+};
+
+// 記録しておいたウィンドウの位置・大きさを、いちばん近いモニタの作業領域に収める
+// (別モニタで閉じたウィンドウを、そのモニタを外した状態で復元しても見えなくならないように)
+function clampToScreen(bounds) {
+  const ok = ['x', 'y', 'width', 'height'].every((k) => Number.isFinite(bounds?.[k]));
+  if (!ok) return null;
+  const area = screen.getDisplayMatching(bounds).workArea;
+  const width = Math.min(bounds.width, area.width);
+  const height = Math.min(bounds.height, area.height);
+  return {
+    x: Math.min(Math.max(bounds.x, area.x), area.x + area.width - width),
+    y: Math.min(Math.max(bounds.y, area.y), area.y + area.height - height),
+    width,
+    height,
+  };
+}
+
+// シークレットのサイドパネルはディスクに書かない
+function memoryStore(defaultValue) {
+  return { data: defaultValue, save() {}, flush() {} };
+}
+
+// url を指定すると、そのURLのタブ1枚だけで開く。
+// x/yはタブを離した画面座標(ドラッグ切り離し時、その位置に新しいウィンドウを出すため)
+// profileId を指定するとそのプロファイルのウィンドウとして開く(Edge挙動。省略時はアクティブ)。
+// restoreTabs を渡すと初期タブの代わりにそのタブ構成を復元する。
+// bounds を渡すとその位置・大きさをそのまま使う(閉じたウィンドウの復元)。
+// adoptTab を渡すと初期タブを作らず、そのタブ(別ウィンドウから releaseTab で外したもの)を
+// そのまま引き取る(タブのドラッグ切り離し。再読み込みされないので再生が続く)。
+// session を渡すとそのセッションを使う(切り離し元がシークレットのとき、同じセッションを共有するため)
+browser.createWindow = ({ incognito = false, url, x, y, width, height, bounds, profileId, restoreTabs, adoptTab, session: presetSession } = {}) => {
+  const profile = browser.profiles.list().find((p) => p.id === profileId) ?? browser.profiles.active();
+  const bundle = browser.bundleFor(profile.id);
+  const session = presetSession ?? (incognito ? createIncognitoSession() : browser.profiles.sessionFor(profile));
+  const frameColor = incognito ? FRAME_COLOR_INCOGNITO : FRAME_COLOR;
+
+  // bounds(閉じたウィンドウの復元)はそのままの位置に開く。ただし当時のモニタが
+  // もう無い場合に画面外へ出てしまうので、いちばん近いモニタの作業領域へ収める。
+  // x/y(タブの切り離し)はカーソルの位置なので、掴んだタブがカーソルの下に来るよう少しずらす
+  const frame = bounds ? clampToScreen(bounds) : null;
+  const winWidth = Number.isFinite(frame?.width) ? frame.width : width;
+  const winHeight = Number.isFinite(frame?.height) ? frame.height : height;
+  const pos = Number.isFinite(frame?.x) && Number.isFinite(frame?.y)
+    ? { x: frame.x, y: frame.y }
+    : Number.isFinite(x) && Number.isFinite(y)
+      ? { x: x - 100, y: y - 20 }
+      : null;
+
+  const window = new BrowserWindow({
+    // タブの切り離しでは元のウィンドウと同じ大きさを引き継ぐ(指定が無ければ既定サイズ)
+    width: Number.isFinite(winWidth) ? Math.max(500, Math.round(winWidth)) : 1280,
+    height: Number.isFinite(winHeight) ? Math.max(300, Math.round(winHeight)) : 800,
+    minWidth: 500,
+    minHeight: 300,
+    ...(pos ? { x: Math.round(pos.x), y: Math.round(pos.y) } : {}),
+    title: incognito ? 'Roopie(シークレット)' : 'Roopie',
+    // ページの周囲の余白から透けて見える色。UIと同色にして「額縁」に見せる
+    backgroundColor: frameColor,
+    // ネイティブのタイトルバーを外し、タブバーをタイトルバーとして使う
+    titleBarStyle: 'hidden',
+    titleBarOverlay: { color: frameColor, symbolColor: '#e5e7eb', height: 40 },
+    webPreferences: {
+      preload: path.join(PRELOAD_DIR, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+
+  registerInternalProtocol(session);
+  registerPagePreloads(session);
+  if (!incognito) bundle.downloads.attachSession(session);
+  browser.applyAdblockTo(session, bundle);
+  browser.applyDownloadPathTo(session, bundle);
+  // Tor設定はプロファイル単位。シークレットは対象外(素の一時セッション)
+  if (!incognito) browser.applyTorForProfile(profile).catch((err) => console.error('Torの適用に失敗:', err));
+
+  const tabManager = new TabManager(window, {
+    history: incognito ? NULL_HISTORY : bundle.history,
+    bookmarks: bundle.bookmarks,
+    session,
+    // シークレットのタブはそのウィンドウの中だけで戻せるようにする(通常ウィンドウへURLを持ち出さない)
+    closedTabs: incognito ? [] : bundle.closedTabs,
+    // wc は「今回だけ許可」を見るために渡す(タブ単位で持っているため)。
+    // シークレットの許可はセッションに紐づくので、ここでも session を一緒に渡す
+    isFullscreenGranted: (url, wc) =>
+      browser.isFullscreenGranted({ profileId: profile.id, incognito, session }, url, wc),
+  });
+  tabManager.setOverlay(createOverlayView(session));
+  tabManager.setChromeLeft(bundle.settings.data.tabBarPosition === 'left' ? TAB_BAR_WIDTH : 0);
+  tabManager.setSidePanelSide(bundle.settings.data.sidePanelPosition === 'left' ? 'left' : 'right');
+  tabManager.setSearchEngine(bundle.settings.data.searchEngine);
+  tabManager.setActivatePreviousTab(bundle.settings.data.activatePreviousTabOnClose === true);
+
+  const sidePanel = new SidePanel(window, {
+    session,
+    store: incognito
+      ? memoryStore({ webPanels: [], notes: '' })
+      : store(profile, 'sidepanel', { webPanels: [], notes: '' }),
+    tabManager,
+    onState: () => browser.sendSidePanel(ctx),
+  });
+  tabManager.setSidePanel(sidePanel);
+
+  const mediaPlayer = new MediaPlayer(window, {
+    session,
+    tabManager,
+    corner: bundle.settings.data.mediaCorner,
+    onDrag: (corner) => {
+      bundle.settings.data.mediaCorner = corner;
+      bundle.settings.save();
+    },
+  });
+  tabManager.setMediaPlayer(mediaPlayer);
+
+  const timerPanel = new TimerPanel(window, {
+    session,
+    tabManager,
+    corner: bundle.settings.data.timerCorner,
+    onDrag: (corner) => {
+      bundle.settings.data.timerCorner = corner;
+      bundle.settings.save();
+    },
+  });
+  timerPanel.setDocked(bundle.settings.data.timerDocked);
+  tabManager.setTimerPanel(timerPanel);
+
+  const ctx = windows.add({
+    window,
+    tabManager,
+    sidePanel,
+    mediaPlayer,
+    timerPanel,
+    session,
+    incognito,
+    profileId: profile.id,
+    mediaList: [], // 再生中/一時停止中のタブ一覧(タブごとに独立して扱う)
+    // フレーム(iframe含む)ごとの再生状態。動画がiframeの中にあるサイトでは、
+    // 動画を持たないメインフレームからもnullが届くため、1つの変数では上書きし合ってしまう
+    mediaFrames: new Map(),
+    // タブ単位の「フローティング表示」上書き(セッション限り。無指定ならmediaDocked設定に従う)
+    mediaDockedOverrides: new Map(),
+  });
+
+  // 新しいウィンドウにもテーマの外観(明暗・マテリアル・不透明度)を効かせる
+  browser.applyWindowChrome(ctx);
+
+  // 再生中だったタブを閉じたら、フローティングプレイヤー/サイドパネルの表示も消す
+  tabManager.onTabClosed = (tab) => browser.forgetMediaForTab(ctx, tab.id);
+
+  // 「閉じたタブ/ウィンドウを再度開く」でウィンドウの記録を引いたとき(TabManagerはウィンドウを作れない)。
+  // 閉じたときと同じ位置・大きさ・タブ構成で開き直す
+  tabManager.onReopenWindow = (entry) => {
+    const reopened = browser.createWindow({
+      profileId: profile.id,
+      restoreTabs: entry.tabs,
+      bounds: entry.bounds,
+    });
+    if (entry.maximized) reopened.window.maximize();
+    return reopened;
+  };
+
+  // タブごとの再生状態(タブ側が全フレームを調べて報告する)
+  tabManager.onMediaReport = (tabId, state, frame) => {
+    if (state) ctx.mediaFrames.set(tabId, { state: { ...state, tabId }, frame, tabId });
+    else ctx.mediaFrames.delete(tabId);
+    browser.refreshMedia(ctx);
+  };
+
+  // Googleにログインした可能性のあるタイミングでアカウントを自動検出する(シークレットでは行わない)
+  if (!incognito) tabManager.onGoogleDomainVisit = (s) => browser.checkGoogleAutoRegister(s);
+
+  // 拡張機能はシークレット(非永続セッション)では動かないので取り付けない
+  if (!incognito) {
+    browser.extensions.setBrowser({ tabManager, window });
+    tabManager.onTabCreated = (tab) => browser.extensions.addTab(tab.view.webContents);
+    tabManager.onTabSelected = (tab) => browser.extensions.selectTab(tab.view.webContents);
+    // 別ウィンドウから引き取ったタブは、拡張機能システム側の「どのウィンドウのタブか」も更新する
+    tabManager.onTabAdopted = (tab) => browser.extensions.moveTab(tab.view.webContents);
+    browser.extensions
+      .attach(session, profile.id, bundle.settings.data.disabledExtensions ?? [])
+      // 拡張機能の読み込みはウィンドウの初期状態送信(did-finish-load)より後に終わることがある。
+      // そのままだと一覧が空のまま届き、ツールバーの拡張機能ボタンが出ないので配り直す
+      .then(() => browser.sendExtensionsFor(profile.id))
+      .catch((err) => console.error('拡張機能サポートの初期化に失敗:', err));
+  }
+
+  // 切り離しで運ばれてきたタブは、画面(タブバー)の読み込みを待たずに引き取る。
+  // 待つ間Viewが宙に浮くと再生が途切れかねないため、できるだけ早く新しいウィンドウへ載せる
+  if (adoptTab) tabManager.adoptTab(adoptTab);
+
+  window.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+
+  window.webContents.once('did-finish-load', () => {
+    window.webContents.send('ui:window', { incognito });
+    browser.sendAllTo(ctx);
+    // 既定のブラウザ化のお願い。1起動につきどれか1つのウィンドウで1回だけ。
+    // イントロ/変更点の案内と競合しないよう、それらを開くウィンドウでは出さない(次の機会に回る)
+    const isOnboarding = url === 'roopie://welcome' || url === 'roopie://whatsnew';
+    if (!incognito && !isOnboarding && DefaultBrowser.shouldPrompt()) {
+      DefaultBrowser.markShown();
+      window.webContents.send('default-browser:prompt');
+    }
+    if (adoptTab) {
+      // 引き取り済みのタブをタブバーへ映すだけ(sendAllToはタブ状態を含まない)
+      tabManager.sendState();
+      if (url) tabManager.createTab(url);
+    } else if (restoreTabs?.length) {
+      tabManager.restoreTabs(restoreTabs);
+      // 復元と同時に開きたいページ(初回イントロ/更新後の変更点)は復元後に前面で開く
+      if (url) tabManager.createTab(url);
+    } else {
+      tabManager.createTab(url || undefined);
+    }
+  });
+
+  // マウスの戻る/進むボタン
+  window.on('app-command', (_e, command) => {
+    if (command === 'browser-backward') tabManager.goBack();
+    if (command === 'browser-forward') tabManager.goForward();
+  });
+
+  // ウィンドウがOSレベルでフォーカスされると、既定ではUI(タブバー等のchrome)側の
+  // webContentsにフォーカスが行ってしまう。ウィンドウ切り替え直後からYouTube等の
+  // ページ内ショートカットが使えるよう、アクティブなタブのコンテンツへフォーカスを戻す
+  // (メニュー等のオーバーレイ表示中はそちらのフォーカスを奪わない)
+  window.on('focus', () => {
+    if (tabManager.overlayVisible) tabManager.overlay.webContents.focus();
+    else tabManager.activeWebContents()?.focus();
+  });
+
+  // そのプロファイルの最後のウィンドウを閉じるとき、タブ構成を保存する
+  // (次にプロファイルを開いたとき同じタブで再開できるように。Edgeのワークスペース風)
+  window.on('close', () => {
+    if (incognito) return;
+    if (!browser.profiles.list().some((p) => p.id === profile.id)) return; // プロファイル削除時
+    // 「閉じたタブ/ウィンドウを再度開く」でウィンドウごと戻せるように、構成を1件覚えておく
+    // (タブがまだ生きている 'close' の時点で。破棄後の 'closed' では間に合わない)
+    // 最大化中でも「元に戻したときの大きさ」を覚える(最大化かどうかは別に持つ)
+    tabManager.rememberClosedWindow(window.getNormalBounds(), window.isMaximized());
+    const others = windows.normal().filter((c) => c !== ctx && c.profileId === profile.id);
+    if (others.length) return;
+    const s = store(profile, 'session-tabs', []);
+    s.data = [tabManager.snapshotTabs()];
+    s.flush();
+  });
+
+  // WebContentsView(タブ・Webパネル・ミニプレイヤー等)はウィンドウを破棄しても
+  // 一緒には消えないため、明示的に閉じる。閉じないと動画・音声が鳴り続ける
+  // (最後の1枚はアプリ終了で消えるので、2枚目以降を閉じたときだけ表面化していた)
+  window.on('closed', () => {
+    tabManager.dispose();
+    sidePanel.destroyWebView();
+    sidePanel.destroyPanelView();
+    mediaPlayer.destroy();
+    timerPanel.destroy();
+  });
+
+  // シークレットのセッションはウィンドウを閉じたら破棄する。
+  // ただしタブの切り離しでセッションを共有している場合は、最後の1枚が閉じるまで残す
+  window.on('closed', () => {
+    if (!incognito) return;
+    if (windows.all().some((c) => c !== ctx && c.session === session)) return;
+    session.clearStorageData().catch(() => {});
+    // 訳文のキャッシュ(メモリのみ)も、シークレットが残っていなければ捨てる
+    if (!windows.all().some((c) => c !== ctx && c.incognito)) require('./translate').clearCache();
+  });
+
+  return ctx;
+};
+
+// ページの上に重ねる透明View。プルダウンメニューをここに描画する
+// (タブはネイティブViewなので、通常のHTMLドロップダウンはページの下に隠れてしまう)
+function createOverlayView(session) {
+  const view = new WebContentsView({
+    webPreferences: {
+      preload: path.join(PRELOAD_DIR, 'internal-preload.js'),
+      session,
+      transparent: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  view.setBackgroundColor('#00000000');
+  view.webContents.loadURL('roopie://menu');
+  return view;
+}
+
+// ---- 広告ブロック ----
+
+// 1セッションへ、そのプロファイルの設定を適用する
+browser.applyAdblockTo = (session, bundle) => {
+  const enabled = bundle?.settings.data.adblock !== false;
+  browser.adblock.apply(session, enabled).catch((err) => console.error('広告ブロックの適用に失敗:', err));
+};
+
+// 指定プロファイルの全ウィンドウ(シークレット含む)へ適用する
+browser.applyAdblockFor = (profileId) => {
+  const bundle = browser.bundleFor(profileId);
+  for (const ctx of windows.all()) {
+    if (ctx.profileId === profileId) browser.applyAdblockTo(ctx.session, bundle);
+  }
+};
+
+// ---- Tor ----
+
+// あるプロファイルのセッションに、そのプロファイルのTor設定を反映する。
+// Tor ONならSOCKS5プロキシ経由、OFFなら直接接続に戻す。
+browser.applyTorForProfile = async (profile) => {
+  const session = browser.profiles.sessionFor(profile);
+  if (profile.tor) {
+    const proxyRules = await browser.tor.ensureRunning();
+    if (proxyRules) {
+      await session.setProxy({ proxyRules });
+      // WebRTCによる実IPの漏洩を防ぐ(Torプロキシはトンネルできないため)
+      setWebRtcPolicyForSession(session);
+    } else {
+      // Torを準備できなかった場合は、意図せず素の接続で通信しないよう空ルートにする
+      await session.setProxy({ proxyRules: 'socks5://127.0.0.1:1' });
+    }
+  } else {
+    await session.setProxy({ proxyRules: '' });
+  }
+};
+
+// 全プロファイルのTor設定を各セッションへ適用する(Tor状態が変わったときなど)
+browser.applyAllTor = async () => {
+  for (const profile of browser.profiles.list()) {
+    await browser.applyTorForProfile(profile).catch((err) => console.error('Torの適用に失敗:', err));
+  }
+  browser.sendTor();
+};
+
+// Torプロファイルのタブは、WebRTCでローカル/公開IPを露出しないようにする
+function setWebRtcPolicyForSession(session) {
+  for (const ctx of windows.all()) {
+    if (ctx.session !== session) continue;
+    for (const tab of ctx.tabManager.tabs) {
+      if (!tab.view.webContents.isDestroyed()) {
+        tab.view.webContents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
+      }
+    }
+  }
+}
+
+browser.sendTor = () => {
+  broadcast('tor:status', browser.tor.state());
+};
+
+// Torの状態変化(起動中→接続済み等)を全ウィンドウへ配信する
+browser.tor.on('status', () => browser.sendTor?.());
+
+// ---- テーマ ----
+
+// パッチを検証してthemeストアへ適用する(実際に書き込むのはこの関数のみ)
+browser.applyThemePatch = (themeStore, patch) => {
+  if (!themeStore || !patch) return;
+  if (typeof patch.accent === 'string' && /^#[0-9a-fA-F]{6}$/.test(patch.accent)) {
+    themeStore.data.accent = patch.accent.toLowerCase();
+  }
+  if (browser.THEME_BACKGROUNDS.includes(patch.background)) {
+    themeStore.data.background = patch.background;
+  }
+  if (typeof patch.backgroundImage === 'string' && patch.backgroundImage.length <= MAX_BACKGROUND_IMAGE) {
+    if (patch.backgroundImage === '' || patch.backgroundImage.startsWith('data:image/')) {
+      themeStore.data.backgroundImage = patch.backgroundImage;
+    }
+  }
+  const clamp = (v, [min, max]) => Math.min(max, Math.max(min, v));
+  if (Number.isFinite(patch.backgroundBlur)) {
+    themeStore.data.backgroundBlur = Math.round(clamp(patch.backgroundBlur, BACKGROUND_BLUR_RANGE));
+  }
+  if (Number.isFinite(patch.backgroundDim)) {
+    themeStore.data.backgroundDim = Math.round(clamp(patch.backgroundDim, BACKGROUND_DIM_RANGE));
+  }
+  if (THEME_PATTERNS.includes(patch.backgroundPattern)) {
+    themeStore.data.backgroundPattern = patch.backgroundPattern;
+  }
+  for (const key of ['patternColor', 'patternBase']) {
+    if (typeof patch[key] === 'string' && /^#[0-9a-fA-F]{6}$/.test(patch[key])) {
+      themeStore.data[key] = patch[key].toLowerCase();
+    }
+  }
+  if (Number.isFinite(patch.gradientAngle)) {
+    themeStore.data.gradientAngle = Math.round(clamp(patch.gradientAngle, [0, 360]));
+  }
+  // 色は必ず #rrggbb だけを通す(レンダラーではCSSのgradient文字列に埋め込むため)
+  if (Array.isArray(patch.gradientStops)) {
+    const stops = patch.gradientStops.filter((c) => typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c)).map((c) => c.toLowerCase());
+    if (stops.length >= GRADIENT_STOPS_RANGE[0]) {
+      themeStore.data.gradientStops = stops.slice(0, GRADIENT_STOPS_RANGE[1]);
+    }
+  }
+  if (Number.isFinite(patch.windowOpacity)) {
+    themeStore.data.windowOpacity = clamp(patch.windowOpacity, WINDOW_OPACITY_RANGE);
+  }
+  if (typeof patch.customCss === 'string') {
+    themeStore.data.customCss = patch.customCss.slice(0, browser.MAX_CUSTOM_CSS);
+  }
+
+  // ---- ウィンドウの外観 ----
+  if (WINDOW_MODES.includes(patch.windowMode)) themeStore.data.windowMode = patch.windowMode;
+  if (WINDOW_STYLES.includes(patch.windowStyle)) themeStore.data.windowStyle = patch.windowStyle;
+  // '' はモード既定に戻す指定
+  if (patch.windowColor === '' || (typeof patch.windowColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(patch.windowColor))) {
+    themeStore.data.windowColor = patch.windowColor.toLowerCase();
+  }
+  if (Number.isFinite(patch.windowTranslucency)) {
+    themeStore.data.windowTranslucency = Math.round(clamp(patch.windowTranslucency, WINDOW_TRANSLUCENCY_RANGE));
+  }
+  if (Number.isFinite(patch.windowGradientAngle)) {
+    themeStore.data.windowGradientAngle = Math.round(clamp(patch.windowGradientAngle, [0, 360]));
+  }
+  if (Array.isArray(patch.windowGradientStops)) {
+    const stops = patch.windowGradientStops.filter((c) => typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c)).map((c) => c.toLowerCase());
+    if (stops.length >= GRADIENT_STOPS_RANGE[0]) {
+      themeStore.data.windowGradientStops = stops.slice(0, GRADIENT_STOPS_RANGE[1]);
+    }
+  }
+  if (THEME_PATTERNS.includes(patch.windowPattern)) themeStore.data.windowPattern = patch.windowPattern;
+  if (typeof patch.windowPatternColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(patch.windowPatternColor)) {
+    themeStore.data.windowPatternColor = patch.windowPatternColor.toLowerCase();
+  }
+
+  themeStore.save();
+};
+
+// 任意のプロファイルのテーマを読む(設定画面のプロファイルカード用)
+browser.themeFor = (profileId) => {
+  return browser.bundleFor(profileId)?.theme.data ?? { ...DEFAULT_THEME };
+};
+
+// 任意のプロファイルのテーマを書く(そのプロファイルのウィンドウがあれば即座にUIへ反映)
+browser.setThemeFor = (profileId, patch) => {
+  const bundle = browser.bundleFor(profileId);
+  if (!bundle) return;
+  browser.applyThemePatch(bundle.theme, patch);
+  browser.sendThemeFor(profileId);
+};
+
+// ---- Googleアカウントの自動検出 ----
+
+// プロファイルID -> 直近に自動検出チェックした時刻(google.comへのナビゲーションの連打で
+// 何度もDOMを読みに行かないようにする)
+const googleCheckedAt = new Map();
+
+// そのプロファイルの各ウィンドウの中から、今Googleドメインを開いているタブのwebContentsを探す
+// (ListAccounts APIはページの文脈が無いと弾かれるため、実際に開いているページのDOMを見に行く)
+browser.findGoogleTabWebContents = (profileId) => {
+  for (const ctx of windows.all()) {
+    if (ctx.profileId !== profileId) continue;
+    for (const tab of ctx.tabManager.tabs) {
+      const wc = tab.view.webContents;
+      if (!wc.isDestroyed() && GoogleAccounts.isGoogleDomain(wc.getURL())) return wc;
+    }
+  }
+  return null;
+};
+
+// ログイン中なのに未登録のアカウントを見つけたら自動登録し、そのプロファイルで有効化する
+browser.autoRegisterGoogleAccounts = async (profile) => {
+  if (!browser.googleAccounts) return [];
+  const wc = browser.findGoogleTabWebContents(profile.id);
+  const detected = wc ? await GoogleAccounts.detectFromWebContents(wc) : [];
+  let changed = false;
+
+  for (const { email, name } of detected) {
+    let account = browser.googleAccounts.findByEmail(email);
+    if (!account) {
+      account = browser.googleAccounts.add(email, name);
+      changed = true;
+    }
+    if (!profile.google.enabled.includes(account.id)) {
+      browser.profiles.setGoogleEnabled(profile.id, account.id, true);
+      changed = true;
+    }
+    if (!profile.google.primaryId) {
+      browser.profiles.setGooglePrimary(profile.id, account.id);
+      changed = true;
+    }
+  }
+  if (changed) browser.sendProfiles();
+  return detected;
+};
+
+// 起動時にも一度だけ見に行く。Googleのページを開かない人でも、既にログインしていれば
+// アカウントが設定画面に出るようにする(検出のきっかけがナビゲーションだけだと取りこぼす)
+browser.detectGoogleAccountsOnStartup = () => {
+  const profile = browser.profiles?.active();
+  if (!profile) return;
+  browser
+    .autoRegisterGoogleAccounts(profile)
+    .catch((err) => console.error('Googleアカウントの自動検出に失敗:', err));
+};
+
+// タブがgoogle.com系ドメインへナビゲートしたときの自動検出(5秒スロットル)
+browser.checkGoogleAutoRegister = (session) => {
+  const profile = browser.profiles?.list().find((p) => browser.profiles.sessionFor(p) === session);
+  if (!profile) return;
+  const last = googleCheckedAt.get(profile.id) ?? 0;
+  if (Date.now() - last < 5000) return;
+  googleCheckedAt.set(profile.id, Date.now());
+  browser.autoRegisterGoogleAccounts(profile).catch((err) => console.error('Googleアカウントの自動検出に失敗:', err));
+};
+
+// ---- ダウンロード先 ----
+
+// 1セッションへ、そのプロファイルのダウンロード先を適用する
+browser.applyDownloadPathTo = (session, bundle) => {
+  const dir = bundle?.settings.data.downloadPath;
+  if (!dir) return; // 空ならElectronのOS既定のままにする
+  session.setDownloadPath(dir);
+};
+
+browser.applyDownloadPathFor = (profileId) => {
+  const bundle = browser.bundleFor(profileId);
+  for (const ctx of windows.all()) {
+    if (ctx.profileId === profileId) browser.applyDownloadPathTo(ctx.session, bundle);
+  }
+};
+
+// ---- タブバーの位置(上部/左側) ----
+
+// そのプロファイルの全ウィンドウのタブバーレイアウトを切り替える
+browser.applyTabBarPositionFor = (profileId) => {
+  const left = browser.bundleFor(profileId)?.settings.data.tabBarPosition === 'left' ? TAB_BAR_WIDTH : 0;
+  for (const ctx of windows.all()) {
+    if (ctx.profileId === profileId) ctx.tabManager.setChromeLeft(left);
+  }
+};
+
+// ---- サイドパネルの左右位置 ----
+
+browser.applySidePanelPositionFor = (profileId) => {
+  const side = browser.bundleFor(profileId)?.settings.data.sidePanelPosition === 'left' ? 'left' : 'right';
+  for (const ctx of windows.all()) {
+    if (ctx.profileId === profileId) ctx.tabManager.setSidePanelSide(side);
+  }
+};
+
+// ---- 検索エンジン ----
+
+browser.applySearchEngineFor = (profileId) => {
+  const engine = browser.bundleFor(profileId)?.settings.data.searchEngine;
+  for (const ctx of windows.all()) {
+    if (ctx.profileId === profileId) ctx.tabManager.setSearchEngine(engine);
+  }
+};
+
+// ---- タブを閉じた後の行き先 ----
+
+browser.applyActivatePreviousTabFor = (profileId) => {
+  const on = browser.bundleFor(profileId)?.settings.data.activatePreviousTabOnClose === true;
+  for (const ctx of windows.all()) {
+    if (ctx.profileId === profileId) ctx.tabManager.setActivatePreviousTab(on);
+  }
+};
+
+// ---- プロファイル ----
+
+// 共有トグル変更などで、そのプロファイルの保存先を作り直して各所へ反映する
+// (インスタンスは維持し、setStoreで差し替えるのでTabManager等の参照はそのまま生きる)
+browser.applyProfileStores = (profileId) => {
+  const bundle = profileData.get(profileId);
+  const profile = browser.profiles.list().find((p) => p.id === profileId);
+  if (!bundle || !profile) return;
+
+  bundle.history.setStore(store(profile, 'history', []));
+  bundle.bookmarks.setStore(store(profile, 'bookmarks', []));
+  bundle.readlist.setStore(store(profile, 'readlist', []));
+  bundle.downloads.setStore(store(profile, 'downloads', []));
+  bundle.settings = store(profile, 'settings', { ...DEFAULT_SETTINGS });
+  bundle.gestures.setStore(store(profile, 'gestures', Gestures.defaults()));
+  bundle.theme = store(profile, 'theme', { ...DEFAULT_THEME });
+  bundle.passwords.setStore(store(profile, 'passwords', []));
+  bundle.autofill.setStore(store(profile, 'autofill', {}));
+  bundle.widgets.setStore(store(profile, 'start-widgets', {}));
+
+  for (const ctx of windows.normal()) {
+    if (ctx.profileId === profileId) {
+      ctx.sidePanel.setStore(store(profile, 'sidepanel', { webPanels: [], notes: '' }));
+    }
+  }
+  browser.applyAdblockFor(profileId);
+  browser.applyDownloadPathFor(profileId);
+  browser.applyTabBarPositionFor(profileId);
+  browser.applySidePanelPositionFor(profileId);
+  browser.applySearchEngineFor(profileId);
+  for (const ctx of windows.all()) {
+    if (ctx.profileId === profileId) browser.sendAllTo(ctx);
+  }
+};
+
+// Edge挙動: プロファイルの切り替え=そのプロファイルの新しいウィンドウを開く。
+// 既存のウィンドウは元のプロファイルのまま残る(複数プロファイルの同時利用)。
+// そのプロファイルのウィンドウがまだ無ければ、前回閉じたときのタブ構成を復元する
+browser.switchProfile = (id, { url } = {}) => {
+  const profile = browser.profiles.list().find((p) => p.id === id);
+  if (!profile) return null;
+  browser.profiles.switchTo(id); // 新しいウィンドウの既定プロファイルとして記憶
+
+  const hasWindow = windows.normal().some((c) => c.profileId === id);
+  const saved = !hasWindow && !url ? store(profile, 'session-tabs', []).data?.[0]?.tabs : null;
+  const ctx = browser.createWindow({ profileId: id, url, restoreTabs: saved?.length ? saved : null });
+  browser.sendProfiles();
+  return ctx;
+};
+
+// ---- 起動時のセッション復元 ----
+
+// 終了時に、開いている全ウィンドウのタブ構成をプロファイルごとに保存する。
+// ウィンドウを1枚ずつ閉じるときの保存(window.on('close'))は「最後の1枚」しか残せないため、
+// 複数ウィンドウを開いたまま終了したときのためにここでまとめて上書きする
+browser.saveAllSessions = () => {
+  const byProfile = new Map();
+  for (const ctx of windows.normal()) {
+    if (ctx.incognito) continue; // シークレットは残さない
+    if (!byProfile.has(ctx.profileId)) byProfile.set(ctx.profileId, []);
+    byProfile.get(ctx.profileId).push(ctx.tabManager.snapshotTabs());
+  }
+  for (const [profileId, snapshots] of byProfile) {
+    const profile = browser.profiles?.list().find((p) => p.id === profileId);
+    if (!profile || !snapshots.length) continue;
+    const s = store(profile, 'session-tabs', []);
+    s.data = snapshots;
+    s.flush();
+  }
+};
+
+// 起動時のウィンドウを開く。設定(restoreTabsOnStart)がONなら前回のタブを復元する。
+// url は初回イントロ/更新後の変更点。復元する場合でも最初のウィンドウで開く。
+// externalUrl は既定のブラウザとして他アプリから渡されたURL。イントロ等と競合させず、
+// 復元・イントロのタブが並んだ後ろに足して前面にする(=最後に開いたものが見える)
+browser.openStartupWindows = ({ url, externalUrl } = {}) => {
+  const profile = browser.profiles.active();
+  const restore = browser.bundleFor(profile?.id)?.settings.data.restoreTabsOnStart === true;
+  const saved = restore ? store(profile, 'session-tabs', []).data : null;
+  const windowsToRestore = Array.isArray(saved) ? saved.filter((w) => w?.tabs?.length) : [];
+
+  // createWindow が did-finish-load で最初のタブを作った後に足す(リスナは登録順に走る)
+  const openExternalAfterLoad = (ctx) => {
+    if (!externalUrl || !ctx) return;
+    ctx.window.webContents.once('did-finish-load', () => ctx.tabManager.createTab(externalUrl));
+  };
+
+  if (!windowsToRestore.length) {
+    openExternalAfterLoad(browser.createWindow({ url }));
+    return 0;
+  }
+  // 1枚目に url(イントロ等)を載せる。2枚目以降はそのまま復元する
+  windowsToRestore.forEach((snapshot, index) => {
+    const ctx = browser.createWindow({ restoreTabs: snapshot.tabs, url: index === 0 ? url : undefined });
+    if (index === 0) openExternalAfterLoad(ctx);
+  });
+  return windowsToRestore.length;
+};
+
+// 既定のブラウザとして他アプリから渡されたURLを開く(二重起動時)。
+// リンクをクリックされたのと同じ扱いなので、タブは末尾に足す(nearActiveにはしない)。
+// シークレットウィンドウには流し込まない(通常のウィンドウで開く)
+browser.openExternalUrl = (url) => {
+  if (!url) return;
+  const ctx = windows.normal().find((c) => c.window.isFocused()) ?? windows.normal()[0];
+  if (!ctx) {
+    browser.createWindow({ url });
+    return;
+  }
+  if (ctx.window.isMinimized()) ctx.window.restore();
+  ctx.window.focus();
+  ctx.tabManager.createTab(url);
+};
+
+// プロファイルの削除: そのプロファイルのウィンドウも閉じる(Edgeと同じ)。
+// 全ウィンドウが無くなったら、残ったアクティブプロファイルのウィンドウを開く
+browser.removeProfile = (id) => {
+  if (!browser.profiles.remove(id)) return;
+  const targets = windows.normal().filter((c) => c.profileId === id);
+  for (const ctx of targets) ctx.window.close();
+  profileData.get(id)?.timers.destroy();
+  profileData.delete(id);
+  if (!windows.normal().length) browser.createWindow({ profileId: browser.profiles.activeId });
+  browser.sendProfiles();
+};
+
+// プロファイルのTor ON/OFFを切り替えて、そのセッションへ即時反映する
+browser.setProfileTor = async (id, enabled) => {
+  browser.profiles.setTor(id, enabled);
+  const profile = browser.profiles.list().find((p) => p.id === id);
+  if (profile) await browser.applyTorForProfile(profile).catch((err) => console.error('Torの適用に失敗:', err));
+  browser.sendProfiles();
+  browser.sendTor();
+};
+
+// 共有トグルの変更: そのプロファイルのデータ束が生成済みなら保存先を差し替える
+browser.setShared = (id, key, shared) => {
+  browser.profiles.setShared(id, key, shared);
+  browser.applyProfileStores(id);
+  browser.sendProfiles();
+};
+
+// フォーカス中のウィンドウのプロファイル設定を切り替える(アプリメニューから)
+browser.toggleBookmarkBar = () => {
+  const ctx = windows.focused();
+  const bundle = browser.bundleFor(ctx?.profileId ?? browser.profiles.activeId);
+  if (!bundle) return;
+  bundle.settings.data.showBookmarkBar = !bundle.settings.data.showBookmarkBar;
+  bundle.settings.save();
+  browser.sendSettingsFor(bundle.profileId);
+};
+
+// ---- レンダラーへの状態送信 ----
+
+// 1ウィンドウ内のUI・内部ページ・サイドパネルへ送る
+function sendToContext(ctx, channel, payload) {
+  if (ctx.window.isDestroyed()) return;
+  ctx.window.webContents.send(channel, payload);
+  ctx.tabManager.broadcastToInternal(channel, payload);
+  ctx.sidePanel.sendToPanel(channel, payload); // パネルUIはタブ一覧に含まれないため個別に送る
+}
+
+function broadcast(channel, payload) {
+  for (const ctx of windows.all()) sendToContext(ctx, channel, payload);
+}
+
+// 指定プロファイルのウィンドウ(そのプロファイルで開いたシークレット含む)だけに送る
+function broadcastProfile(profileId, channel, payload) {
+  for (const ctx of windows.all()) {
+    if (ctx.profileId === profileId) sendToContext(ctx, channel, payload);
+  }
+}
+
+function profilesPayload(ctx) {
+  return {
+    // 拡張機能アイコン(<browser-action-list>)がプロファイルごとのセッションを
+    // 指し示せるよう、partition名も一緒に送る
+    profiles: browser.profiles.list().map((p) => ({ ...p, partition: browser.profiles.partitionFor(p) })),
+    // 「使用中」はウィンドウごとに異なる(Edge挙動)。送信先ウィンドウのプロファイルを入れる
+    activeId: ctx?.profileId ?? browser.profiles.activeId,
+    googleAccounts: browser.googleAccounts?.list() ?? [],
+  };
+}
+
+function downloadsPayload(bundle) {
+  return { items: bundle.downloads.list(), hasActive: bundle.downloads.hasActive() };
+}
+
+browser.sendBookmarksFor = (profileId) => {
+  const bundle = profileData.get(profileId);
+  if (!bundle) return;
+  broadcastProfile(profileId, 'bookmarks:state', bundle.bookmarks.list());
+  for (const ctx of windows.all()) {
+    if (ctx.profileId === profileId) ctx.tabManager.sendState(); // スターボタンの状態を更新
+  }
+};
+
+browser.sendReadlistFor = (profileId) => {
+  const bundle = profileData.get(profileId);
+  if (bundle) broadcastProfile(profileId, 'readlist:state', bundle.readlist.list());
+};
+
+browser.sendTimersFor = (profileId) => {
+  const bundle = profileData.get(profileId);
+  if (!bundle) return;
+  const list = bundle.timers.list();
+  broadcastProfile(profileId, 'timer:state', list);
+  // フローティング表示(タイマーパネル)へは複数タイマーのリストとして個別に送る
+  for (const ctx of windows.all()) {
+    if (ctx.profileId === profileId) ctx.timerPanel?.setState(list);
+  }
+};
+
+browser.sendDownloadsFor = (profileId) => {
+  const bundle = profileData.get(profileId);
+  if (bundle) broadcastProfile(profileId, 'downloads:state', downloadsPayload(bundle));
+};
+
+browser.sendProfiles = () => {
+  if (!browser.profiles) return;
+  for (const ctx of windows.all()) sendToContext(ctx, 'profiles:state', profilesPayload(ctx));
+};
+
+browser.sendSettingsFor = (profileId) => {
+  const bundle = profileData.get(profileId);
+  if (!bundle) return;
+  // 全ての利用側が正しい形の配列を受け取れるよう、配信前に正規化して保持する
+  bundle.settings.data.toolbarItems = normalizeToolbarItems(bundle.settings.data.toolbarItems);
+  broadcastProfile(profileId, 'ui:settings', bundle.settings.data);
+};
+
+browser.sendKeybindings = () => {
+  if (!browser.keybindings) return;
+  broadcast('keybindings:state', browser.keybindings.config());
+};
+
+browser.sendGesturesFor = (profileId) => {
+  const bundle = profileData.get(profileId);
+  if (!bundle) return;
+  const config = bundle.gestures.config();
+  broadcastProfile(profileId, 'gestures:state', config); // 設定画面(内部ページ)向け
+  // 各タブのジェスチャーpreload向け(通常タブにも送る必要があるためbroadcastとは別)
+  for (const ctx of windows.all()) {
+    if (ctx.profileId !== profileId) continue;
+    for (const tab of ctx.tabManager.tabs) {
+      if (!tab.view.webContents.isDestroyed()) tab.view.webContents.send('gestures:config', config);
+    }
+  }
+};
+
+// サイドパネルの状態はウィンドウごとに異なる
+browser.sendSidePanel = (ctx) => {
+  if (!ctx || ctx.window.isDestroyed()) return;
+  sendToContext(ctx, 'sidepanel:state', ctx.sidePanel.state());
+};
+
+browser.sendThemeFor = (profileId) => {
+  const bundle = profileData.get(profileId);
+  if (!bundle) return;
+  // 共有トグルがONのプロファイルは**同じStoreインスタンス**を指す(storeCacheがパスで配る)。
+  // そのままだと相手のウィンドウだけ古い外観のまま残るので、共有している側もまとめて更新する。
+  // 色だけならまだしも、ウィンドウ全体の見た目が食い違うと明らかに壊れて見える
+  const targets = new Set([profileId]);
+  for (const [id, other] of profileData) {
+    if (other.theme === bundle.theme) targets.add(id);
+  }
+  for (const id of targets) broadcastProfile(id, 'theme:state', bundle.theme.data);
+  // 不透明度・背景マテリアル・タイトルバーのボタン色はCSSでは届かないのでウィンドウ側に適用する
+  for (const ctx of windows.all()) {
+    if (targets.has(ctx.profileId)) browser.applyWindowChrome(ctx);
+  }
+};
+
+// 'system' をOSの設定で解決する。nativeTheme.themeSource は**書かない**
+// (アプリ全体に効いてしまい、プロファイルごとに別の明暗にできなくなる)
+browser.resolvedWindowMode = (theme) => {
+  const mode = theme?.windowMode;
+  if (mode === 'dark' || mode === 'light') return mode;
+  return nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
+};
+
+// タイトルバーのボタン(最小化・最大化・閉じる)が乗る帯の色。
+// シークレットは識別のため常に紫。それ以外は明暗と基準色に従う
+const TITLE_BAR_DARK = { color: FRAME_COLOR, symbolColor: '#e5e7eb' };
+const TITLE_BAR_LIGHT = { color: '#eef0f4', symbolColor: '#1c2129' };
+
+// テーマをウィンドウ本体へ反映する(生成時とテーマ変更時に呼ぶ)。
+// - 半透明/liquidglass: acrylicを敷く。backgroundColorを透明にしないと見えない
+// - 不透明度(setOpacity)はacrylicのぼかしを打ち消すので、その2つは併用しない
+browser.applyWindowChrome = (ctx) => {
+  if (!ctx || ctx.window.isDestroyed()) return;
+  const theme = profileData.get(ctx.profileId)?.theme.data ?? DEFAULT_THEME;
+  // シークレットは紫の識別色を保つため、外観のスタイルも明暗も固定する
+  const material = ctx.incognito ? null : MATERIAL_STYLES[theme.windowStyle] ?? null;
+  const dark = ctx.incognito || browser.resolvedWindowMode(theme) === 'dark';
+
+  if (typeof ctx.window.setBackgroundMaterial === 'function') {
+    ctx.window.setBackgroundMaterial(material ?? 'none');
+  }
+  // ページの周囲に見える「額縁」。acrylicのときは透明にして背後を透かす
+  const frame = ctx.incognito ? FRAME_COLOR_INCOGNITO : theme.windowColor || (dark ? FRAME_COLOR : TITLE_BAR_LIGHT.color);
+  ctx.window.setBackgroundColor(material ? '#00000000' : frame);
+
+  // 最小化・最大化・閉じるが乗る帯。acrylicのときはここも透かさないと、
+  // 右上だけ不透明な四角が残ってガラスに見えない
+  const symbolColor = ctx.incognito || dark ? TITLE_BAR_DARK.symbolColor : TITLE_BAR_LIGHT.symbolColor;
+  const barColor = material ? '#00000000' : ctx.incognito ? FRAME_COLOR_INCOGNITO : frame;
+  try {
+    ctx.window.setTitleBarOverlay({ color: barColor, symbolColor, height: 40 });
+  } catch {
+    // タイトルバーを隠していないウィンドウでは使えない
+  }
+
+  // acrylicのときは不透明度を下げない(下げるとぼかしごと無効になる)
+  const [min, max] = WINDOW_OPACITY_RANGE;
+  const opacity = material ? 1 : Math.min(max, Math.max(min, Number.isFinite(theme.windowOpacity) ? theme.windowOpacity : 1));
+  ctx.window.setOpacity(opacity);
+};
+
+// OSの明暗設定が変わったら、'system' のプロファイルのウィンドウを追従させる
+nativeTheme.on('updated', () => {
+  for (const ctx of windows.all()) browser.applyWindowChrome(ctx);
+});
+
+browser.sendPasswordsFor = (profileId) => {
+  const bundle = profileData.get(profileId);
+  if (bundle) broadcastProfile(profileId, 'passwords:state', bundle.passwords.list());
+};
+
+browser.sendAutofillFor = (profileId) => {
+  const bundle = profileData.get(profileId);
+  if (!bundle) return;
+  broadcastProfile(profileId, 'autofill:state', {
+    addresses: bundle.autofill.listAddresses(),
+    cards: bundle.autofill.listCards(),
+  });
+};
+
+// ---- サイトごとの権限(カメラ・マイク・現在地・通知・全画面表示) ----
+// 「許可」だけをサイト単位で覚え、「ブロック」は今回限り(次も尋ねる)。
+// 「今回だけ許可」はディスクへ書かずメモリで持ち、そのタブがサイトを離れたら失効する。
+// シークレットの「許可」もディスクへは書かず、そのセッションの間だけ覚える
+const PERMISSION_PROMPT_TIMEOUT_MS = 60_000; // 返事が無いまま残り続けないようにする
+const MAX_PROMPT_QUEUE = 3; // 順番待ちの上限(あふれた要求は尋ねずに拒否する)
+const pendingPrompt = new Map(); // ctx -> { wc, host, kinds, settle }
+const promptChains = new Map(); // ctx -> { tail: Promise, waiting: number }
+// シークレットの許可は**そのウィンドウのセッション**に紐づける(プロファイルではなく)。
+// シークレットのセッションはウィンドウごとに作られ、閉じると消えるので、
+// 次に開いたシークレットウィンドウへ許可が残らない
+const incognitoGrants = new WeakMap(); // シークレットのsession -> { kind: Set(host) }
+const tempGrants = new Map(); // wc.id -> { topHost, keys: Set('kind|host') }
+const tempWatched = new Set(); // ナビゲーションの見張りを張った wc.id
+
+// 今そのウィンドウで見えているタブか(裏のタブや分割していないタブには聞かない)
+function isVisibleTabWebContents(ctx, wc) {
+  return [ctx.tabManager.activeTabId, ctx.tabManager.splitTabId].some(
+    (id) => id && ctx.tabManager.getTab(id)?.view.webContents === wc
+  );
+}
+
+// ---- 「今回だけ許可」(そのタブがそのサイトを見ている間だけ有効) ----
+// Chrome の「今回のみ許可」と同じく、**サイトを離れた時点で捨てる**。判定のたびに
+// 「今いるサイト」と比べるだけだと、別サイトへ行って戻ってきたときに生き返ってしまうため、
+// 離れたことをナビゲーションで見張る(同じサイト内のページ移動では残す)。
+// このリスナは wc とこのMapしか触らないので、タブをウィンドウ間で移しても張り直しは要らない
+const tempKey = (kind, host) => `${kind}|${host}`;
+
+function hasTempGrant(wc, kind, host) {
+  if (wc.isDestroyed()) return false;
+  return tempGrants.get(wc.id)?.keys.has(tempKey(kind, host)) ?? false;
+}
+
+function addTempGrant(wc, kind, host) {
+  if (wc.isDestroyed()) return;
+  const topHost = sitePermissions.hostFor(wc.getURL());
+  if (!topHost) return;
+  let entry = tempGrants.get(wc.id);
+  if (!entry || entry.topHost !== topHost) {
+    entry = { topHost, keys: new Set() };
+    tempGrants.set(wc.id, entry);
+  }
+  entry.keys.add(tempKey(kind, host));
+  if (tempWatched.has(wc.id)) return; // 見張りはタブにつき1本だけ
+  tempWatched.add(wc.id);
+  wc.on('did-start-navigation', (_e, navUrl, isInPlace, isMainFrame) => {
+    if (!isMainFrame || isInPlace) return;
+    const current = tempGrants.get(wc.id);
+    if (current && sitePermissions.hostFor(navUrl) !== current.topHost) tempGrants.delete(wc.id);
+  });
+  // タブを閉じたら丸ごと捨てる(長生きするウィンドウに溜め込まないため)
+  wc.once('destroyed', () => {
+    tempGrants.delete(wc.id);
+    tempWatched.delete(wc.id);
+  });
+}
+
+// ---- 覚えている許可 ----
+// scope はウィンドウの文脈 { profileId, incognito, session }(ctx をそのまま渡せる)
+browser.isSitePermissionGranted = (scope, kind, url) => {
+  const host = sitePermissions.hostFor(url);
+  if (!host) return false;
+  if (scope?.incognito) return incognitoGrants.get(scope.session)?.[kind]?.has(host) ?? false;
+  return sitePermissions.isGranted(
+    browser.bundleFor(scope?.profileId)?.settings.data.sitePermissions,
+    kind,
+    url
+  );
+};
+
+browser.grantSitePermission = (scope, kind, host) => {
+  if (!host || !sitePermissions.KINDS.includes(kind)) return;
+  if (scope?.incognito) {
+    const grants = incognitoGrants.get(scope.session) ?? {};
+    grants[kind] = grants[kind] ?? new Set();
+    grants[kind].add(host);
+    incognitoGrants.set(scope.session, grants);
+    return;
+  }
+  const bundle = browser.bundleFor(scope?.profileId);
+  if (!bundle) return;
+  bundle.settings.data.sitePermissions = sitePermissions.addGrant(
+    bundle.settings.data.sitePermissions,
+    kind,
+    host
+  );
+  bundle.settings.save();
+  browser.sendSettingsFor(scope.profileId);
+};
+
+// 全画面表示の保険(tab-manager の enter-html-full-screen から。wc は「今回だけ許可」を見るため)
+browser.isFullscreenGranted = (scope, url, wc) => {
+  if (browser.isSitePermissionGranted(scope, 'fullscreen', url)) return true;
+  const host = sitePermissions.hostFor(url);
+  return !!wc && !!host && hasTempGrant(wc, 'fullscreen', host);
+};
+
+/**
+ * ページからの権限要求。決まっていない種類があれば確認ポップアップを出して返事を待つ。
+ * 戻り値 true で要求を通す(返すのが数秒後でも全画面・カメラ等には正しく入れる)。
+ */
+browser.requestSitePermission = (wc, permission, details) => {
+  const kinds = sitePermissions.kindsFor(permission, details, { ask: true });
+  if (!kinds.length) return true; // このブラウザで尋ねない権限は従来どおり許可
+  const url = details?.requestingUrl || wc?.getURL?.() || '';
+  const host = sitePermissions.hostFor(url);
+  const ctx = windows.contextFor(wc);
+  if (!host || !ctx || ctx.window.isDestroyed()) return false;
+
+  const undecided = kinds.filter(
+    (kind) => !browser.isSitePermissionGranted(ctx, kind, url) && !hasTempGrant(wc, kind, host)
+  );
+  if (!undecided.length) return true; // 全部すでに許可されている
+  if (!isVisibleTabWebContents(ctx, wc)) return false; // 見えていないタブからの要求は聞かずに拒否
+
+  return enqueuePrompt(ctx, () => askPermission(ctx, wc, host, undecided));
+};
+
+// 1つのウィンドウでは確認を1つずつ出す(同時に来た要求は順番待ちにする)。
+// 待たせすぎないよう上限を設け、あふれた分は拒否する
+function enqueuePrompt(ctx, run) {
+  let chain = promptChains.get(ctx);
+  if (!chain) {
+    chain = { tail: Promise.resolve(), waiting: 0 };
+    promptChains.set(ctx, chain);
+    ctx.window.once('closed', () => promptChains.delete(ctx)); // 登録はウィンドウにつき1本
+  }
+  if (chain.waiting >= MAX_PROMPT_QUEUE) {
+    console.warn('サイトの権限: 確認の順番待ちが上限を超えたため、要求を拒否しました');
+    return false;
+  }
+  chain.waiting++;
+  const result = chain.tail.then(run);
+  chain.tail = result.then(
+    () => {
+      chain.waiting--;
+    },
+    () => {
+      chain.waiting--;
+    }
+  );
+  return result;
+}
+
+function askPermission(ctx, wc, host, kinds) {
+  // 順番待ちの間にタブが消えた/隠れた/ウィンドウが閉じたときは尋ねずに拒否する
+  if (ctx.window.isDestroyed() || wc.isDestroyed() || !isVisibleTabWebContents(ctx, wc)) return false;
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = (allow) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (!wc.isDestroyed()) {
+        wc.removeListener('did-start-navigation', onNavigate);
+        wc.removeListener('destroyed', onGone);
+      }
+      ctx.window.removeListener('closed', onGone);
+      pendingPrompt.delete(ctx);
+      // 確認ポップアップはオーバーレイに出ているので、閉じる指示もそこへ直接送る
+      // (オーバーレイごと畳むかは、ほかのポップアップの有無を知っている向こう側が決める)
+      const overlayWc = ctx.tabManager?.overlay?.webContents;
+      if (!ctx.window.isDestroyed() && overlayWc && !overlayWc.isDestroyed()) overlayWc.send('perm:close');
+      resolve(allow);
+    };
+    // ページを移動した/タブごと消えた/ウィンドウを閉じたら、返事を待たずに取り下げる
+    const onGone = () => settle(false);
+    const onNavigate = (_e, _navUrl, isInPlace, isMainFrame) => {
+      if (isMainFrame && !isInPlace) settle(false);
+    };
+    const timer = setTimeout(() => settle(false), PERMISSION_PROMPT_TIMEOUT_MS);
+    wc.on('did-start-navigation', onNavigate);
+    wc.once('destroyed', onGone);
+    ctx.window.once('closed', onGone);
+    pendingPrompt.set(ctx, { wc, host, kinds, settle });
+    // ツールバーへ知らせる → 向こうがアンカー位置を測って menu:open-permission で戻してくる
+    ctx.window.webContents.send('permission:prompt', {
+      host,
+      items: kinds.map((kind) => ({ kind, label: sitePermissions.LABELS[kind] })),
+    });
+  });
+}
+
+// 確認ポップアップを出す前に、その要求がまだ生きているか(ipc.js から使う)
+browser.hasPendingPermission = (ctx) => !!ctx && pendingPrompt.has(ctx);
+
+// 確認ポップアップへの返事。'always'(覚える)/ 'once'(今回だけ)/ 'block'
+browser.respondPermissionPrompt = (ctx, answer) => {
+  const pending = ctx ? pendingPrompt.get(ctx) : null;
+  if (!pending) return;
+  // 返事を待つ間にタブを切り替えていることがある。今見えていないタブへ許可を与えない
+  const alive = !pending.wc.isDestroyed() && isVisibleTabWebContents(ctx, pending.wc);
+  const allow = alive && (answer === 'always' || answer === 'once');
+  if (allow) {
+    for (const kind of pending.kinds) {
+      if (answer === 'always') browser.grantSitePermission(ctx, kind, pending.host);
+      else addTempGrant(pending.wc, kind, pending.host);
+    }
+  }
+  pending.settle(allow);
+};
+
+browser.sendExtensionsFor = (profileId) => {
+  const profile = browser.profiles?.list().find((p) => p.id === profileId);
+  if (!profile) return;
+  const session = browser.profiles.sessionFor(profile);
+  broadcastProfile(profileId, 'extensions:state', browser.extensions.list(session));
+};
+
+const TIMER_GRACE_MS = 15_000; // 「ウィンドウを閉じる」「シャットダウン」の猶予(キャンセル可能)
+
+function windowsForProfile(profileId) {
+  return windows.all().filter((c) => c.profileId === profileId);
+}
+
+// そのプロファイルのウィンドウの中から、フォーカス中のものを優先して選ぶ(無ければ先頭)
+function primaryWindowForProfile(profileId) {
+  const list = windowsForProfile(profileId);
+  const focused = BrowserWindow.getFocusedWindow();
+  return list.find((c) => c.window === focused) ?? list[0] ?? null;
+}
+
+// タイマー発火時のアクション実行。音はTimerPanel側(actions.soundを見て自前で再生)。
+// 危険アクション(ウィンドウを閉じる/シャットダウン)は猶予15秒+キャンセル可能にする
+browser.fireTimer = (profileId, timer) => {
+  const ctx = primaryWindowForProfile(profileId);
+  if (!ctx) return;
+  const actions = timer.actions || {};
+
+  if (actions.hibernateTabs) {
+    for (const c of windowsForProfile(profileId)) timerActions.hibernateBackgroundTabs(c);
+  }
+  if (actions.openPage?.enabled) timerActions.openPage(ctx, actions.openPage.url);
+
+  // 「シャットダウン前に通知を出す」がOFFのときは、鳴動表示も猶予も挟まずに即シャットダウンする
+  const immediateShutdown = !!actions.shutdown && actions.notifyBeforeShutdown === false;
+  if (!immediateShutdown) ctx.timerPanel?.ring(timer);
+
+  const dangerous = !!actions.closeWindow || !!actions.shutdown;
+  if (!dangerous) return;
+
+  const run = () => {
+    // シャットダウンを先に投げる(ウィンドウを閉じるのが先だと、最後のウィンドウが閉じて
+    // アプリ終了処理へ入っている途中でコマンドを投げることになる)
+    if (actions.shutdown) timerActions.runShutdown();
+    if (actions.closeWindow) timerActions.closeWindow(ctx);
+  };
+
+  const bundle = profileData.get(profileId);
+  if (!bundle) return;
+  if (immediateShutdown) {
+    run();
+    bundle.timers.settleAfterRing(timer.id); // 鳴動を待たずに決着させる(繰り返しなら次回へ)
+    return;
+  }
+  bundle.timers.registerGrace(timer.id, timer.fireId, TIMER_GRACE_MS, run, true);
+};
+
+// メディア再生状態はウィンドウごとに異なる。フローティングプレイヤーとサイドパネルの
+// 「再生中」セクションの両方へ届ける(サイドパネルはsendToContext経由で自動的に届く)。
+// 複数タブが同時に再生していても、それぞれ独立したタブとして一覧を送る
+browser.sendMedia = (ctx) => {
+  if (!ctx || ctx.window.isDestroyed()) return;
+  sendToContext(ctx, 'media:state', ctx.mediaList);
+  ctx.mediaPlayer.setState(ctx.mediaList);
+};
+
+// フレームごとの報告から、タブ単位の再生状態一覧を作り直す。
+// 再生中のものを先頭に、次に再生位置が進んでいるもの(一時停止中の続き)の順で並べる。
+// 消えたフレームの報告は捨てる(タブを閉じた/ページを離れた後に残ると誤表示になる)
+browser.refreshMedia = (ctx) => {
+  if (!ctx) return;
+  for (const [key, entry] of ctx.mediaFrames) {
+    if (!entry.frame || entry.frame.isDestroyed?.() || !ctx.tabManager.getTab(entry.tabId)) {
+      ctx.mediaFrames.delete(key);
+      ctx.mediaDockedOverrides.delete(key);
+    }
+  }
+  const entries = [...ctx.mediaFrames.values()].sort((a, b) => {
+    if (a.state.playing !== b.state.playing) return a.state.playing ? -1 : 1;
+    return (b.state.currentTime || 0) - (a.state.currentTime || 0);
+  });
+  const globalDocked = browser.bundleFor(ctx.profileId)?.settings.data.mediaDocked === true;
+  ctx.mediaList = entries.map((entry) => {
+    const wc = ctx.tabManager.getTab(entry.tabId)?.view.webContents;
+    return {
+      ...entry.state,
+      muted: !!wc?.isAudioMuted(),
+      docked: ctx.mediaDockedOverrides.has(entry.tabId) ? ctx.mediaDockedOverrides.get(entry.tabId) : globalDocked,
+    };
+  });
+  browser.sendMedia(ctx);
+};
+
+// タブを閉じたときに、そのタブのフレームの報告を捨てる
+browser.forgetMediaForTab = (ctx, tabId) => {
+  if (!ctx) return;
+  for (const [key, entry] of ctx.mediaFrames) {
+    if (entry.tabId === tabId) ctx.mediaFrames.delete(key);
+  }
+  ctx.mediaDockedOverrides.delete(tabId);
+  browser.refreshMedia(ctx);
+};
+
+// 「サイドパネルに格納」設定(既定値)の変更を、そのプロファイルの全ウィンドウへ反映する
+browser.applyMediaDockedFor = (profileId) => {
+  for (const ctx of windows.all()) {
+    if (ctx.profileId === profileId) browser.refreshMedia(ctx);
+  }
+};
+
+// タブ単位の「フローティング表示」上書き(星ボタンならぬトグル用。既定値と同じなら上書きを消す)
+browser.setMediaDockedForTab = (ctx, tabId, docked) => {
+  if (!ctx) return;
+  const globalDocked = browser.bundleFor(ctx.profileId)?.settings.data.mediaDocked === true;
+  if (!!docked === globalDocked) ctx.mediaDockedOverrides.delete(tabId);
+  else ctx.mediaDockedOverrides.set(tabId, !!docked);
+  browser.refreshMedia(ctx);
+};
+
+// 「サイドパネルに格納」設定の変更を、そのプロファイルのウィンドウのタイマーパネルへ反映する
+browser.applyTimerDockedFor = (profileId) => {
+  const docked = browser.bundleFor(profileId)?.settings.data.timerDocked === true;
+  for (const ctx of windows.all()) {
+    if (ctx.profileId === profileId) ctx.timerPanel.setDocked(docked);
+  }
+};
+
+browser.sendAll = () => {
+  for (const ctx of windows.all()) browser.sendAllTo(ctx);
+  browser.sendKeybindings();
+};
+
+// 1つのウィンドウに、そのウィンドウのプロファイルの状態一式を流し込む
+browser.sendAllTo = (ctx) => {
+  const bundle = browser.bundleFor(ctx.profileId) ?? browser.activeBundle();
+  if (!bundle) return;
+  const profile = browser.profiles.list().find((p) => p.id === bundle.profileId);
+  bundle.settings.data.toolbarItems = normalizeToolbarItems(bundle.settings.data.toolbarItems);
+  sendToContext(ctx, 'profiles:state', profilesPayload(ctx));
+  sendToContext(ctx, 'ui:settings', bundle.settings.data);
+  if (profile) {
+    sendToContext(ctx, 'extensions:state', browser.extensions.list(browser.profiles.sessionFor(profile)));
+  }
+  sendToContext(ctx, 'gestures:state', bundle.gestures.config());
+  sendToContext(ctx, 'bookmarks:state', bundle.bookmarks.list());
+  sendToContext(ctx, 'readlist:state', bundle.readlist.list());
+  sendToContext(ctx, 'downloads:state', downloadsPayload(bundle));
+  sendToContext(ctx, 'theme:state', bundle.theme.data);
+  sendToContext(ctx, 'passwords:state', bundle.passwords.list());
+  sendToContext(ctx, 'tor:status', browser.tor.state());
+  const timerList = bundle.timers.list();
+  sendToContext(ctx, 'timer:state', timerList);
+  ctx.timerPanel?.setState(timerList);
+  browser.sendSidePanel(ctx);
+};
+
+module.exports = browser;

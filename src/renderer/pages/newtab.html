@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https: data:; style-src 'self'" />
+  <title>新しいタブ</title>
+  <link rel="stylesheet" href="app.css" />
+  <link rel="stylesheet" href="newtab.css" />
+</head>
+<body data-bg="night">
+  <!-- 背景(時間帯 or テーマ設定で変化) -->
+  <div id="bg"></div>
+  <!-- 三体問題シミュレーション(背景が threebody のときだけ動く。初期条件はタブごとにランダム) -->
+  <canvas id="bg-sim"></canvas>
+  <!-- 画像背景の暗さ調節。ぼかしと違い文字の読みやすさに効く -->
+  <div id="bg-dim"></div>
+  <div id="vignette"></div>
+
+  <main id="newtab">
+    <div id="clock">
+      <div id="time">--:--</div>
+      <div id="date"></div>
+      <div id="greeting"></div>
+    </div>
+
+    <input
+      id="search"
+      type="text"
+      placeholder="検索またはURLを入力"
+      spellcheck="false"
+      autocomplete="off"
+      autofocus
+    />
+
+    <div id="quick-links"></div>
+    <div id="shortcut-pages"></div>
+    <div id="local-servers"></div>
+  </main>
+
+  <script src="window-theme.js"></script>
+  <script src="theme.js"></script>
+  <script src="icon-picker.js"></script>
+  <script src="newtab.js"></script>
+</body>
+</html>

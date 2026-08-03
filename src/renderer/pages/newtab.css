@@ -1,0 +1,1210 @@
+/* 新しいタブ(Bonjourr風: フルスクリーン背景+大きな時計+控えめな検索欄) */
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+
+/* ---- 背景(時間帯 or テーマ設定で切り替え) ---- */
+#bg {
+  position: fixed;
+  inset: -4%;
+  z-index: -2;
+  background: #1e1f24;
+  animation: bg-drift 80s ease-in-out infinite alternate;
+}
+
+@keyframes bg-drift {
+  from { transform: scale(1) translateY(0); }
+  to { transform: scale(1.06) translateY(-1.5%); }
+}
+
+body[data-bg="dawn"] #bg {
+  background:
+    radial-gradient(120% 80% at 50% 110%, rgba(255, 183, 130, 0.55) 0%, transparent 55%),
+    linear-gradient(168deg, #171632 0%, #453667 38%, #a45f7d 72%, #e29a76 100%);
+}
+
+body[data-bg="day"] #bg {
+  background:
+    radial-gradient(110% 70% at 50% -20%, rgba(255, 255, 255, 0.28) 0%, transparent 60%),
+    linear-gradient(172deg, #3a6ea8 0%, #6d9dce 52%, #a9c9e8 100%);
+}
+
+body[data-bg="dusk"] #bg {
+  background:
+    radial-gradient(120% 85% at 50% 115%, rgba(255, 140, 90, 0.6) 0%, transparent 58%),
+    linear-gradient(165deg, #241d3e 0%, #55356a 42%, #b25457 76%, #e59a5e 100%);
+}
+
+body[data-bg="night"] #bg {
+  background:
+    radial-gradient(100% 65% at 78% -10%, rgba(96, 118, 200, 0.35) 0%, transparent 60%),
+    linear-gradient(176deg, #0a0f24 0%, #16203f 55%, #26335c 100%);
+}
+
+body[data-bg="plain"] #bg {
+  background: var(--bg);
+  animation: none;
+}
+
+/* 背景画像(アップロードした画像。background-imageはJSでインラインスタイルとして設定) */
+body[data-bg="image"] #bg {
+  background-color: #1e1f24;
+  background-size: cover;
+  background-position: center;
+  filter: blur(var(--bg-blur, 0px));
+  /* ぼかすと縁が透けるので、ぼかし量に応じて外へはみ出させる(insetはJSが設定) */
+}
+
+/* ---- 画像の暗さ(ぼかしとは別に、写真の上でも文字が読めるようにする) ---- */
+#bg-dim {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background: #000;
+  opacity: var(--bg-dim, 0);
+}
+
+/* ---- ビルトインのパターン背景(下地色+線の色の2色。種類はdata-pattern) ---- */
+body[data-bg="pattern"] #bg {
+  background-color: var(--pattern-base, #12162b);
+  animation: none;
+}
+
+body[data-bg="pattern"] #bg[data-pattern="dots"] {
+  background-image: radial-gradient(circle at center, var(--pattern-color) 1.6px, transparent 1.7px);
+  background-size: 24px 24px;
+}
+
+body[data-bg="pattern"] #bg[data-pattern="grid"] {
+  background-image:
+    linear-gradient(to right, var(--pattern-color) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--pattern-color) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+body[data-bg="pattern"] #bg[data-pattern="diagonal"] {
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--pattern-color) 0 2px,
+    transparent 2px 18px
+  );
+}
+
+body[data-bg="pattern"] #bg[data-pattern="crosshatch"] {
+  background-image:
+    repeating-linear-gradient(45deg, var(--pattern-color) 0 1px, transparent 1px 20px),
+    repeating-linear-gradient(-45deg, var(--pattern-color) 0 1px, transparent 1px 20px);
+}
+
+/* 三方向の線で六角格子に見せる(hexagonそのものはCSSで描けないため) */
+body[data-bg="pattern"] #bg[data-pattern="hexagon"] {
+  background-image:
+    repeating-linear-gradient(60deg, var(--pattern-color) 0 1px, transparent 1px 28px),
+    repeating-linear-gradient(-60deg, var(--pattern-color) 0 1px, transparent 1px 28px),
+    repeating-linear-gradient(0deg, var(--pattern-color) 0 1px, transparent 1px 24px);
+}
+
+body[data-bg="pattern"] #bg[data-pattern="wave"] {
+  background-image: repeating-radial-gradient(
+    circle at 50% 120%,
+    transparent 0 38px,
+    var(--pattern-color) 38px 40px
+  );
+}
+
+body[data-bg="pattern"] #bg[data-pattern="circuit"] {
+  background-image:
+    linear-gradient(to right, var(--pattern-color) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--pattern-color) 1px, transparent 1px),
+    radial-gradient(circle at center, var(--pattern-color) 2.5px, transparent 2.6px);
+  background-size: 60px 60px, 60px 60px, 60px 60px;
+}
+
+/* ---- 自由に組めるグラデーション(角度と色はJSが組み立ててインラインで設定) ---- */
+body[data-bg="gradient"] #bg {
+  animation: none;
+}
+
+/* ---- 三体問題シミュレーション ---- */
+#bg-sim {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  display: none;
+  width: 100%;
+  height: 100%;
+}
+
+body[data-bg="threebody"] #bg {
+  background: radial-gradient(120% 90% at 50% 30%, #141a33 0%, #05070f 70%);
+  animation: none;
+}
+
+body[data-bg="threebody"] #bg-sim {
+  display: block;
+}
+
+/* 周辺を少し落として中央の文字を読みやすくする */
+#vignette {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.3) 100%);
+  pointer-events: none;
+}
+
+body[data-bg="plain"] #vignette {
+  display: none;
+}
+
+/* ---- 中央のコンテンツ ---- */
+#newtab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 680px;
+  padding: 0 24px;
+  margin-top: var(--newtab-shift, -6vh);
+}
+
+#clock {
+  text-align: center;
+  margin-bottom: 40px;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.35);
+}
+
+#time {
+  font-size: clamp(72px, 13vw, 124px);
+  font-weight: 200;
+  letter-spacing: 0.01em;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+
+#date {
+  margin-top: 10px;
+  font-size: 16px;
+  font-weight: 300;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+#greeting {
+  margin-top: 4px;
+  font-size: 14px;
+  font-weight: 300;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+/* ---- 検索欄(すりガラスのピル) ---- */
+#search {
+  width: min(560px, 100%);
+  height: 46px;
+  padding: 0 24px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 23px;
+  background: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(14px);
+  color: #fff;
+  font-size: 15px;
+  text-align: center;
+  outline: none;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+  transition: background 0.2s, border-color 0.2s;
+}
+
+#search::placeholder {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+#search:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+#search:focus {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: var(--accent);
+  text-align: left;
+}
+
+/* ---- クイックリンク(アイコンタイル) ---- */
+/* ショートカット+ウィジェットの統合グリッド(スマホのホーム画面風) */
+#quick-links {
+  display: grid;
+  grid-template-columns: repeat(var(--grid-cols, 6), var(--cell, 84px));
+  grid-auto-rows: var(--cell, 84px);
+  align-content: start;
+  gap: 14px;
+  justify-content: center;
+  margin-top: 44px;
+  max-width: calc(100vw - 48px);
+  height: var(--grid-height, auto);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.grid-item.quick-link {
+  justify-self: center;
+}
+
+/* aタグ・imgは既定でネイティブドラッグ対象になり、独自のpointerドラッグと衝突するため無効化 */
+.grid-item,
+.grid-item * {
+  -webkit-user-drag: none;
+}
+
+.grid-item.dragging {
+  z-index: 80;
+  cursor: grabbing;
+  user-select: none;
+  transform: scale(1.05);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.4);
+}
+
+/* ドラッグ中のグリッド線+ドロップ先プレビュー(直感的に操作できるように) */
+.grid-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+}
+
+.grid-overlay-cell {
+  position: fixed;
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+}
+
+.grid-overlay-preview {
+  position: fixed;
+  display: none;
+  border-radius: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.grid-overlay-preview.valid {
+  border-color: rgba(120, 220, 150, 0.9);
+  background: rgba(120, 220, 150, 0.2);
+}
+
+.grid-overlay-preview.swap {
+  border-color: rgba(255, 200, 90, 0.9);
+  background: rgba(255, 200, 90, 0.18);
+}
+
+.grid-overlay-preview.blocked {
+  border-color: rgba(255, 100, 100, 0.9);
+  background: rgba(255, 100, 100, 0.16);
+}
+
+/* ローカルサーバーのサジェスト(ショートカットの下) */
+#local-servers {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-top: 30px;
+  max-width: 620px;
+}
+
+.ls-heading {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.ls-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 18px 14px;
+}
+
+.ls-port {
+  font-size: 13px !important;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.ls-menu {
+  position: fixed;
+  z-index: 100;
+  min-width: 128px;
+  padding: 4px;
+  border-radius: 10px;
+  background: rgba(28, 31, 38, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+}
+
+.ls-menu-item {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  text-align: left;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.9);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.ls-menu-item:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.quick-link {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  width: calc(var(--cell, 84px) * 0.81);
+  color: rgba(255, 255, 255, 0.8);
+  text-decoration: none;
+  font-size: clamp(9px, calc(var(--cell, 84px) * 0.131), 13px);
+  font-weight: 300;
+  text-align: center;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.4);
+}
+
+.quick-link .tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--cell, 84px) * 0.619);
+  height: calc(var(--cell, 84px) * 0.619);
+  border-radius: calc(var(--cell, 84px) * 0.19);
+  background: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  transition: background 0.15s, transform 0.15s;
+}
+
+.quick-link:hover .tile {
+  background: rgba(255, 255, 255, 0.24);
+  transform: translateY(-2px);
+}
+
+.quick-link img {
+  width: calc(var(--cell, 84px) * 0.286);
+  height: calc(var(--cell, 84px) * 0.286);
+}
+
+.quick-link .placeholder {
+  font-size: calc(var(--cell, 84px) * 0.214);
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.quick-link span.label {
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.quick-link {
+  position: relative;
+  border: none;
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.folder-icon {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ---- ページの中のフォルダ(スマホのアプリフォルダ風) ----
+   タイルには中身のアイコンを2x2で小さく並べ、クリックで中身を展開する */
+.tile.group-tile {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: calc(var(--cell, 84px) * 0.028);
+  padding: calc(var(--cell, 84px) * 0.055);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.group-mini {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: calc(var(--cell, 84px) * 0.055);
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/* .quick-link 配下の既定サイズ(タイル1枚ぶん)ではなく、小さいマス目に合わせる */
+.group-mini img {
+  width: 68%;
+  height: 68%;
+}
+
+.group-mini .custom-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.group-mini .placeholder {
+  font-size: calc(var(--cell, 84px) * 0.1);
+  line-height: 1;
+}
+
+.group-mini .folder-icon {
+  width: 62%;
+  height: 62%;
+}
+
+/* フォルダを開いたときのオーバーレイ(背景をぼかして中身だけを見せる) */
+.folder-view-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 55; /* 編集モーダル(60)・ポップアップ(80)より下 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(8, 10, 22, 0.45);
+  backdrop-filter: blur(18px);
+}
+
+.folder-view {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(520px, 100%);
+  max-height: 100%;
+  padding: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  /* 開くときの拡大だけ。opacityは動かさない(描画が進まない状況ではアニメーションが開始
+     キーフレームのまま止まり、透明のまま=開いていないように見えるため) */
+  animation: folder-view-pop 160ms cubic-bezier(0.2, 0.9, 0.3, 1.15);
+}
+
+.folder-view-title {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 15px;
+  font-weight: 500;
+  text-align: center;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.4);
+}
+
+.folder-view-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--cell, 84px), 1fr));
+  gap: 14px;
+  justify-items: center;
+  overflow-y: auto;
+}
+
+.folder-view-empty {
+  grid-column: 1 / -1;
+  padding: 18px 0;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  text-align: center;
+}
+
+@keyframes folder-view-pop {
+  from {
+    transform: scale(0.92);
+  }
+}
+
+/* 編集ボタン(ホバー時のみ表示) */
+.quick-link-edit {
+  position: absolute;
+  top: -4px;
+  right: 6px;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-size: 10px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.quick-link:hover .quick-link-edit {
+  opacity: 1;
+}
+
+/* ---- ページ切り替え(ショートカットの複数ページ) ---- */
+#shortcut-pages {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 18px;
+}
+
+/* ページ名のピル(クリックで切り替え/ダブルクリックで改名/右クリックでメニュー) */
+.page-tab {
+  max-width: 180px;
+  padding: 4px 12px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: background 0.15s, color 0.15s;
+}
+
+.page-tab:hover {
+  background: rgba(255, 255, 255, 0.24);
+  color: #fff;
+}
+
+.page-tab.active {
+  background: rgba(255, 255, 255, 0.9);
+  color: #1b1b2c;
+  font-weight: 600;
+}
+
+.page-tab-add {
+  padding: 4px 10px;
+  font-size: 13px;
+}
+
+/* その場改名の入力欄(ピルの見た目をそのまま使う) */
+.page-tab-input {
+  width: 7em;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: center;
+  outline: none;
+}
+
+body[data-bg="plain"] .page-tab {
+  background: var(--card);
+  color: var(--text-dim);
+}
+
+body[data-bg="plain"] .page-tab:hover {
+  color: var(--text);
+}
+
+body[data-bg="plain"] .page-tab.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* ---- ショートカット追加/編集モーダル ---- */
+.shortcut-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.shortcut-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 320px;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--card);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  color: var(--text);
+  text-align: left;
+}
+
+.shortcut-modal h3 {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.shortcut-modal .search {
+  width: 100%;
+}
+
+.shortcut-kind-row {
+  display: flex;
+  gap: 16px;
+}
+
+.shortcut-kind-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.shortcut-folder-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.shortcut-folder-path {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shortcut-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.shortcut-actions .spacer {
+  flex: 1;
+}
+
+/* アイコン設定行(プロファイルと同じ共通ピッカーで変更。左にプレビュー) */
+.shortcut-icon-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.shortcut-icon-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--card-hover);
+}
+
+.shortcut-icon-preview img {
+  width: 24px;
+  height: 24px;
+}
+
+.shortcut-icon-preview .placeholder {
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.shortcut-icon-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* アップロード画像のアイコンはタイル全体に敷く(プロファイルのアバターと同じ見せ方) */
+.quick-link .tile img.custom-image,
+.shortcut-icon-preview img.custom-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
+/* ---- シンプル(単色)背景のときは従来のダークUIに寄せる ---- */
+body[data-bg="plain"] {
+  color: var(--text);
+}
+
+body[data-bg="plain"] #clock,
+body[data-bg="plain"] .quick-link {
+  text-shadow: none;
+}
+
+body[data-bg="plain"] #date,
+body[data-bg="plain"] #greeting {
+  color: var(--text-dim);
+}
+
+body[data-bg="plain"] #search {
+  background: var(--card);
+  border-color: var(--border);
+  backdrop-filter: none;
+  color: var(--text);
+  box-shadow: none;
+}
+
+body[data-bg="plain"] #search::placeholder {
+  color: var(--text-dim);
+}
+
+body[data-bg="plain"] .quick-link {
+  color: var(--text-dim);
+}
+
+body[data-bg="plain"] .quick-link .tile {
+  background: var(--card);
+  border-color: var(--border);
+  backdrop-filter: none;
+  box-shadow: none;
+}
+
+body[data-bg="plain"] .quick-link:hover .tile {
+  background: var(--card-hover);
+}
+
+/* =========================================================
+   ウィジェット(天気/ノートパッド/カレンダー/ニュース)
+   ========================================================= */
+.widget {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(14px);
+  color: rgba(255, 255, 255, 0.92);
+  overflow: hidden;
+}
+
+.widget.resizing {
+  z-index: 80;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.4);
+}
+
+.widget-resize-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 20px;
+  height: 20px;
+  cursor: nwse-resize;
+  touch-action: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.widget-resize-handle::after {
+  content: '';
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid rgba(255, 255, 255, 0.65);
+  border-bottom: 2px solid rgba(255, 255, 255, 0.65);
+  border-radius: 0 0 3px 0;
+}
+
+.widget:hover .widget-resize-handle,
+.widget.resizing .widget-resize-handle {
+  opacity: 1;
+}
+
+body[data-bg="plain"] .widget {
+  background: var(--card);
+  color: var(--text);
+}
+
+.widget-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 6px 2px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  flex-shrink: 0;
+}
+
+.widget-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.widget-menu-btn {
+  border: none;
+  background: none;
+  color: inherit;
+  opacity: 0.6;
+  cursor: pointer;
+  font-size: 14px;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.widget-menu-btn:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.widget-body {
+  flex: 1;
+  min-height: 0;
+  padding: 4px 12px 10px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.widget-note {
+  opacity: 0.7;
+  font-size: 12px;
+  margin: auto;
+}
+
+/* ---- 天気 ---- */
+.weather-now {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.weather-icon {
+  font-size: 30px;
+  line-height: 1;
+}
+
+.weather-temp {
+  font-size: 32px;
+  font-weight: 300;
+  line-height: 1;
+}
+
+.weather-days {
+  display: flex;
+  gap: 6px;
+  margin-top: auto;
+}
+
+.weather-day {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  font-size: 10px;
+}
+
+.weather-range {
+  opacity: 0.85;
+}
+
+/* ---- ノートパッド ---- */
+.notepad-textarea {
+  flex: 1;
+  width: 100%;
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.notepad-textarea::placeholder {
+  color: inherit;
+  opacity: 0.5;
+}
+
+/* ---- カレンダー ---- */
+.cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 2px;
+  flex-shrink: 0;
+}
+
+.cal-nav {
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 15px;
+  opacity: 0.7;
+  width: 22px;
+  border-radius: 6px;
+}
+
+.cal-nav:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  flex: 1;
+  min-height: 0;
+  font-size: 10px;
+  text-align: center;
+  align-items: center;
+}
+
+.cal-weekday {
+  opacity: 0.6;
+}
+
+.cal-day.today {
+  background: var(--accent);
+  color: #fff;
+  border-radius: 50%;
+  width: 17px;
+  height: 17px;
+  line-height: 17px;
+  justify-self: center;
+}
+
+.cal-day.sun {
+  color: #ffa8a8;
+}
+
+.cal-day.sat {
+  color: #a8c8ff;
+}
+
+body[data-bg="plain"] .cal-day.sun {
+  color: #e05b5b;
+}
+
+body[data-bg="plain"] .cal-day.sat {
+  color: #5b8de0;
+}
+
+/* ---- ニュース ---- */
+.news-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.news-item {
+  color: inherit;
+  text-decoration: none;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.9;
+  border-radius: 6px;
+  padding: 2px 6px;
+  flex-shrink: 0;
+}
+
+.news-item:hover {
+  background: rgba(255, 255, 255, 0.12);
+  opacity: 1;
+}
+
+/* ---- ウィジェット内の設定UI(天気の場所検索/ニュースのフィード管理) ---- */
+/* 本体の高さいっぱいを使い、入りきらない分はここごとスクロールさせる。
+   中の要素は flex-shrink: 0(潰れると高さが縮んでスクロールが発生せず、
+   以前は一覧だけが数pxに潰れて追加したフィードが見えなくなっていた) */
+.widget-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  font-size: 12px;
+}
+
+.widget-setup-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.widget-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  border-radius: 8px;
+  padding: 5px 8px;
+  background: rgba(0, 0, 0, 0.25);
+  color: inherit;
+  outline: none;
+  font-size: 12px;
+}
+
+body[data-bg="plain"] .widget-input {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.widget-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.15);
+  color: inherit;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.widget-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.widget-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.widget-btn:disabled:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.widget-btn-primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.widget-setup-results {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+/* 直下の要素は縮ませない(縮むとスクロールにならず、中身が読めなくなる) */
+.widget-setup > * {
+  flex-shrink: 0;
+}
+
+.widget-setup-result {
+  text-align: left;
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 4px 8px;
+  color: inherit;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.widget-setup-result:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.widget-setup-error {
+  flex-shrink: 0;
+  font-size: 10px;
+  line-height: 1.3;
+  color: #ffb4b4;
+}
+
+.widget-feed-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 2px 4px 2px 8px;
+}
+
+.widget-feed-row .widget-btn {
+  padding: 1px 5px;
+  line-height: 1.4;
+}
+
+.widget-feed-row span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- 追加/ウィジェットの小さなポップアップメニュー ---- */
+.grid-popup {
+  position: fixed;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  background: #23262e;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.grid-popup-item {
+  display: block;
+  text-align: left;
+  border: none;
+  background: none;
+  color: #e5e7eb;
+  padding: 8px 12px;
+  border-radius: 7px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.grid-popup-item:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.grid-popup-item:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

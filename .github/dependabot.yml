@@ -1,0 +1,34 @@
+# 依存の更新をまとめて提案させる。
+# Electron本体はメジャー更新でクロームUIやWebContentsViewの挙動が変わるため、
+# まとめずに単独のPRにして個別に検証する。
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: '/'
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: '依存を更新:'
+    groups:
+      dev-dependencies:
+        dependency-type: development
+        exclude-patterns: ['electron', 'electron-builder']
+        update-types: ['minor', 'patch']
+      production-minor:
+        dependency-type: production
+        update-types: ['minor', 'patch']
+    ignore:
+      # メジャー更新は手元で検証してから上げる
+      - dependency-name: electron
+        update-types: ['version-update:semver-major']
+      - dependency-name: electron-builder
+        update-types: ['version-update:semver-major']
+
+  - package-ecosystem: github-actions
+    directory: '/'
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: 'CIを更新:'

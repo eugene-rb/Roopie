@@ -1,0 +1,138 @@
+# masterへのpushごとにインストーラーをビルドしてGitHub Releasesへ公開する。
+# インストール済みのRoopieはReleasesを見て自動アップデートするため、これで変更が自動で行き渡る。
+#
+# バージョンはワークフローの実行番号から 0.1.<run_number> を組み立てて使う。
+# package.json は書き換えずビルド時にだけ差し替えるので、CIがmasterへpushし返すことがなく、
+# 「バージョン更新のコミット → それがまたCIを起動」という無限ループが起きない。
+# メジャー/マイナーを上げたいときは下の VERSION_BASE を変える。
+name: Release
+
+on:
+  push:
+    branches: [master]
+    # ドキュメント・リポジトリの体裁だけの変更ではビルドしない(1回あたり約100MBの成果物が増えるため)。
+    # .github/** をまとめて除外はしない(このワークフロー自体の変更はビルドして確かめたいため)
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+      - 'docs/**'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/PULL_REQUEST_TEMPLATE.md'
+      - '.github/dependabot.yml'
+      - 'LICENSE'
+  workflow_dispatch: # 手動実行も可能
+
+permissions:
+  contents: write # Releasesの作成に必要
+
+# 同時に複数のリリースが走るとバージョンの前後が入れ替わるので直列化する
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  VERSION_BASE: '0.1'
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: 依存をインストール
+        run: npm ci
+
+      - name: CSSをビルド(tailwind.css → pages/app.css)
+        run: npm run build:css
+
+      # 同梱するTor本体を毎回最新の安定版で取り直す(=Roopieを更新するとTorも新しくなる)。
+      # Tor Projectのサーバーに繋がらないときはスクリプト側が固定バージョンに落ちる
+      - name: Tor本体を取得(最新の安定版)
+        run: npm run fetch:tor
+
+      - name: バージョンを決めてタグを作る
+        shell: bash
+        run: |
+          VERSION="${VERSION_BASE}.${{ github.run_number }}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          # package.json はコミットせずビルド用に書き換えるだけ
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          # 公開状態(draftではない)のリリースはタグが先に無いとGitHub APIが作れないため、
+          # ここでビルド対象のコミットにタグを打つ。
+          # タグのpushではこのワークフローは再起動しない(トリガーはmasterブランチへのpushのみ)
+          if git ls-remote --exit-code --tags origin "v$VERSION" >/dev/null 2>&1; then
+            echo "タグ v$VERSION は既にあります(再実行とみなす)"
+          else
+            git tag "v$VERSION"
+            git push origin "v$VERSION"
+          fi
+          echo "このビルドのバージョン: $VERSION"
+
+      # electron-builderは成果物(exe/blockmap/latest.yml)を並列にアップロードし、
+      # そのとき「リリースが無ければ作る」を各アップロードが行うため、同じタグのリリースが
+      # 二重にできて成果物が分裂することがある。先に空のリリースを作っておくとレースが起きない
+      - name: リリースの入れ物を先に作る
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # コミットメッセージは環境変数で受ける(本文に " や ` が入っていてもスクリプトが壊れないため)
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            echo "リリース v$VERSION は既にあります(再実行とみなす)"
+          else
+            # --generate-notes で前回のリリースからのコミット一覧も本文に付ける。
+            # 本文は1行で組み立てる(YAMLのブロック内で行頭から書くとブロックが切れるため)
+            install="**インストール**: 下の \`Roopie-Setup-$VERSION.exe\` をダウンロードして実行してください(Windows 10/11 64bit)。インストール済みのRoopieは自動で更新されるため、この操作は不要です。"
+            # コミットのトレーラー(Signed-off-by: など)はリリースノートには要らないので落とす
+            message=$(printf '%s' "${COMMIT_MESSAGE:-master への push による自動リリース}" | sed -E '/^(Signed-off-by|Co-authored-by|Reviewed-by):/Id')
+            notes="$message"$'\n\n'"$install"$'\n\n---\n'
+            gh release create "v$VERSION" \
+              --title "$VERSION" \
+              --generate-notes \
+              --notes "$notes"
+          fi
+
+      - name: インストーラーをビルドしてReleasesへ公開
+        run: npm run release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 公開結果を確認(exe と latest.yml が付いているか)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 同じタグのリリースが複数あると成果物が分裂している(過去に並列アップロードで発生)
+          count=$(gh api "repos/${{ github.repository }}/releases" --paginate \
+            --jq "[.[] | select(.tag_name == \"v$VERSION\")] | length")
+          [ "$count" = "1" ] || { echo "::error::タグ v$VERSION のリリースが $count 個あります"; exit 1; }
+
+          assets=$(gh release view "v$VERSION" --json assets --jq '.assets[].name')
+          echo "$assets"
+          # latest.yml が無いと electron-updater が更新を検知できない
+          echo "$assets" | grep -q '^latest.yml$' || { echo '::error::latest.yml がありません'; exit 1; }
+          echo "$assets" | grep -q '\.exe$' || { echo '::error::インストーラー(.exe)がありません'; exit 1; }
+          # blockmapは差分ダウンロード用。無くても更新は動くので警告に留める
+          echo "$assets" | grep -q '\.blockmap$' || echo '::warning::blockmapがありません(差分更新は効きません)'
+
+      # 1回あたり約100MBあるので、古いリリースは消して直近だけ残す
+      - name: 古いリリースを整理(直近10件を残す)
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release list --limit 100 --json tagName,createdAt \
+            --jq 'sort_by(.createdAt) | reverse | .[10:] | .[].tagName' \
+            | while read -r tag; do
+                [ -n "$tag" ] || continue
+                echo "削除: $tag"
+                gh release delete "$tag" --yes --cleanup-tag
+              done

@@ -1,0 +1,5863 @@
+/*
+ * Roopie UI の統合スタイル(Tailwind CSS v4 + Preline UI)。
+ * `npm run build:css` で src/renderer/pages/app.css に生成される。
+ * ブラウザUI(index.html)と全内部ページ(roopie://)の両方から読み込まれるため、
+ * ページ固有のbodyルールは .chrome-body / .menu-body / .panel-body でスコープする。
+ */
+@import "tailwindcss" source(none);
+/* Preline UIのバリアント(hs-*コンポーネント用)。exportsに"style"条件がないため相対パスで読む */
+@import "../../node_modules/preline/variants.css";
+/* タブの音声エフェクト「ニャンキャット」のドット絵(node scripts/gen-nyan-sprite.js で生成) */
+@import "./nyan-sprite.css";
+
+/* クラス検出はHTML/JSのみ(生成物のapp.cssを対象にしない) */
+@source "./**/*.html";
+@source "./**/*.js";
+
+/* ---- デザイントークン(Preline風ダーク) ----
+   面の色は「生の色 --c-*」→「実際に使う --bg 等」の2段で作る。
+   半透明・liquidglass では2段目に --surface-alpha が乗り、背後(acrylic)が透ける。
+   --c-* を差し替えるだけでライトテーマや単色テーマになる(使う側は無変更で済む)。 */
+:root {
+  --c-bg: #16181d;
+  --c-toolbar: #1e2128;
+  --c-bar: #1a1c22;
+  --c-tab-inactive: #22252d;
+  --c-tab-active: #30343f;
+  --c-card: #1e2128;
+  --c-card-hover: #272b34;
+  --c-menu: #23262e;
+  --c-menu-hover: #30343f;
+
+  /* クロームの面をどれだけ不透明に保つか(1=不透明)。ドキュメントごとにJSが入れる。
+     内部ページ(設定・履歴など)は1のまま=ページが透けることはない */
+  --surface-alpha: 1;
+  /* 面に重ねる色。ダークでは白、ライトでは黒(ホバーや境界線がどちらでも効くように) */
+  --tint: 255 255 255;
+
+  --bg: var(--c-bg);
+  /* クロームの帯(タブバー・ツールバー・ブックマークバー)の面。
+     --bg と違い半透明になりうる。内部ページは --bg を使うので透けない */
+  --chrome-bar: color-mix(in srgb, var(--c-bg) calc(var(--surface-alpha) * 100%), transparent);
+  --bg-toolbar: color-mix(in srgb, var(--c-toolbar) calc(var(--surface-alpha) * 100%), transparent);
+  --bg-bar: color-mix(in srgb, var(--c-bar) calc(var(--surface-alpha) * 100%), transparent);
+  --tab-inactive: color-mix(in srgb, var(--c-tab-inactive) calc(var(--surface-alpha) * 100%), transparent);
+  --tab-active: color-mix(in srgb, var(--c-tab-active) calc(var(--surface-alpha) * 100%), transparent);
+  --card: var(--c-card);
+  --card-hover: var(--c-card-hover);
+  --text: #e5e7eb;
+  --text-dim: #99a0ac;
+  --accent: #6c8cff;
+  --hover: rgb(var(--tint) / 0.08);
+  --border: rgb(var(--tint) / 0.08);
+  --ring: color-mix(in srgb, var(--accent) 30%, transparent);
+  --menu-bg: color-mix(in srgb, var(--c-menu) calc(var(--surface-alpha) * 100%), transparent);
+  --menu-hover: var(--c-menu-hover);
+  /* liquidglass のときだけ効く光沢(既定では何も足さない) */
+  --glass-sheen: none;
+  --glass-blur: 0px;
+  /* 音声再生中タブのエフェクトの色。設定で指定があればJSが上書きするが、
+     未定義だと color-mix() ごと無効になってエフェクトが丸ごと消えるので既定値を置く */
+  --audio-fx-1: var(--accent);
+  --audio-fx-2: color-mix(in srgb, var(--audio-fx-1) 45%, #ffffff);
+
+  color-scheme: dark;
+}
+
+/* ---- ライトテーマ(html の data-window-mode をJSが入れる) ----
+   'system' はJS側でOSの設定を見て dark/light のどちらかに解決してから入れるので、
+   ここでは2つの明示的な値だけを持てばよい */
+:root[data-window-mode="light"] {
+  --c-bg: #eef0f4;
+  --c-toolbar: #ffffff;
+  --c-bar: #e7eaf0;
+  --c-tab-inactive: #dfe3ea;
+  --c-tab-active: #ffffff;
+  --c-card: #ffffff;
+  --c-card-hover: #f2f4f8;
+  --c-menu: #ffffff;
+  --c-menu-hover: #eef1f6;
+  --text: #1c2129;
+  --text-dim: #5b6472;
+  --tint: 15 23 42;
+
+  color-scheme: light;
+}
+
+/* ---- ベース ---- */
+html {
+  height: 100%;
+}
+
+body {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", "Yu Gothic UI", sans-serif;
+  font-size: 14px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* 内部ページのスクロールバーを控えめにする */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--tint) / 0.14);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--tint) / 0.24);
+  background-clip: content-box;
+  border: 2px solid transparent;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* =========================================================
+   ブラウザUI(index.html) — .chrome-body
+   ========================================================= */
+.chrome-body {
+  height: 100%;
+  overflow: hidden;
+  user-select: none;
+  /* ウィンドウのスタイル(グラデーション・パターン)はこの面に描く。
+     半透明・liquidglass では transparent になり、背後のacrylicが出る */
+  background: var(--chrome-surface, var(--bg));
+}
+
+/* シークレットウィンドウは紫がかった配色にして通常と区別する。
+   body は html より子孫なので、JSが html へ入れるテーマ色よりこちらが勝つ。
+   ここは --c-* ではなく**最終トークンを直接**上書きする(--bg 等の var() の解決は
+   宣言元の :root で済んでいるため、--c-* を子孫で差し替えても届かない)。
+   明暗はJS側でシークレットをダーク固定にしているので --text 等はそのままでよい */
+.chrome-body.incognito {
+  --bg: #1b1730;
+  --chrome-bar: #1b1730;
+  --bg-toolbar: #241f3d;
+  --bg-bar: #1f1a35;
+  --tab-inactive: #2b2549;
+  --tab-active: #3a3160;
+  --chrome-surface: #1b1730;
+  --glass-sheen: none;
+  --glass-blur: 0px;
+  --hover: rgb(255 255 255 / 0.1);
+}
+
+/* ---- ウィンドウの外観(単色/半透明/ぼかしグラデーション/liquidglass/パターン) ----
+   色・角度・パターンの具体値はJS(window-theme.js)が html へインラインで入れる。
+   ここには「スタイルごとに何が変わるか」だけを置く。
+   半透明とliquidglassの背後のぼかしはCSSではなくウィンドウのacrylic(browser.js)が作る */
+
+/* 面を透かして背後のacrylicを見せる */
+:root[data-window-style="translucent"] .chrome-body,
+:root[data-window-style="glass"] .chrome-body {
+  --chrome-surface: transparent;
+}
+
+/* liquidglass: 帯に内側の光沢と、ページ側に対するぼかしを足して「板ガラス」に見せる */
+:root[data-window-style="glass"] {
+  --glass-blur: 14px;
+  --glass-sheen:
+    inset 0 1px 0 rgb(var(--tint) / 0.3),
+    inset 0 -1px 0 rgb(var(--tint) / 0.07);
+}
+
+:root[data-window-style="glass"] #tab-bar,
+:root[data-window-style="glass"] #group-row,
+:root[data-window-style="glass"] #toolbar,
+:root[data-window-style="glass"] #bookmark-bar {
+  box-shadow: var(--glass-sheen);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+}
+
+/* liquidglass ではアドレスバーとタブも板ガラスにする */
+:root[data-window-style="glass"] #address-wrap,
+:root[data-window-style="glass"] .tab {
+  box-shadow: var(--glass-sheen);
+  backdrop-filter: blur(8px) saturate(160%);
+}
+
+/* グラデーションとパターンには backdrop-filter を掛けない。
+   帯の背後にあるのはページではなくウィンドウ自身が描いた絵なので、
+   ぼかすと自分の模様を潰してしまう(パターンの細い線が消える) */
+
+/* パターン(下地色と線の色の2色。種類は data-window-pattern)。
+   「新しいタブ」側(newtab.css)と同じ模様をクローム用の面へ描く */
+:root[data-window-pattern="dots"] .chrome-body {
+  background-image: radial-gradient(circle at center, var(--chrome-pattern-color) 1.6px, transparent 1.7px);
+  background-size: 24px 24px;
+}
+
+:root[data-window-pattern="grid"] .chrome-body {
+  background-image:
+    linear-gradient(to right, var(--chrome-pattern-color) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--chrome-pattern-color) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+:root[data-window-pattern="diagonal"] .chrome-body {
+  background-image: repeating-linear-gradient(45deg, var(--chrome-pattern-color) 0 2px, transparent 2px 18px);
+}
+
+:root[data-window-pattern="crosshatch"] .chrome-body {
+  background-image:
+    repeating-linear-gradient(45deg, var(--chrome-pattern-color) 0 1px, transparent 1px 20px),
+    repeating-linear-gradient(-45deg, var(--chrome-pattern-color) 0 1px, transparent 1px 20px);
+}
+
+:root[data-window-pattern="hexagon"] .chrome-body {
+  background-image:
+    repeating-linear-gradient(60deg, var(--chrome-pattern-color) 0 1px, transparent 1px 28px),
+    repeating-linear-gradient(-60deg, var(--chrome-pattern-color) 0 1px, transparent 1px 28px),
+    repeating-linear-gradient(0deg, var(--chrome-pattern-color) 0 1px, transparent 1px 24px);
+}
+
+:root[data-window-pattern="wave"] .chrome-body {
+  background-image: repeating-radial-gradient(
+    circle at 50% 120%,
+    transparent 0 38px,
+    var(--chrome-pattern-color) 38px 40px
+  );
+}
+
+:root[data-window-pattern="circuit"] .chrome-body {
+  background-image:
+    linear-gradient(to right, var(--chrome-pattern-color) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--chrome-pattern-color) 1px, transparent 1px),
+    radial-gradient(circle at center, var(--chrome-pattern-color) 2.5px, transparent 2.6px);
+  background-size: 60px 60px, 60px 60px, 60px 60px;
+}
+
+/* シークレットウィンドウには data-window-style / data-window-pattern を入れない
+   (window-theme.js 側で外している)ので、上のスタイルはどれも当たらない */
+
+/* タブバー左端にシークレットである目印を出す */
+.chrome-body.incognito #tab-bar::before {
+  content: "シークレット";
+  display: flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  margin-right: 4px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-dim);
+  font-size: 11px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  -webkit-app-region: drag;
+}
+
+/* SVGアイコン共通(stroke式、ボタンの文字色に追従) */
+.icon-btn svg,
+.section-tab svg,
+.hbtn svg,
+#star-btn svg,
+#translate-btn svg,
+#address-icon svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+}
+
+/* 共通アイコンボタン */
+.icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.icon-btn:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.icon-btn:disabled {
+  color: var(--text-dim);
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ---- タブバー(ピル型タブ、タイトルバー兼用) ---- */
+#tab-bar {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  padding: 5px 8px;
+  gap: 4px;
+  background: var(--chrome-bar);
+  /* 空き領域のドラッグでウィンドウを移動できるようにする */
+  -webkit-app-region: drag;
+  /* 右上のウィンドウ操作ボタン(OSオーバーレイ)と重ならないように空ける */
+  padding-right: calc(100vw - env(titlebar-area-width, 100vw) + 8px);
+  transition: background 0.15s, box-shadow 0.15s;
+}
+
+/* ドラッグ中(並べ替え/検索)だけ空き領域のウィンドウ移動を止め、ドロップを拾えるようにする */
+#tab-bar.dnd-armed {
+  -webkit-app-region: no-drag;
+}
+
+/* 選択テキストをドラッグ中の受け皿ハイライト(ドロップで検索) */
+#tab-bar.drag-search {
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+/* タブバー縦横切替(左上に配置。ウィンドウ移動用のドラッグ領域を上書き) */
+#tab-bar-position-btn {
+  flex-shrink: 0;
+  margin-right: 4px;
+  -webkit-app-region: no-drag;
+}
+
+/* Edgeの「ワークスペース」に相当するプロファイル切り替えピル(プロファイル色で着色) */
+#workspace-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px 0 4px;
+  margin-right: 4px;
+  border: none;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--workspace-color, var(--accent)) 20%, transparent);
+  color: var(--text);
+  cursor: pointer;
+  flex-shrink: 0;
+  max-width: 160px;
+  -webkit-app-region: no-drag;
+  transition: background 0.12s;
+}
+
+#workspace-btn:hover {
+  background: color-mix(in srgb, var(--workspace-color, var(--accent)) 32%, transparent);
+}
+
+#workspace-avatar {
+  width: 20px;
+  height: 20px;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+#workspace-avatar.emoji {
+  font-size: 13px;
+}
+
+#workspace-name {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.workspace-chevron {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.7;
+}
+
+/* Torインジケーター(ピル内の🧅) */
+#workspace-tor {
+  font-size: 12px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+#workspace-tor.connecting {
+  animation: tor-pulse 1.2s ease-in-out infinite;
+}
+
+#workspace-tor.error {
+  filter: grayscale(1);
+  opacity: 0.6;
+}
+
+@keyframes tor-pulse {
+  50% { opacity: 0.35; }
+}
+
+/* タブが増えたら潰さずに横スクロールさせる(ホイールはrenderer.js側で横に流す)。
+   min-width: 0 が無いと、フレックスアイテムの既定の最小サイズ(min-content)に
+   引っかかって縮まず、スクロールが始まらない */
+#tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex: 0 1 auto;
+  min-width: 0;
+  -webkit-app-region: no-drag;
+}
+
+/* あふれている側の端でタブを透明へ落として「続きがある」と分かるようにする。
+   帯の色(単色/半透明/グラデ/パターン)を問わず成立させるため、色を重ねるのではなく
+   **タブ自身をマスクで消す**。どちら側を透かすかは renderer.js が付けるクラスで決める
+   (端まで送り切った側と、アクティブなタブが張り付いている側は透かさない) */
+#tabs,
+#group-tabs {
+  --tab-fade-start: 0px;
+  --tab-fade-end: 0px;
+}
+
+#tabs.fade-start,
+#group-tabs.fade-start {
+  --tab-fade-start: 28px;
+}
+
+#tabs.fade-end,
+#group-tabs.fade-end {
+  --tab-fade-end: 28px;
+}
+
+#tabs.fade-start,
+#tabs.fade-end,
+#group-tabs.fade-start,
+#group-tabs.fade-end {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 var(--tab-fade-start),
+    #000 calc(100% - var(--tab-fade-end)),
+    transparent 100%
+  );
+}
+
+/* 縦タブは上下方向に透かす */
+.chrome-body.vertical-tabs #tabs.fade-start,
+.chrome-body.vertical-tabs #tabs.fade-end {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--tab-fade-start),
+    #000 calc(100% - var(--tab-fade-end)),
+    transparent 100%
+  );
+}
+
+/* 選択中のグループチップから2段目へ伸ばす「橋」(.tab-group-chip.linked::after)の逃げ場。
+   スクロールコンテナが中身を切るのは**パディングボックス**なので、下に橋のぶんだけ
+   パディングを持たせておけば、そこへはみ出した橋は切られずに見える。
+   負のマージンでタブバーの下パディング(--group-bridge と同じ5px)にぴったり重ねるので、
+   タブの位置は動かない。橋は絶対配置なので #tabs の高さにも影響しない */
+.chrome-body:not(.vertical-tabs) #tabs {
+  padding-bottom: var(--group-bridge);
+  margin-bottom: calc(-1 * var(--group-bridge));
+}
+
+/* 横タブのバーは高さ40pxしかなく、スクロールバーを出すとタブが潰れるので隠す
+   (アクティブなタブは切り替わるたびに自動で見える位置へ寄せている) */
+#tabs::-webkit-scrollbar {
+  height: 0;
+  width: 0;
+}
+
+/* 縦タブのレールは幅に余裕があるので、細いつまみだけ出す */
+.chrome-body.vertical-tabs #tabs::-webkit-scrollbar {
+  width: 6px;
+}
+
+#new-tab-btn {
+  -webkit-app-region: no-drag;
+}
+
+/* タブの送りボタン(入りきらない側にだけ出す)。押すと1画面ぶん近く送る */
+.tabs-scroll {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 30px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 0;
+  -webkit-app-region: no-drag;
+}
+
+.tabs-scroll:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.tabs-scroll svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* .off は「場所は空けたまま見せない」(押せる側が変わってもタブの幅が動かないように)。
+   あふれていないときは共通の .hidden(display:none)で場所ごと畳む */
+.tabs-scroll.off {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.chrome-body.vertical-tabs .tabs-scroll {
+  display: none;
+}
+
+.tab {
+  /* 音声再生中のエフェクト(::after)の基準。isolationで重なり文脈を作り、
+     z-index:-1のエフェクトがタブの背景より上・文字やアイコンより下に入るようにする */
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 200px;
+  /* ここまでしか縮めない。あふれた分はタブバーの横スクロールで見せる。
+     幅は設定「タブの最小幅」(--tab-min-w。renderer.js が設定から入れる)で変えられる */
+  min-width: var(--tab-min-w, 140px);
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: default;
+  flex-shrink: 1;
+  overflow: hidden;
+  transition: background 0.12s, color 0.12s, transform 0.15s, opacity 0.15s;
+}
+
+.tab:hover {
+  background: var(--tab-inactive);
+}
+
+/* ✕で連続して閉じている間は、そのときの幅で固定して✕をカーソルの下に留める
+   (幅が戻るとカーソルの下が隣のタブの中央になり、続けて閉じられない)。
+   flex-grow は 0 なので width を上書きするだけで広がらなくなる。
+   最後に閉じてから1秒たったら外して本来の幅に戻す(renderer.js の lockTabWidths)。
+   縦タブは1枚閉じても幅が変わらないので対象外(固定すると幅100%の指定を上書きしてしまう)。
+   2段目(グループの中身)も同じ理由で固定する */
+.chrome-body:not(.vertical-tabs) #tabs.width-locked .tab,
+#group-tabs.width-locked .tab {
+  width: var(--tab-lock-w);
+}
+
+.tab.active {
+  background: var(--tab-active);
+  color: var(--text);
+}
+
+/* アクティブなタブ(と選択中のグループチップ)は、タブバーをスクロールしても端に
+   張り付いて見えたままにする。左右(縦タブでは上下)の両方を0にすると、
+   はみ出しそうな側の端で止まる = どちらへスクロールしても隠れない */
+.chrome-body:not(.vertical-tabs) #tabs > .tab.active,
+.chrome-body:not(.vertical-tabs) #tabs > .tab-group-chip.active,
+#group-tabs > .tab.active {
+  position: sticky;
+  left: 0;
+  right: 0;
+  z-index: 2;
+}
+
+.chrome-body.vertical-tabs #tabs > .tab.active {
+  position: sticky;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+}
+
+/* 張り付いている間だけ、下を流れるタブが透けないように不透明にして影を付ける
+   (--tab-active は半透明なので、不透明な --bg を下敷きにしてから重ねる)。
+   クラスは renderer.js の updateTabOverflow が付ける */
+#tabs > .tab.pinned,
+#group-tabs > .tab.pinned {
+  background: linear-gradient(var(--tab-active), var(--tab-active)), var(--bg);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border) 60%, transparent), 0 2px 12px rgba(0, 0, 0, 0.35);
+}
+
+/* グループチップはグループ色を保ったまま不透明にする(色が変わると別のグループに見える) */
+#tabs > .tab-group-chip.pinned {
+  background: color-mix(in srgb, var(--group-color, var(--group-grey)) 32%, var(--bg));
+  box-shadow: inset 0 -2px 0 var(--group-color, var(--group-grey)), 0 2px 12px rgba(0, 0, 0, 0.35);
+}
+
+/* 2段目とつながっているチップは、橋(::after)と同じ色のまま・影なし
+   (色や影が変わると継ぎ目に線が見えて1枚の面に見えなくなる) */
+#tabs > .tab-group-chip.linked.pinned {
+  background: var(--group-fill);
+  box-shadow: none;
+}
+
+/* 本来の位置を測る間だけ張り付きを解く(張り付いている最中は見た目の位置が
+   ずれていて、そのまま測るとスクロール位置を誤って計算してしまう)。
+   上の張り付きの指定より詳細度が低いので、!important で確実に外す */
+#tabs.measure-raw > .tab.active,
+#tabs.measure-raw > .tab-group-chip.active,
+#group-tabs.measure-raw > .tab.active {
+  position: relative !important;
+}
+
+/* 並べ替え後のFLIPアニメーション(transformでスライドさせる)も測定中は無効にする。
+   transformは矩形に乗るので、動いている最中に測ると位置を誤る。
+   Web Animations は !important の作者スタイルには勝てないので、これで確実に止まる */
+#tabs.measure-raw > *,
+#group-tabs.measure-raw > * {
+  transform: none !important;
+}
+
+/* 集中モード(Ctrl+Shift+H): ツールバー類を隠し、タブバーだけ残す */
+.chrome-body.compact #toolbar,
+.chrome-body.compact #bookmark-bar {
+  display: none;
+}
+
+/* ドラッグ並べ替え: つまみ上げたタブは畳んで隙間を消し、代わりに挿入スロットを出す */
+.tab.dragging {
+  opacity: 0.4;
+}
+
+/* つまみ上げたタブ本体は幅0(縦タブでは高さ0)に畳む。実体の隙間はスロットが担う */
+.tab.drag-collapsed {
+  width: 0 !important;
+  min-width: 0 !important;
+  padding-left: 0;
+  padding-right: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition: width 0.16s ease, height 0.16s ease, min-width 0.16s ease, padding 0.16s ease, opacity 0.12s ease;
+}
+
+.chrome-body.vertical-tabs .tab.drag-collapsed {
+  width: 100%;
+  height: 0 !important;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+/* 挿入位置プレビュー(隙間)。閉じた状態は幅0で、.open でタブ幅まで開く */
+.tab-drop-slot {
+  flex: 0 1 auto;
+  width: 0;
+  min-width: 0;
+  height: 30px;
+  border-radius: 8px;
+  opacity: 0;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
+  pointer-events: none;
+  transition: width 0.16s ease, min-width 0.16s ease, height 0.16s ease, opacity 0.16s ease;
+}
+
+.tab-drop-slot.open {
+  width: 200px;
+  min-width: var(--tab-min-w, 140px); /* .tab と揃える(隙間の大きさが実際のタブと合わないと位置がずれて見える) */
+  flex-shrink: 1;
+  opacity: 1;
+}
+
+/* 縦タブ時は上下方向の隙間にする */
+.chrome-body.vertical-tabs .tab-drop-slot {
+  width: 100%;
+  height: 0;
+}
+
+.chrome-body.vertical-tabs .tab-drop-slot.open {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+}
+
+/* 画面分割中の2タブに付ける、ペアだと分かる強調表示 */
+.tab.split {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.tab .favicon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+/* faviconがないタブの頭文字 */
+.tab .favicon-letter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  background: rgb(var(--tint) / 0.1);
+  color: var(--text-dim);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.tab .spinner {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  border: 2px solid var(--text-dim);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.tab .title {
+  flex: 1;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tab .close-btn {
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  /* ホバー中のタブだけに出す。visibilityではなくdisplayで消して場所も明け渡し、
+     ホバーしていない間はタイトルがその分まで伸びるようにする */
+  display: none;
+}
+
+.tab:hover .close-btn {
+  display: flex;
+}
+
+.tab .close-btn:hover {
+  background: rgb(var(--tint) / 0.15);
+  color: var(--text);
+}
+
+/* 音声再生中のタブに出るスピーカーアイコン。クリックでミュート切り替え */
+.tab .audio-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 0;
+}
+
+.tab .audio-btn svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.tab .audio-btn:hover {
+  background: rgb(var(--tint) / 0.15);
+  color: var(--text);
+}
+
+.tab .audio-btn.muted {
+  color: var(--accent);
+}
+
+/* 再生中のタブに出る再生/一時停止ボタン(video/audio要素があるタブのみ) */
+.tab .play-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 0;
+}
+
+.tab .play-btn svg {
+  width: 12px;
+  height: 12px;
+  fill: currentColor;
+  stroke: none;
+}
+
+.tab .play-btn:hover {
+  background: rgb(var(--tint) / 0.15);
+  color: var(--text);
+}
+
+/* =========================================================
+   タブグループと二段タブバー
+   ---------------------------------------------------------
+   1段目(#tabs)にはグループに入っていないタブと、グループ1つにつき1枚のチップが並ぶ。
+   2段目(#group-row)は選択中のタブが属するグループの中身。グループ外のタブを選んでいる間は
+   出さない(renderer.js が .hidden を付け外しする)。高さの変化は #chrome の
+   ResizeObserver からメインプロセスへ伝わり、ページの表示領域が自動で追従する。
+   ========================================================= */
+
+:root {
+  /* チップと2段目をつなぐ「橋」の高さ。タブバーの下パディング(5px)と必ず同じにする */
+  --group-bridge: 5px;
+  --group-blue: #6c8cff;
+  --group-red: #f87171;
+  --group-yellow: #fbbf24;
+  --group-green: #4ade80;
+  --group-pink: #f472b6;
+  --group-purple: #a78bfa;
+  --group-cyan: #22d3ee;
+  --group-orange: #fb923c;
+  --group-grey: #9ca3af;
+}
+
+/* チップ/2段目の色。data-color から1つの変数にまとめ、以降はこれだけを使う */
+[data-color='blue'] { --group-color: var(--group-blue); }
+[data-color='red'] { --group-color: var(--group-red); }
+[data-color='yellow'] { --group-color: var(--group-yellow); }
+[data-color='green'] { --group-color: var(--group-green); }
+[data-color='pink'] { --group-color: var(--group-pink); }
+[data-color='purple'] { --group-color: var(--group-purple); }
+[data-color='cyan'] { --group-color: var(--group-cyan); }
+[data-color='orange'] { --group-color: var(--group-orange); }
+[data-color='grey'] { --group-color: var(--group-grey); }
+
+/* チップ(選択中)・橋・2段目の地は同じ色で塗り、3つが1枚の面に見えるようにする。
+   var()は宣言した要素の値で先に展開されるので、:root ではなく --group-color を
+   持っている要素(data-color が付くチップと2段目)の側で定義する */
+.tab-group-chip,
+#group-row {
+  --group-fill: color-mix(in srgb, var(--group-color, var(--group-grey)) 18%, var(--bg));
+}
+
+.tab-group-chip {
+  /* エフェクト(.tab-fx)の基準。isolationで重なり文脈を作り、z-index:-1のエフェクトが
+     チップの背景より上・文字やドットより下に入るようにする(.tab と同じ作り) */
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  height: 30px;
+  max-width: 200px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--group-color, var(--group-grey)) 16%, transparent);
+  color: var(--text);
+  font-size: 12px;
+  cursor: default;
+  /* 選択中は下線で「この段の中身が2段目に出ている」と分かるようにする
+     (2段目とつながっているとき=.linked では橋が代わりになるので消す) */
+  box-shadow: inset 0 -2px 0 transparent;
+  transition: background 0.12s, box-shadow 0.12s;
+}
+
+.tab-group-chip:hover {
+  background: color-mix(in srgb, var(--group-color, var(--group-grey)) 26%, transparent);
+}
+
+.tab-group-chip.active {
+  background: color-mix(in srgb, var(--group-color, var(--group-grey)) 32%, transparent);
+  box-shadow: inset 0 -2px 0 var(--group-color, var(--group-grey));
+}
+
+/* ---- チップと2段目をつなぐ ----
+   2段目が出ているグループのチップ(.linked)は、下端の角丸を落として2段目と同じ色で塗り、
+   ::after の「橋」でタブバーの下パディングを埋める。チップ→橋→2段目が切れ目のない
+   1枚の面になり、「この帯の中身が下に並んでいる」と見て分かるようにする。
+   橋は絶対配置なので #tabs の高さ(=タブの位置)には影響しない */
+.chrome-body:not(.vertical-tabs) .tab-group-chip.linked,
+.chrome-body:not(.vertical-tabs) .tab-group-chip.linked:hover {
+  background: var(--group-fill);
+  border-radius: 8px 8px 0 0;
+  box-shadow: none;
+}
+
+.chrome-body:not(.vertical-tabs) .tab-group-chip.linked::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  height: var(--group-bridge);
+  background: var(--group-fill);
+  pointer-events: none;
+}
+
+/* 下端は2段目と地続きにする面なので、下寄せのエフェクト(下線・イコライザー)が
+   継ぎ目に線を引かないよう橋のぶんだけ持ち上げる(.tab.split と同じ考え方) */
+.chrome-body:not(.vertical-tabs) .tab-group-chip.linked .tab-fx {
+  bottom: var(--group-bridge);
+}
+
+.tab-group-chip .group-dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--group-color, var(--group-grey));
+}
+
+.tab-group-chip .group-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.tab-group-chip .group-count {
+  flex-shrink: 0;
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: rgb(var(--tint) / 0.12);
+  color: var(--text-dim);
+  font-size: 10px;
+  text-align: center;
+}
+
+/* チップ内のインライン改名。見た目はそのまま文字だけ差し替わるようにする */
+.tab-group-chip .group-name-input {
+  width: 110px;
+  border: none;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--text);
+  font: inherit;
+  padding: 2px 4px;
+  outline: 1px solid var(--group-color, var(--group-grey));
+}
+
+/* ---- 2段目 ----
+   グループ色の地(右クリックの「色」で変わる)以外は1段目とまったく同じ作りにする:
+   高さ・余白・タブの見た目・「+」の大きさを合わせ、上下2段が同じ見た目になるようにする。
+   上端の境界線は引かない(チップから伸びる橋をそこで切ってしまうため)。
+   ウィンドウ移動のドラッグ領域(-webkit-app-region)は付けない。ここはタブのドロップ先 */
+#group-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 40px;
+  padding: 5px 8px;
+  background: var(--group-fill);
+}
+
+#group-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* 2段目のバーも高さが無いのでスクロールバーは出さない(1段目と同じ理由) */
+#group-tabs::-webkit-scrollbar {
+  height: 0;
+  width: 0;
+}
+
+#group-new-tab-btn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  color: var(--text-dim);
+  font-size: 18px;
+}
+
+/* 縦タブでは2段目を使わず、レールの中でグループの中身を字下げして出す */
+.chrome-body.vertical-tabs #group-row {
+  display: none;
+}
+
+.chrome-body.vertical-tabs .tab.in-group-list {
+  width: calc(100% - 14px);
+  margin-left: 14px;
+  box-shadow: inset 2px 0 0 var(--group-color, var(--group-grey));
+}
+
+/* =========================================================
+   タブのエフェクト(設定で切り替え)
+   ---------------------------------------------------------
+   「アクティブ」「メディア再生中」「タブグループ」の3系統をそれぞれ設定でき、
+   同じタブに重ねて出せる。そのため描画先は ::after ではなく**専用の子要素**
+   .tab-fx(1系統につき1枚。renderer.js が作る)にしてある。
+   種類は各要素の data-effect、色は --fx-1 / --fx-2(レンダラーがインラインで入れる)。
+   ニャンキャットだけは1系統で2枚(虹と猫)必要なので、.tab-fx の ::before / ::after を使う。
+
+   装飾はタブの内側だけで完結させる(縦タブでは #tabs が overflow を切るため、
+   外へ広がる影は見切れてしまう)。また .tab.split が inset の box-shadow を
+   使っているので、エフェクトは別要素に載せて打ち消し合わないようにする。
+
+   アニメーションの長さは60秒を割り切れる値にし、レンダラーが渡す負の遅延
+   (--fx-delay。タブ側に置いて全系統で共有する)で位相を合わせる。
+   タブ要素は再描画のたびに作り直されるが、これで作り直しても続きから見える
+   ========================================================= */
+.tab-fx {
+  /* 色が未指定でも color-mix() ごと無効にならないよう既定を持たせる
+     (無効になると見た目が丸ごと消える) */
+  --fx-1: var(--audio-fx-1);
+  --fx-2: var(--audio-fx-2);
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  animation-delay: var(--fx-delay, 0s);
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+}
+
+.tab-fx[data-effect='none'] {
+  display: none;
+}
+
+/* 画面分割中の強調表示(.tab.split の inset box-shadow)は「背景+影」の段階で描かれ、
+   z-index:-1 のエフェクトはその後に描かれるので、全面を塗るエフェクトだと線が消える。
+   分割中だけ下2pxを空けて線を残す(下線系のエフェクトは線のすぐ上に乗る形になる) */
+.tab.split .tab-fx {
+  bottom: 2px;
+}
+
+/* ---- 単色 ---- */
+.tab-fx[data-effect='solid'] {
+  background: color-mix(in srgb, var(--fx-1) 32%, transparent);
+}
+
+.tab-fx[data-effect='outline'] {
+  box-shadow: inset 0 0 0 2px var(--fx-1);
+}
+
+.tab-fx[data-effect='underline'] {
+  background-image: linear-gradient(var(--fx-1), var(--fx-1));
+  background-repeat: no-repeat;
+  background-size: 100% 3px;
+  background-position: 0 100%;
+}
+
+.tab-fx[data-effect='glow'] {
+  box-shadow:
+    inset 0 0 12px 1px color-mix(in srgb, var(--fx-1) 70%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--fx-1) 45%, transparent);
+}
+
+/* ---- グラデーション ---- */
+.tab-fx[data-effect='gradient'] {
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--fx-1) 45%, transparent),
+    color-mix(in srgb, var(--fx-2) 45%, transparent)
+  );
+}
+
+.tab-fx[data-effect='gradient-underline'] {
+  background-image: linear-gradient(90deg, var(--fx-1), var(--fx-2));
+  background-repeat: no-repeat;
+  background-size: 100% 3px;
+  background-position: 0 100%;
+}
+
+/* 枠線だけをグラデーションにする。塗りつぶした矩形から内側をマスクで抜く */
+.tab-fx[data-effect='gradient-outline'] {
+  padding: 2px;
+  background: linear-gradient(120deg, var(--fx-1), var(--fx-2), var(--fx-1));
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+/* ---- アニメーション ---- */
+.tab-fx[data-effect='pulse'] {
+  background: var(--fx-1);
+  animation-name: audio-fx-pulse;
+  animation-duration: 2s;
+}
+
+@keyframes audio-fx-pulse {
+  0%, 100% { opacity: 0.1; }
+  50% { opacity: 0.42; }
+}
+
+.tab-fx[data-effect='breathe'] {
+  box-shadow:
+    inset 0 0 12px 1px var(--fx-1),
+    inset 0 0 0 1px var(--fx-1);
+  animation-name: audio-fx-breathe;
+  animation-duration: 3s;
+}
+
+@keyframes audio-fx-breathe {
+  0%, 100% { opacity: 0.28; }
+  50% { opacity: 1; }
+}
+
+/* 3色を並べた2倍幅のグラデーションを半分ずらす。端の色が揃うので継ぎ目が出ない */
+.tab-fx[data-effect='flow'] {
+  background: linear-gradient(90deg, var(--fx-1), var(--fx-2), var(--fx-1));
+  background-size: 200% 100%;
+  opacity: 0.45;
+  animation-name: audio-fx-flow;
+  animation-duration: 4s;
+  animation-timing-function: linear;
+}
+
+@keyframes audio-fx-flow {
+  from { background-position: 0% 50%; }
+  to { background-position: 100% 50%; }
+}
+
+/* 薄く色を敷いた上を、細い光の帯が左から右へ通り抜ける */
+.tab-fx[data-effect='sweep'] {
+  background-image:
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--fx-2) 85%, transparent) 50%,
+      transparent 100%
+    ),
+    linear-gradient(
+      color-mix(in srgb, var(--fx-1) 22%, transparent),
+      color-mix(in srgb, var(--fx-1) 22%, transparent)
+    );
+  background-repeat: no-repeat;
+  background-size: 45% 100%, 100% 100%;
+  animation-name: audio-fx-sweep;
+  animation-duration: 2.5s;
+  animation-timing-function: linear;
+}
+
+@keyframes audio-fx-sweep {
+  from { background-position: -100% 0, 0 0; }
+  to { background-position: 200% 0, 0 0; }
+}
+
+/* 音楽プレイヤーのイコライザー風。5本の柱が背景で上下する */
+.tab-fx[data-effect='bars'] {
+  background-image:
+    linear-gradient(var(--fx-1), var(--fx-1)),
+    linear-gradient(var(--fx-2), var(--fx-2)),
+    linear-gradient(var(--fx-1), var(--fx-1)),
+    linear-gradient(var(--fx-2), var(--fx-2)),
+    linear-gradient(var(--fx-1), var(--fx-1));
+  background-repeat: no-repeat;
+  background-position: 6% 100%, 26% 100%, 46% 100%, 66% 100%, 86% 100%;
+  opacity: 0.75;
+  animation-name: audio-fx-bars;
+  animation-duration: 1.5s;
+}
+
+/* 柱はタブの下半分に収める(文字の上まで伸びると読みにくい) */
+@keyframes audio-fx-bars {
+  0%, 100% { background-size: 4px 18%, 4px 40%, 4px 25%, 4px 50%, 4px 22%; }
+  25% { background-size: 4px 46%, 4px 18%, 4px 52%, 4px 22%, 4px 38%; }
+  50% { background-size: 4px 28%, 4px 52%, 4px 18%, 4px 38%, 4px 55%; }
+  75% { background-size: 4px 53%, 4px 28%, 4px 40%, 4px 16%, 4px 28%; }
+}
+
+.tab-fx[data-effect='rainbow'] {
+  background: linear-gradient(90deg, var(--fx-1), var(--fx-2));
+  opacity: 0.4;
+  animation-name: audio-fx-rainbow;
+  animation-duration: 6s;
+  animation-timing-function: linear;
+}
+
+@keyframes audio-fx-rainbow {
+  from { filter: hue-rotate(0deg); }
+  to { filter: hue-rotate(360deg); }
+}
+
+/* ---- ニャンキャット ----
+   ドット絵は nyan-sprite.css の --nyan-cat(6コマ横並び)/ --nyan-rainbow(1タイル)。
+   1マス=1pxまで縮めてあるので、猫は34x21pxで30pxのタブに丸ごと収まる。
+   1系統で虹と猫の2枚が要るので、エフェクト要素(.tab-fx)の ::before に虹、
+   ::after に猫を置く(同じ重なり文脈なら文書順=虹→猫の順に描かれる)。
+   この2つだけは色設定(--fx-*)を使わない。
+   タブ側の見た目(場所空け・縁取り)は、どの系統がニャンキャットでも効くように
+   renderer.js が付ける .tab.fx-nyan を起点にする */
+/* 猫のぶんだけ右に場所を空ける。tab の padding ではなくタイトルの余白で押しているのは、
+   タブが細いときに「猫を消す」判断をコンテナクエリでやるため
+   (要素は自分自身のコンテナクエリには反応できないので、padding だと逃げ道がない) */
+.tab.fx-nyan {
+  container-type: inline-size;
+}
+
+.tab.fx-nyan .title {
+  margin-right: 38px;
+}
+
+/* 再生/ミュートボタンは右端の猫とぶつかるので、favicon の隣(左)へ寄せる。
+   order だけで並べ替えるのでDOMの順序はそのまま */
+.tab.fx-nyan .favicon,
+.tab.fx-nyan .favicon-letter,
+.tab.fx-nyan .spinner {
+  order: -2;
+}
+
+.tab.fx-nyan .play-btn,
+.tab.fx-nyan .audio-btn {
+  order: -1;
+}
+
+/* 虹の上でも文字が読めるように黒で縁取る。ぼかした影は極彩色に溶けるので
+   8方向のぼかしなしの影で輪郭を作る(-webkit-text-stroke は小さい漢字の
+   内側の隙間まで潰してしまうので使わない) */
+.tab.fx-nyan .title,
+.tab.fx-nyan .favicon-letter,
+.tab.fx-nyan .close-btn {
+  color: #fff;
+  text-shadow:
+    1px 0 0 #000, -1px 0 0 #000, 0 1px 0 #000, 0 -1px 0 #000,
+    1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000;
+}
+
+/* favicon とアイコン(SVG)は文字ではないので drop-shadow を4方向ぶん連鎖させて縁取る。
+   ボタン自体ではなく中身に掛けるのは、ホバー時の背景の角丸まで縁取られないようにするため。
+   細い線のアイコンは黒く潰れて見えるため、線自体は白くして芯を残す
+   (ミュート中だけはアクセント色に意味があるので触らない) */
+.tab.fx-nyan .favicon,
+.tab.fx-nyan .play-btn svg,
+.tab.fx-nyan .audio-btn svg {
+  filter:
+    drop-shadow(1px 0 0 #000) drop-shadow(-1px 0 0 #000)
+    drop-shadow(0 1px 0 #000) drop-shadow(0 -1px 0 #000);
+}
+
+.tab.fx-nyan .play-btn,
+.tab.fx-nyan .audio-btn:not(.muted) {
+  color: #fff;
+}
+
+/* グループチップも同じ扱い(グループのエフェクトはチップに出る)。
+   チップには✕が無いので、ホバーで猫を消す打ち消し(下の #tabs .tab.fx-nyan:hover)は要らない。
+   タブと違って container-type も付けない。チップは中身で幅が決まるため、
+   インラインサイズの封じ込めを入れると幅が中身を見なくなり、20px まで潰れてしまう
+   (逆に言うと猫のぶんだけチップが広がるので、細くなりすぎる心配もない) */
+.tab-group-chip.fx-nyan .group-count,
+.tab-group-chip.fx-nyan .group-name-input {
+  margin-right: 38px;
+}
+
+.tab-group-chip.fx-nyan .group-name,
+.tab-group-chip.fx-nyan .group-count {
+  color: #fff;
+  text-shadow:
+    1px 0 0 #000, -1px 0 0 #000, 0 1px 0 #000, 0 -1px 0 #000,
+    1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000;
+}
+
+.tab-fx[data-effect='nyan']::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 31px; /* 猫のポップタルトの左端で虹が終わる(しっぽは虹の上に乗る) */
+  opacity: 0.8;
+  top: 50%;
+  margin-top: -9.5px;
+  height: 19px;
+  background-image: var(--nyan-rainbow);
+  background-size: 16px 19px;
+  background-repeat: repeat-x;
+  image-rendering: pixelated;
+  pointer-events: none;
+  animation: audio-fx-nyan-rainbow 1s steps(8) infinite;
+  animation-delay: var(--fx-delay, 0s); /* shorthandの後に置く(shorthandがdelayを0に戻すため) */
+}
+
+@keyframes audio-fx-nyan-rainbow {
+  to { background-position-x: -16px; }
+}
+
+.tab-fx[data-effect='nyan']::after {
+  content: '';
+  position: absolute;
+  inset: auto 4px auto auto;
+  top: 50%;
+  margin-top: -10.5px;
+  width: 34px;
+  height: 21px;
+  border-radius: 0;
+  background-image: var(--nyan-cat);
+  background-size: 204px 21px;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  pointer-events: none;
+  animation-name: audio-fx-nyan;
+  animation-duration: 0.5s;
+  animation-timing-function: step-end;
+  animation-iteration-count: infinite;
+  animation-delay: var(--fx-delay, 0s);
+}
+
+/* 6コマを1/12秒ずつ送る(元CSSの各パーツのアニメーションを1枚に焼いてある) */
+@keyframes audio-fx-nyan {
+  0% { background-position-x: 0; }
+  16.667% { background-position-x: -34px; }
+  33.333% { background-position-x: -68px; }
+  50% { background-position-x: -102px; }
+  66.667% { background-position-x: -136px; }
+  83.333% { background-position-x: -170px; }
+}
+
+/* ✕(ホバー中だけ出る)は猫と同じ右端なので、ホバー中は猫を消して本来の位置に✕を出す。
+   空いた場所はタイトルと虹で埋める。
+   ✕があるのは本物のタブバー(1段目・2段目)だけなので、そこだけに限定する
+   (設定画面のプレビューにも効くと、猫を見に来たのにホバーで猫が消えてしまう) */
+#tabs .tab.fx-nyan:hover .tab-fx[data-effect='nyan']::after,
+#group-tabs .tab.fx-nyan:hover .tab-fx[data-effect='nyan']::after {
+  content: none;
+}
+
+#tabs .tab.fx-nyan:hover .title,
+#group-tabs .tab.fx-nyan:hover .title {
+  margin-right: 0;
+}
+
+#tabs .tab.fx-nyan:hover .tab-fx[data-effect='nyan']::before,
+#group-tabs .tab.fx-nyan:hover .tab-fx[data-effect='nyan']::before {
+  right: 0;
+}
+
+/* タブが増えて細くなったら猫は出さず虹だけにする(34pxの猫を置くとタイトルの幅が
+   0になって何のタブか分からなくなる)。上のルールを打ち消すので必ずこの位置に置く */
+@container (width < 150px) {
+  .tab.fx-nyan .title {
+    margin-right: 0;
+  }
+
+  .tab-fx[data-effect='nyan']::after {
+    content: none;
+  }
+
+  /* 猫が消えて虹だけになると幅いっぱいが極彩色になり、faviconや頭文字が沈む。
+     細いときは薄くして中身を優先する */
+  .tab-fx[data-effect='nyan']::before {
+    right: 0;
+    opacity: 0.45;
+  }
+}
+
+/* 設定画面のプレビュー枠。中身は本物のタブと同じ .tab を並べる */
+.audio-effect-preview {
+  display: flex;
+  align-items: center;
+  padding: 7px 8px;
+  border-radius: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+#new-tab-btn {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0; /* タブがあふれても「+」は右端に残す */
+  color: var(--text-dim);
+  font-size: 18px;
+}
+
+/* =========================================================
+   縦タブ表示(タブバーを左側の固定レールにする)
+   ========================================================= */
+
+/* タブバー先頭のヘッダー(位置切替ボタン+ワークスペースピル)。
+   横タブでは透過(display:contents)し、従来どおりタブバーの行に直接並ぶ */
+#tab-bar-head {
+  display: contents;
+}
+
+/* 縦タブ時は#tab-barがposition:fixedで文書フローから抜けるため、
+   #chromeの高さはtoolbar + bookmark-bar等だけになる(タブバー分は含まない)。
+   上部にデッドスペースを作らないよう、専用ストリップは置かずツールバーがタイトルバーを兼ねる */
+.chrome-body.vertical-tabs #tab-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 220px;
+  height: auto;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 8px 6px;
+  -webkit-app-region: no-drag;
+}
+
+/* レール最上部の1行(位置切替+ワークスペースピル)。空き部分でウィンドウを移動できる */
+.chrome-body.vertical-tabs #tab-bar-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-bottom: 4px;
+  -webkit-app-region: drag;
+}
+
+.chrome-body.vertical-tabs #workspace-btn {
+  flex: 1;
+  min-width: 0;
+  margin-right: 0;
+}
+
+/* 縦タブ時はツールバーがタイトルバーを兼ねる(空き領域のドラッグでウィンドウ移動、
+   右端はOSのウィンドウ操作ボタンのオーバーレイと重ならないよう空ける) */
+.chrome-body.vertical-tabs #toolbar {
+  -webkit-app-region: drag;
+  padding-right: calc(100vw - env(titlebar-area-width, 100vw) + 8px);
+  box-sizing: border-box;
+}
+
+.chrome-body.vertical-tabs #toolbar > * {
+  -webkit-app-region: no-drag;
+}
+
+.chrome-body.vertical-tabs #tabs {
+  flex-direction: column;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.chrome-body.vertical-tabs .tab {
+  width: 100%;
+  /* 縦並びでは flex-shrink が「高さ」に効くため、既定のままだとタブが上下に潰れて
+     あふれずスクロールが始まらない。高さは固定して、あふれた分はスクロールで見せる */
+  flex-shrink: 0;
+}
+
+.chrome-body.vertical-tabs #new-tab-btn {
+  align-self: flex-start;
+}
+
+.chrome-body.vertical-tabs #toolbar,
+.chrome-body.vertical-tabs #bookmark-bar,
+.chrome-body.vertical-tabs #password-bar,
+.chrome-body.vertical-tabs #default-browser-bar,
+.chrome-body.vertical-tabs #find-bar {
+  margin-left: 220px;
+}
+
+/* ---- ツールバー ----
+   Zen Browser風: クローム全体を「額縁」として同色にし、
+   アドレスバーだけを一段明るいピルとして浮かせる */
+#toolbar {
+  display: flex;
+  align-items: center;
+  height: 44px;
+  padding: 0 10px;
+  gap: 4px;
+  background: var(--chrome-bar);
+}
+
+#address-wrap {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  height: 32px;
+  margin: 0 8px;
+  padding-right: 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-toolbar);
+  transition: box-shadow 0.15s, border-color 0.15s, background 0.15s;
+}
+
+#address-wrap:hover {
+  background: var(--card-hover);
+}
+
+#address-wrap:focus-within {
+  border-color: var(--accent);
+  background: var(--bg-toolbar);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+/* サイト種別アイコン(https=鍵 / それ以外=検索) */
+#address-icon {
+  display: flex;
+  align-items: center;
+  margin-left: 12px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+#address-icon svg {
+  width: 13px;
+  height: 13px;
+}
+
+#address-bar {
+  flex: 1;
+  height: 100%;
+  padding: 0 10px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+  user-select: text;
+}
+
+#star-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+#star-btn:hover {
+  background: var(--hover);
+}
+
+#star-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+#star-btn.bookmarked {
+  color: #ffc857;
+}
+
+#star-btn.bookmarked svg {
+  fill: #ffc857;
+}
+
+#star-btn:disabled {
+  visibility: hidden;
+}
+
+/* 翻訳(Edge風): アドレスバーの中、ブックマークの星の左に置く。
+   読めない言語のページ(提案中)と翻訳済みのページで出す */
+#translate-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+#translate-btn:hover {
+  background: var(--hover);
+}
+
+#translate-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* 翻訳済み(と翻訳中)はEdgeと同じくアクセント色で光らせる */
+#translate-btn.active {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent);
+}
+
+#translate-btn.busy svg {
+  animation: translate-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes translate-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+#translate-btn.hidden {
+  display: none;
+}
+
+#zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+#zoom-label {
+  min-width: 42px;
+  font-size: 11px;
+  color: var(--text-dim);
+  text-align: center;
+  cursor: pointer;
+}
+
+#downloads-btn.active,
+#sidepanel-btn.active,
+#tab-bar-position-btn.active {
+  color: var(--accent);
+  background: var(--hover);
+}
+
+/* Edge風: ダウンロード/サイドパネル/履歴/分割/ズームをひとまとまりにする */
+#toolbar-utility {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* 画面分割コントロール */
+#split-controls {
+  display: flex;
+  gap: 2px;
+}
+
+/* ピン留めした拡張機能のアイコン(electron-chrome-extensions のWeb Component)。
+   **idは設定画面の一覧(#extensions-list)と必ず分ける**。app.cssはブラウザUIと
+   内部ページで共用なので、同じidにすると設定画面向けの margin-top まで当たり、
+   ツールバーのアイコンだけ下へずれる */
+#extensions-area {
+  display: contents;
+}
+
+/* 右の余白は #toolbar の gap に任せる(margin を足すとここだけ隙間が広くなる) */
+#toolbar-extensions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* 大きさ・角丸・アイコンの寸法は隣の .icon-btn に合わせる(1つだけ大きさが違うと浮く)。
+   背景は shorthand にしない(拡張機能がインラインstyleで入れたアイコンの
+   background-size/position まで初期値に戻り、ホバー中だけ絵が崩れる) */
+#toolbar-extensions::part(action) {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  background-size: 16px;
+}
+
+#toolbar-extensions::part(action):hover {
+  background-color: var(--hover);
+}
+
+/* ページ側の全画面(YouTube等)の間はブラウザのUIを丸ごと隠す。
+   ページの領域はメイン側(tab-manager.js の layout)がウィンドウ一杯に広げる */
+body.html-fullscreen #chrome {
+  display: none;
+}
+
+/* ---- ブックマークバー ---- */
+#bookmark-bar {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 10px;
+  gap: 2px;
+  background: var(--chrome-bar);
+  overflow: hidden;
+}
+
+/* ブックマークの案内。常に出すと邪魔なので、前にも来たのにまだ入れていない
+   ページでだけ表示し、ページをクリック/スクロールしたら引っ込める(renderer.js) */
+#bookmark-hint {
+  margin-left: auto;
+  padding-left: 12px;
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.bookmark {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 160px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.bookmark:hover {
+  background: var(--hover);
+}
+
+.bookmark img {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.bookmark span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- パスワード保存の確認バー ---- */
+#password-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 8px 6px;
+  padding: 0 12px;
+  height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-toolbar);
+}
+
+#password-bar .pw-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#password-text {
+  flex: 1;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bar-btn {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.bar-btn:hover {
+  background: var(--hover);
+}
+
+.bar-btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #14151a;
+  font-weight: 600;
+}
+
+.bar-btn.primary:hover {
+  filter: brightness(1.1);
+}
+
+/* サイトの権限の確認はツールバーのバーではなく、オーバーレイ上のドロップダウン
+   (#perm-popup)に出す。スタイルはオーバーレイのセクションにある */
+
+/* ---- 既定のブラウザ化のお願い ---- */
+#default-browser-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 8px 6px;
+  padding: 0 12px;
+  height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-toolbar);
+}
+
+#default-browser-bar .db-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#default-browser-text {
+  flex: 1;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- ページ内検索バー ---- */
+#find-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 8px 6px;
+  padding: 0 8px;
+  height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-toolbar);
+}
+
+#find-input {
+  flex: 1;
+  max-width: 320px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+  user-select: text;
+}
+
+#find-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+#find-count {
+  min-width: 48px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+/* =========================================================
+   内部ページ共通(履歴・ブックマーク・ダウンロード・設定など)
+   ========================================================= */
+.page {
+  max-width: 840px;
+  margin: 0 auto;
+  padding: 32px 24px 64px;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.page-header h1 {
+  flex: 1;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.search {
+  width: 240px;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+
+.search:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+.btn {
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.btn:hover {
+  background: var(--card-hover);
+  border-color: rgb(var(--tint) / 0.14);
+}
+
+.btn:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+.btn.danger:hover {
+  border-color: #e5484d;
+  color: #ff7b7f;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--card);
+  transition: background 0.12s;
+}
+
+.row:hover {
+  background: var(--card-hover);
+}
+
+.row img.favicon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.row .main {
+  flex: 1;
+  min-width: 0;
+}
+
+.row .title {
+  display: block;
+  color: var(--text);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row .title:hover {
+  color: var(--accent);
+}
+
+.row .sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row .time {
+  font-size: 12px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.row-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.row-btn {
+  padding: 4px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.row-btn:hover {
+  background: rgb(var(--tint) / 0.1);
+  color: var(--text);
+}
+
+.row-btn.danger:hover {
+  color: #ff7b7f;
+}
+
+/* ブックマーク管理のフォルダツリー(通常ブックマーク+スタート画面のショートカットを一本化) */
+.bm-children {
+  margin-left: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.row.bm-folder .title {
+  cursor: pointer;
+}
+
+.bm-twisty {
+  flex-shrink: 0;
+  width: 14px;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+}
+
+.bm-emoji {
+  flex-shrink: 0;
+  width: 16px;
+  font-size: 14px;
+  text-align: center;
+}
+
+.bm-empty {
+  padding: 4px 14px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+select.row-btn {
+  appearance: auto;
+  background: var(--card);
+  border: 1px solid var(--border);
+}
+
+/* 拡張機能カード(Edgeの拡張機能ページ風) */
+.ext-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ext-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  transition: background 0.12s;
+}
+
+.ext-card:hover {
+  background: var(--card-hover);
+}
+
+.ext-icon {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.ext-icon-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--card-hover);
+  color: var(--text-dim);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.ext-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.ext-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.ext-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ext-version {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* ウェブストア以外(フォルダから読み込んだ)拡張機能の目印 */
+.ext-badge {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card-hover);
+  color: var(--text-dim);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.ext-desc {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.ext-actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 無効化した拡張はアイコン/本文を薄くして一目で分かるようにする */
+.ext-card.ext-disabled .ext-icon,
+.ext-card.ext-disabled .ext-main {
+  opacity: 0.5;
+}
+
+.ext-details-toggle {
+  margin-top: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ext-details-toggle:hover {
+  text-decoration: underline;
+}
+
+.ext-details {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ext-details-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.ext-details-row code {
+  color: var(--text-dim);
+  font-size: 11px;
+  word-break: break-all;
+}
+
+.ext-details-label {
+  flex-shrink: 0;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.ext-perm-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.ext-perm-chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--card-hover);
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+/* 設定画面の一覧に出すピン留めボタン。#ext-menu .ext-pin と同じ見た目 */
+#extensions-list .ext-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  color: var(--text-dim);
+  opacity: 0.55;
+}
+
+#extensions-list .ext-pin:hover {
+  background: var(--card-hover);
+  color: var(--text);
+  opacity: 1;
+}
+
+#extensions-list .ext-pin.active {
+  color: var(--accent);
+  opacity: 1;
+}
+
+#extensions-list .ext-pin svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#extensions-list .ext-pin.active svg {
+  fill: currentColor;
+}
+
+.date-heading {
+  margin: 20px 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+/* 素の空表示(gesture-pattern の修飾子などで使う既存クラス) */
+.empty {
+  padding: 60px 0;
+  text-align: center;
+  color: var(--text-dim);
+}
+
+/* Preline風の空状態: ソフトな角丸アイコン + 文言(theme.jsの roopieEmptyState が生成) */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 72px 20px;
+  text-align: center;
+  color: var(--text-dim);
+}
+
+.empty-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+
+.empty-icon svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.empty-title {
+  font-size: 13px;
+  line-height: 1.5;
+  max-width: 30ch;
+}
+
+/* 進捗バー(ダウンロード) */
+.progress {
+  width: 100%;
+  height: 4px;
+  margin-top: 6px;
+  border-radius: 2px;
+  background: rgb(var(--tint) / 0.1);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.2s;
+}
+
+/* =========================================================
+   設定ページ
+   ========================================================= */
+
+/* Edge風: 左に目次(クリックでスクロール)、右に本文の2カラム構成 */
+.settings-shell {
+  display: flex;
+  align-items: flex-start;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 32px 24px 64px;
+  gap: 32px;
+}
+
+.settings-shell .page {
+  max-width: 680px;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-toc {
+  position: sticky;
+  top: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 180px;
+  flex-shrink: 0;
+}
+
+.toc-link {
+  padding: 8px 12px;
+  border-radius: 6px;
+  color: var(--text-dim);
+  font-size: 13px;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.12s, color 0.12s;
+}
+
+.toc-link:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.toc-link.active {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+@media (max-width: 900px) {
+  .settings-toc {
+    display: none;
+  }
+
+  .settings-shell .page {
+    max-width: 840px;
+  }
+}
+
+.note {
+  margin-bottom: 20px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-dim);
+}
+
+/* カード内の説明文と一覧の余白(CSPでインラインstyleは使えないためクラスで持つ) */
+.note-tight {
+  margin-bottom: 12px;
+}
+
+#accounts,
+#extensions-list {
+  margin-top: 14px;
+}
+
+#passwords-list {
+  margin-top: 8px;
+}
+
+/* パスワードの検索+エクスポート/インポートの行 */
+.passwords-tools {
+  margin-top: 12px;
+}
+
+/* 「保存しないサイト」小見出し */
+.excluded-title {
+  margin-top: 16px;
+  margin-bottom: 4px;
+}
+
+#passwords-excluded {
+  margin-top: 4px;
+}
+
+/* 自動入力セクション: 住所カードとお支払いカードの間隔 */
+.autofill-card-gap {
+  margin-top: 16px;
+}
+
+#addresses-list,
+#cards-list {
+  margin-top: 8px;
+}
+
+/* ---- 自動入力/パスワード編集の共通フォームモーダル ---- */
+.af-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.af-modal {
+  width: 480px;
+  max-width: calc(100vw - 40px);
+  max-height: calc(100vh - 60px);
+  overflow-y: auto;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+}
+
+.af-modal h3 {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.af-modal-note {
+  margin-bottom: 12px;
+}
+
+.af-modal-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.af-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.af-field.half {
+  width: calc(50% - 5px);
+}
+
+.af-field-label {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.af-field-input {
+  width: 100%;
+}
+
+.af-modal-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.af-modal-actions .spacer {
+  flex: 1;
+}
+
+.section-title {
+  margin: 32px 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* プロファイル個別/共有中/常に全体共通、を見出しの隣に表示するバッジ */
+.scope-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--card-hover);
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 500;
+  vertical-align: middle;
+  cursor: help;
+}
+
+.scope-badge.is-shared {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--accent);
+}
+
+.scope-badge.is-global {
+  background: color-mix(in srgb, var(--text-dim) 25%, transparent);
+}
+
+.card {
+  padding: 18px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.card.active {
+  border-color: var(--accent);
+}
+
+.profile-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  color: #14151a;
+  font-weight: 700;
+  overflow: hidden;
+}
+
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
+}
+
+.avatar.emoji {
+  font-size: 20px;
+  font-weight: 400;
+}
+
+/* アイコンを変更するボタン(アバターのラッパー) */
+.avatar-btn {
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.avatar-btn:hover .avatar {
+  filter: brightness(1.12);
+}
+
+/* アイコン選択ポップオーバー(icon-picker.js。プロファイル/Webパネル/ショートカット共通) */
+.icon-picker {
+  position: fixed;
+  z-index: 50;
+  width: 220px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* アイコン選択の中央モーダル版(サイドパネル/スタートページで使う) */
+.icon-picker-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.icon-picker-backdrop .icon-picker {
+  position: static;
+}
+
+.icon-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+}
+
+.icon-picker-emoji {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 17px;
+  cursor: pointer;
+}
+
+.icon-picker-emoji:hover {
+  background: var(--card-hover);
+}
+
+.icon-picker-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.icon-picker-row .search {
+  flex: 1;
+  width: auto;
+}
+
+.icon-picker-row .btn {
+  flex-shrink: 0;
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+/* 画像アップロード用のプライマリボタン(共通の.btnに色を足す) */
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #14151a;
+  font-weight: 600;
+}
+
+.btn.primary:hover {
+  filter: brightness(1.1);
+}
+
+/* 画像アイコンのGUIクロップ(アイコンピッカーやショートカットのモーダルより手前に出す) */
+.crop-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.crop-modal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: 288px;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--card);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.crop-modal .hint {
+  text-align: center;
+}
+
+.crop-viewport {
+  position: relative;
+  width: 240px;
+  height: 240px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #000;
+  cursor: grab;
+  touch-action: none;
+}
+
+.crop-viewport:active {
+  cursor: grabbing;
+}
+
+/* QRの中央マーク用: 円ではなく角丸四角形でクロップ */
+.crop-viewport-rect {
+  border-radius: 16%;
+}
+
+.crop-viewport img {
+  position: absolute;
+  max-width: none;
+  user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: none;
+}
+
+.crop-zoom {
+  width: 240px;
+  accent-color: var(--accent);
+}
+
+.crop-actions {
+  display: flex;
+  gap: 8px;
+  align-self: stretch;
+}
+
+.crop-actions .btn {
+  flex: 1;
+}
+
+/* プロファイルカード内のテーマカラー選択 */
+.card-accent {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.card-accent-label {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.card-accent-swatches {
+  display: flex;
+  gap: 6px;
+}
+
+.swatch-sm {
+  width: 18px;
+  height: 18px;
+}
+
+/* プロファイルカード内のTorトグルと状態表示 */
+.tor-row {
+  margin-top: 4px;
+  padding-top: 4px;
+}
+
+.tor-status {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.tor-status.error {
+  color: #ff7b7f;
+}
+
+.profile-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.badge {
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+  font-size: 11px;
+}
+
+.profile-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* Googleアカウント */
+.account-add {
+  display: flex;
+  gap: 8px;
+}
+
+.account-add .search {
+  flex: 1;
+  width: auto;
+}
+
+.google-section {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.google-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.google-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+}
+
+.google-row input[type="checkbox"],
+.google-row input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.google-row input:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.google-email {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.google-email .label {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.tag {
+  padding: 2px 7px;
+  border-radius: 5px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.tag.primary {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+}
+
+.tag.signed-in {
+  background: rgba(75, 191, 138, 0.15);
+  color: #4bbf8a;
+}
+
+.radio-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+/* 設定セクション内の「項目なし」プレースホルダ(Preline風の破線ボックス) */
+.empty-inline {
+  padding: 14px 16px;
+  font-size: 12px;
+  color: var(--text-dim);
+  background: var(--card);
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  text-align: center;
+}
+
+/* 共有トグル */
+.shared-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 24px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+}
+
+.setting-name {
+  font-size: 13px;
+}
+
+.setting-desc {
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.grid-size-inputs {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 13px;
+}
+
+.grid-size-inputs input {
+  width: 56px;
+  margin-left: 6px;
+  text-align: center;
+}
+
+/* ツールバーのカスタマイズ(表示/非表示 + ドラッグ並べ替え) */
+.toolbar-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.toolbar-item-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--card-hover);
+  border: 1px solid var(--border);
+}
+
+.toolbar-item-row.dragging {
+  opacity: 0.5;
+}
+
+.toolbar-item-row .drag-handle {
+  cursor: grab;
+  color: var(--text-dim);
+  font-size: 15px;
+  line-height: 1;
+  user-select: none;
+}
+
+.toolbar-item-label {
+  flex: 1;
+  font-size: 13px;
+}
+
+.toolbar-item-row.drop-before {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.toolbar-item-row.drop-after {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+/* ショートカット割り当て */
+.shortcuts-list {
+  margin-top: 8px;
+}
+
+.shortcuts-cat {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin: 14px 0 4px;
+}
+
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 2px;
+}
+
+.shortcut-label {
+  flex: 1;
+  font-size: 13px;
+}
+
+.shortcut-error {
+  font-size: 11px;
+  color: #ff7a7a;
+}
+
+.shortcut-key {
+  min-width: 132px;
+  text-align: center;
+  font-size: 12px;
+  font-family: inherit;
+  padding: 5px 10px;
+  border-radius: 6px;
+  background: var(--card-hover);
+  border: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.shortcut-key:hover {
+  border-color: var(--text-dim);
+}
+
+.shortcut-key.custom {
+  border-color: var(--accent);
+}
+
+.shortcut-key.capturing {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.shortcut-reset {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.shortcut-reset:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.shortcut-reset:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.switch {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  inset: 0;
+  border-radius: 11px;
+  /* オフの色。ライトでは薄いグレーになるよう重ね色から作る */
+  background: rgb(var(--tint) / 0.3);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.slider::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  /* ライトでは下地も薄いので、影がないとつまみが溶ける */
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  transition: transform 0.15s;
+}
+
+.switch input:checked + .slider {
+  background: var(--accent);
+}
+
+.switch input:checked + .slider::before {
+  transform: translateX(16px);
+}
+
+.switch input:disabled + .slider {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* マウスジェスチャー */
+#gesture-list {
+  margin-top: 8px;
+}
+
+.gesture-pattern {
+  min-width: 140px;
+  padding: 6px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  font-size: 16px;
+  letter-spacing: 4px;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.gesture-pattern.empty {
+  font-size: 12px;
+  letter-spacing: 0;
+  color: var(--text-dim);
+}
+
+.gesture-row-pattern {
+  min-width: 110px;
+  font-size: 16px;
+  letter-spacing: 4px;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.gesture-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.gesture-arrows {
+  display: flex;
+  gap: 4px;
+}
+
+.gesture-dir {
+  width: 38px;
+  padding: 0;
+  font-size: 15px;
+}
+
+.gesture-select {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+}
+
+.gesture-select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+.gesture-footer {
+  margin-top: 14px;
+}
+
+/* ---- サイトの権限(種類ごとの許可済みサイト一覧) ---- */
+.perm-kind + .perm-kind {
+  margin-top: 16px;
+}
+
+.perm-kind-name {
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* ---- 背景設定のスライダー・色・グラデーション編集 ---- */
+.range-fields {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.range-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.range-field input[type='range'] {
+  width: 120px;
+  height: 4px;
+  appearance: none;
+  border-radius: 999px;
+  background: var(--border);
+  outline: none;
+  cursor: pointer;
+}
+
+.range-field input[type='range']::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+}
+
+.range-value {
+  min-width: 42px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.color-input {
+  width: 34px;
+  height: 28px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  cursor: pointer;
+}
+
+.gradient-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.gradient-preview {
+  width: 240px;
+  height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.gradient-stops {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.gradient-stop {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.gradient-stop-remove {
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.gradient-stop-remove:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.gradient-stop-remove:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.gesture-add .btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.gesture-conflict {
+  font-size: 11px;
+  color: #ffb454;
+}
+
+/* 保存したパスワード */
+.password-value {
+  min-width: 130px;
+  font: 12px/1 Consolas, "Cascadia Mono", monospace;
+  color: var(--text-dim);
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+
+/* テーマ */
+.swatches {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#accent-swatches {
+  display: flex;
+  gap: 6px;
+}
+
+.swatch {
+  width: 24px;
+  height: 24px;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  padding: 0;
+}
+
+.swatch.active {
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px rgb(var(--tint) / 0.25);
+}
+
+#accent-custom {
+  width: 30px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  cursor: pointer;
+}
+
+.theme-css {
+  margin-top: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#custom-css {
+  min-height: 110px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: 12px/1.6 Consolas, "Cascadia Mono", monospace;
+  outline: none;
+  resize: vertical;
+}
+
+#custom-css:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+/* =========================================================
+   サイドパネル — .panel-body
+   ========================================================= */
+.panel-body {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-toolbar);
+  font-size: 13px;
+}
+
+/* Edge/Vivaldiと同じ、左端をドラッグしてパネル幅を変えるハンドル。
+   このパネル自身のView境界の外側は描画されないため、幅は0から始める */
+/* 既定(右ドック)ではパネルの左端(ページ側との境界)をつまむ。
+   左ドック時はページ側との境界がパネルの右端になるため、ハンドルも右へ */
+#resize-handle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  z-index: 10;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.panel-body.panel-left #resize-handle {
+  left: auto;
+  right: 0;
+}
+
+#resize-handle:hover,
+#resize-handle.dragging {
+  background: var(--accent);
+  opacity: 0.5;
+}
+
+/* Edge風: コンテンツを左、セクション切り替えの縦アイコンレールを右端に配置。
+   ただしパネルがウィンドウの左側にドッキングしているときは逆(レールが常に外側=ウィンドウの縁に来るようにする。Vivaldi等と同様) */
+#home {
+  display: flex;
+  flex-direction: row;
+  height: 100%;
+  min-height: 0;
+}
+
+.panel-body.panel-left #home {
+  flex-direction: row-reverse;
+}
+
+.section-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* セクションのヘッダー(Edge/Vivaldiのパネルタイトル相当) */
+/* 高さはside-panel.jsのPANEL_HEADER_HEIGHTと一致させる(Webパネル表示中のwebViewの位置計算に使う) */
+#panel-header {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  height: 40px;
+  padding: 0 6px 0 12px;
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--border);
+}
+
+#panel-header-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.section-tabs {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 44px;
+  padding: 8px 6px;
+  border-left: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.panel-body.panel-left .section-tabs {
+  border-left: none;
+  border-right: 1px solid var(--border);
+}
+
+.section-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.section-tab:hover {
+  background: var(--card-hover);
+  color: var(--text);
+}
+
+.section-tab.active {
+  background: var(--card-hover);
+  color: var(--accent);
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* アイコンレールにピン留めしたWebパネル(.web-iconと同じ見た目を縦積みで流用) */
+#web-pin-list {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.section {
+  display: none;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: 10px;
+  gap: 8px;
+}
+
+.section.active {
+  display: flex;
+}
+
+.panel-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.panel-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.panel-item:hover {
+  background: var(--card-hover);
+}
+
+.panel-item img {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.panel-item .letter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  background: var(--card-hover);
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.panel-item .label {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.panel-item .sub {
+  display: block;
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ブックマークのツリーエクスプローラー(VSCodeの内蔵エクスプローラー風) */
+.bm-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 2px;
+  margin-bottom: 4px;
+  flex-shrink: 0;
+}
+
+.bm-tree .panel-item.bm-row {
+  padding: 4px 6px;
+  gap: 6px;
+  font-size: 12.5px;
+}
+
+.bm-tree-children {
+  margin-left: 9px;
+  padding-left: 7px;
+  border-left: 1px solid var(--border); /* VSCode風のインデントガイド */
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bm-chevron {
+  flex-shrink: 0;
+  width: 10px;
+  font-size: 9px;
+  color: var(--text-dim);
+  user-select: none;
+}
+
+.bm-row.selected {
+  background: var(--card-hover);
+  outline: 1px solid var(--border);
+}
+
+.bm-row.drop-target,
+.bm-tree.drop-target {
+  outline: 1px dashed var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.bm-inline-input {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  padding: 0 6px;
+  font-size: 12.5px;
+}
+
+/* パネル内の小さな右クリックメニュー(ブックマークツリー用) */
+.panel-menu {
+  position: fixed;
+  z-index: 60;
+  min-width: 160px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+
+.panel-menu button {
+  text-align: left;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.panel-menu button:hover {
+  background: var(--card-hover);
+}
+
+.panel-item .item-btn {
+  padding: 3px 7px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 11px;
+  cursor: pointer;
+  flex-shrink: 0;
+  visibility: hidden;
+}
+
+.panel-item:hover .item-btn {
+  visibility: visible;
+}
+
+.panel-item .item-btn:hover {
+  background: rgb(var(--tint) / 0.1);
+  color: var(--text);
+}
+
+/* リードリスト(後で読む) */
+.readlist-add {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.readlist-toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.readlist-toolbar .item-btn {
+  border: 1px solid var(--border);
+}
+
+.readlist-toolbar .item-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.readlist-item.read .label {
+  opacity: 0.5;
+}
+
+/* トラッキング分析パネル */
+.tr-toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+
+.tr-toolbar .item-btn {
+  border: 1px solid var(--border);
+}
+
+.tr-summary {
+  padding: 10px;
+  margin-bottom: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+}
+
+.tr-headline {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  margin-bottom: 8px;
+}
+
+.tr-stats {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.tr-stat {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.tr-stat-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.tr-stat-label {
+  font-size: 10.5px;
+  color: var(--text-dim);
+  line-height: 1.3;
+  word-break: keep-all;
+}
+
+.tr-note {
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.5;
+  margin-bottom: 4px;
+}
+
+.tr-shield {
+  margin-top: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.tr-shield.on {
+  background: rgba(52, 199, 89, 0.12);
+  color: #34c759;
+}
+
+.tr-shield.off {
+  background: rgba(255, 159, 10, 0.12);
+  color: #ff9f0a;
+}
+
+.tr-block {
+  margin-bottom: 12px;
+}
+
+.tr-block-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: none;
+  margin-bottom: 6px;
+}
+
+.tr-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.tr-tag {
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--text);
+}
+
+.tr-company {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 5px;
+  overflow: hidden;
+}
+
+.tr-company-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 8px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tr-company-head:hover {
+  background: rgb(var(--tint) / 0.06);
+}
+
+.tr-company-name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tr-company-cat {
+  flex: 1;
+  min-width: 0;
+  font-size: 10.5px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tr-company-count {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--accent);
+}
+
+.tr-detail {
+  padding: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.tr-cookie {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  font-size: 11px;
+}
+
+.tr-cookie-name {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 45%;
+}
+
+.tr-cookie-meta {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tr-badge {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(255, 69, 58, 0.15);
+  color: #ff453a;
+  font-size: 10px;
+}
+
+.tr-forget {
+  width: 100%;
+  margin-top: 8px;
+  border: 1px solid var(--border);
+}
+
+.panel-input {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+  flex-shrink: 0;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+
+.panel-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+.hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.6;
+  flex-shrink: 0;
+}
+
+.empty-note {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 28px 16px;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.empty-note .empty-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+}
+
+.empty-note .empty-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+#notes {
+  flex: 1;
+  min-height: 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--text);
+  font: 13px/1.7 "Segoe UI", "Yu Gothic UI", sans-serif;
+  outline: none;
+  resize: none;
+}
+
+#notes:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+.hbtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 13px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.hbtn:hover {
+  background: var(--card-hover);
+  color: var(--text);
+}
+
+.web-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.web-icon:hover {
+  background: var(--card-hover);
+}
+
+.web-icon.active {
+  background: var(--card-hover);
+  outline: 1px solid var(--accent);
+}
+
+.web-icon img {
+  width: 16px;
+  height: 16px;
+}
+
+.web-icon .letter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: var(--card);
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+/* カスタムアイコンが絵文字のときは下地を出さず、絵文字だけ見せる */
+.letter.emoji {
+  background: transparent !important;
+  color: inherit;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+/* =========================================================
+   タイマー — 機能ごとに画面を分ける(タイマー/アラーム/ストップウォッチ)
+   ========================================================= */
+.timer-topbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.timer-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 10px;
+  background: var(--card);
+  flex: 1;
+  min-width: 0;
+}
+
+.timer-tab {
+  flex: 1;
+  padding: 6px 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 11.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.timer-tab:hover {
+  color: var(--text);
+}
+
+.timer-tab.active {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.timer-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 8px;
+}
+
+.timers-add {
+  width: 100%;
+  flex-shrink: 0;
+}
+
+/* よく使う長さは押した瞬間に走り出す(モーダルを開かせない) */
+.timer-presets {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.timer-preset {
+  padding: 7px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.timer-preset:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+
+/* 実行中のカウントダウンは残りをリングで大きく見せる */
+.cd-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 10px 12px;
+  border-radius: 14px;
+  background: var(--card);
+  flex-shrink: 0;
+}
+
+.cd-card.ringing {
+  outline: 1px solid #ff3b30;
+  background: color-mix(in srgb, #ff3b30 14%, var(--card));
+}
+
+.cd-ring {
+  position: relative;
+  width: 132px;
+  height: 132px;
+}
+
+.cd-ring svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.cd-ring-track {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 6;
+}
+
+.cd-ring-prog {
+  fill: none;
+  stroke: #ff9f0a;
+  stroke-width: 6;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.3s linear;
+}
+
+.cd-card.paused .cd-ring-prog {
+  stroke: var(--text-dim);
+}
+
+.cd-card.ringing .cd-ring-prog {
+  stroke: #ff3b30;
+}
+
+.cd-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 14px;
+}
+
+.cd-time {
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.cd-card.ringing .cd-time {
+  color: #ff3b30;
+}
+
+.cd-sub {
+  max-width: 100%;
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cd-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.cd-corner {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+
+.timer-flat-btn {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.timer-flat-btn:hover:not(:disabled) {
+  background: var(--card-hover);
+}
+
+.timer-flat-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* 📌 フローティング表示への固定 */
+.timer-pin-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.timer-pin-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.timer-pin-btn:hover {
+  background: var(--card-hover);
+  color: var(--text);
+}
+
+.timer-pin-btn.on {
+  color: var(--accent);
+}
+
+/* ---- アラーム: 時刻とON/OFFスイッチ ---- */
+.alarm-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.alarm-item:hover {
+  background: var(--card-hover);
+}
+
+.alarm-item.off .alarm-time,
+.alarm-item.off .alarm-sub {
+  opacity: 0.45;
+}
+
+.alarm-item.ringing {
+  outline: 1px solid #ff3b30;
+  background: color-mix(in srgb, #ff3b30 14%, transparent);
+}
+
+.alarm-item.ringing .alarm-time {
+  color: #ff3b30;
+}
+
+.alarm-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.alarm-time {
+  font-size: 27px;
+  font-weight: 600;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.alarm-sub {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.timer-switch {
+  position: relative;
+  width: 40px;
+  height: 24px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--border);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.timer-switch.on {
+  background: #30d158;
+}
+
+.timer-switch .knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s ease;
+}
+
+.timer-switch.on .knob {
+  transform: translateX(16px);
+}
+
+/* ---- ストップウォッチ: 1/100秒まで出す大きい表示とラップ ---- */
+.sw-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 10px;
+}
+
+.sw-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.sw-chip {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.sw-chip.running {
+  color: #64d2ff;
+  border-color: color-mix(in srgb, #64d2ff 50%, transparent);
+}
+
+.sw-chip.active {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.sw-time {
+  padding: 10px 0 2px;
+  font-size: 38px;
+  font-weight: 300;
+  line-height: 1.1;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5px;
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+.sw-time.running {
+  color: #64d2ff;
+}
+
+.sw-controls {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.sw-btn {
+  flex: 1;
+  padding: 10px 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.sw-btn:hover:not(:disabled) {
+  background: var(--card-hover);
+}
+
+.sw-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.sw-btn.start {
+  border-color: transparent;
+  background: #30d158;
+  color: #06210f;
+  font-weight: 600;
+}
+
+.sw-btn.stop {
+  border-color: transparent;
+  background: #ff9f0a;
+  color: #2b1400;
+  font-weight: 600;
+}
+
+.sw-laps {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.sw-lap {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 4px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.sw-lap.current {
+  color: #64d2ff;
+}
+
+.sw-lap-value {
+  margin-left: auto;
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.sw-lap.current .sw-lap-value {
+  color: #64d2ff;
+}
+
+.sw-lap-total {
+  width: 68px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+}
+
+/* 未開始のタイマーは1行で軽く見せる(大きい数字+小さい説明+丸い開始ボタン) */
+.timer-item {
+  gap: 10px;
+  padding: 9px 8px;
+  cursor: default;
+}
+
+.timer-item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+  cursor: pointer;
+}
+
+.timer-item-time {
+  font-size: 25px;
+  font-weight: 600;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.timer-item-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.timer-item.ringing {
+  outline: 1px solid #ff3b30;
+  background: color-mix(in srgb, #ff3b30 14%, transparent);
+}
+
+.timer-item.ringing .timer-item-time {
+  color: #ff3b30;
+}
+
+.timer-circle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  background: transparent;
+}
+
+.timer-circle-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.timer-circle-btn.idle {
+  background: #30d158;
+  color: #06210f;
+}
+
+.timer-circle-btn.idle svg {
+  margin-left: 1px; /* 再生アイコンの視覚的な中心補正 */
+}
+
+.timer-circle-btn.running {
+  background: #ff9f0a;
+  color: #2b1400;
+}
+
+.timer-circle-btn.ringing {
+  background: #ff3b30;
+  color: #2b0705;
+}
+
+.timer-circle-btn:hover {
+  filter: brightness(1.08);
+}
+
+/* 実行中カード内の主ボタンは大きめ */
+.timer-circle-btn.lg {
+  width: 44px;
+  height: 44px;
+}
+
+.timer-circle-btn.lg svg {
+  width: 18px;
+  height: 18px;
+}
+
+.modal.timer-modal {
+  max-width: 360px;
+  max-height: 82vh;
+  overflow-y: auto;
+}
+
+.timer-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.timer-duration-inputs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.timer-duration-inputs input {
+  width: 56px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 13px;
+  text-align: center;
+}
+
+.timer-duration-inputs span {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-right: 6px;
+}
+
+.weekday-chips {
+  display: flex;
+  gap: 4px;
+}
+
+.weekday-chip {
+  flex: 1;
+  padding: 6px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.weekday-chip.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.timer-actions-title {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+.timer-action-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.timer-suboption {
+  margin-left: 22px;
+}
+
+.timer-action-row.danger {
+  color: #ff7a7a;
+}
+
+/* Webパネル編集モーダル(名前/URL/アイコン) */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.modal {
+  width: 100%;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+.modal-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.modal-error {
+  font-size: 11px;
+  color: #ff7a7a;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* =========================================================
+   フローティングのミニプレイヤー — .player-body
+   ========================================================= */
+.player-body {
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  user-select: none;
+}
+
+#player {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--menu-bg);
+  border: 1px solid var(--border);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+  cursor: grab;
+}
+
+#player:active {
+  cursor: grabbing;
+}
+
+/* 複数タブが同時に再生していれば、それぞれ独立した行として並べる(timer-panel.jsと同型) */
+#player-rows {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.player-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.player-row:hover {
+  background: var(--card-hover);
+}
+
+.player-row-art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--card-hover);
+  color: var(--text-dim);
+}
+
+.player-row-art svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.player-row-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.player-row-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.player-row-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.player-row-artist {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- D&D分割: タブのドラッグ中に出すドロップゾーン(オーバーレイView上) ---- */
+#drop-zones {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none; /* 中央の隙間はドラッグを透過(=切り離しの判定に回す) */
+}
+
+.drop-zone {
+  position: absolute;
+  pointer-events: auto;
+}
+.drop-zone[data-zone="top"] {
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 32%;
+}
+.drop-zone[data-zone="bottom"] {
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 32%;
+}
+.drop-zone[data-zone="left"] {
+  left: 0;
+  top: 32%;
+  width: 32%;
+  height: 36%;
+}
+.drop-zone[data-zone="right"] {
+  right: 0;
+  top: 32%;
+  width: 32%;
+  height: 36%;
+}
+
+/* 中央(分割ゾーンの抜け)= 新しいウィンドウへ切り離す、の目印。
+   ドラッグを透過させたいので pointer-events は付けない */
+#drop-detach-hint {
+  position: absolute;
+  left: 32%;
+  top: 32%;
+  width: 36%;
+  height: 36%;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 14px;
+  border: 2px dashed color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--text-dim);
+  font-size: 12.5px;
+}
+
+#drop-detach-hint svg {
+  width: 26px;
+  height: 26px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ドロップ後にドラッグしたペインが入る側のプレビュー */
+#drop-preview {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  border: 2px solid var(--accent);
+  opacity: 0;
+  transition: opacity 0.12s ease, left 0.12s ease, top 0.12s ease, width 0.12s ease, height 0.12s ease;
+}
+#drop-preview.visible {
+  opacity: 1;
+}
+
+/* ---- 画面分割のペイン間リサイズ(仕切りView) ---- */
+.divider-body {
+  margin: 0;
+  height: 100vh;
+  background: transparent;
+  overflow: hidden;
+}
+
+#divider-handle {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.divider-body[data-direction="row"] #divider-handle {
+  cursor: col-resize;
+}
+.divider-body[data-direction="column"] #divider-handle {
+  cursor: row-resize;
+}
+
+/* 既定は透明。ホバー/ドラッグ中だけアクセント色のピルを浮かせる */
+.divider-grip {
+  background: transparent;
+  border-radius: 999px;
+  transition: background 0.12s;
+}
+.divider-body[data-direction="row"] .divider-grip {
+  width: 3px;
+  height: 46px;
+}
+.divider-body[data-direction="column"] .divider-grip {
+  width: 46px;
+  height: 3px;
+}
+#divider-handle:hover .divider-grip,
+.divider-body.dragging .divider-grip {
+  background: var(--accent);
+}
+
+.pbtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #14151a;
+  cursor: pointer;
+}
+
+.pbtn svg {
+  width: 15px;
+  height: 15px;
+}
+
+#player-tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px 6px;
+}
+
+.tbtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.tbtn:hover {
+  background: var(--card-hover);
+  color: var(--text);
+}
+
+.tbtn svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* =========================================================
+   フローティングのタイマー表示 — .timerp-body
+   ========================================================= */
+.timerp-body {
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  user-select: none;
+}
+
+#timerp {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: transparent;
+  cursor: grab;
+}
+
+#timerp:active {
+  cursor: grabbing;
+}
+
+#timerp-rows {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 6px 0;
+}
+
+/* iOSのロック画面ライブアクティビティ(タイマー)風の黒い丸ピル。
+   高さは固定(timer-panel.js の ROW_HEIGHT と対応。ずれると行が見切れてクリック位置も狂う) */
+.timerp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  box-sizing: border-box;
+  padding: 0 12px 0 5px;
+  border-radius: 999px;
+  background: #1c1c1e;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+}
+
+/* カウントダウンの残り割合リング(ボタンの周りを囲む。行の高さは変えない) */
+.timerp-btnwrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+}
+
+.timerp-ring {
+  position: absolute;
+  inset: 0;
+  width: 34px;
+  height: 34px;
+  transform: rotate(-90deg);
+  /* SVGのルート要素は矩形全体でクリックを受けるため、これが無いと下の一時停止ボタンを
+     覆ってしまい「カウントダウンだけフロートから止められない」状態になる */
+  pointer-events: none;
+}
+
+.timerp-ring-track {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.16);
+  stroke-width: 3;
+}
+
+.timerp-ring-prog {
+  fill: none;
+  stroke: #ff9f0a;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.timerp-btnwrap .timerp-circle {
+  width: 26px;
+  height: 26px;
+}
+
+.timerp-btnwrap .timerp-circle svg {
+  width: 11px;
+  height: 11px;
+}
+
+.timerp-row.ringing {
+  background: color-mix(in srgb, #ff3b30 32%, #1c1c1e);
+}
+
+.timerp-circle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  background: #ff9f0a;
+  color: #2b1400;
+}
+
+.timerp-circle svg {
+  width: 13px;
+  height: 13px;
+}
+
+.timerp-circle.ringing {
+  background: #ff3b30;
+  color: #2b0705;
+}
+
+/* 機能ごとに色を分ける: カウントダウン=オレンジ / ストップウォッチ=青 / アラーム=紫 */
+.timerp-row[data-type='stopwatch'] .timerp-circle {
+  background: #64d2ff;
+  color: #06212b;
+}
+
+/* 予約中のアラームはボタンではなくベルの表示(押しても予定を消さない) */
+.timerp-circle.alarm {
+  background: color-mix(in srgb, #bf5af2 26%, transparent);
+  color: #d8a6f7;
+  cursor: grab;
+}
+
+.timerp-circle.alarm svg {
+  width: 15px;
+  height: 15px;
+}
+
+.timerp-lap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  cursor: pointer;
+}
+
+.timerp-lap svg {
+  width: 13px;
+  height: 13px;
+}
+
+.timerp-lap:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.timerp-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.timerp-name {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.timerp-time {
+  flex-shrink: 0;
+  font-size: 17px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #ff9f0a;
+  white-space: nowrap;
+}
+
+.timerp-row[data-type='stopwatch'] .timerp-time {
+  color: #64d2ff;
+}
+
+.timerp-row[data-type='clock'] .timerp-time {
+  color: #d8a6f7;
+}
+
+.timerp-row.ringing .timerp-time {
+  color: #ff3b30;
+}
+
+#timerp-tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  flex-shrink: 0;
+}
+
+/* サイドパネルの「再生中」セクション */
+.now-playing-empty {
+  padding: 40px 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+/* 複数タブが同時に再生していれば、タブごとに独立したカードを並べる */
+#now-playing-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.now-playing-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--card);
+}
+
+.now-playing-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.now-playing-art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--card-hover);
+  color: var(--text-dim);
+}
+
+.now-playing-art svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.now-playing-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.now-playing-texts {
+  flex: 1;
+  min-width: 0;
+}
+
+.now-playing-title {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.now-playing-artist {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* タブ単位のミュート切り替え(タブのスピーカーアイコンと同じ意匠) */
+.now-playing-mute {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.now-playing-mute svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.now-playing-mute:hover {
+  background: var(--card-hover);
+  color: var(--text);
+}
+
+.now-playing-mute.muted {
+  color: var(--accent);
+}
+
+.now-playing-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.now-playing-seek {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+/* =========================================================
+   プロファイルメニュー(オーバーレイ) — .menu-body
+   ========================================================= */
+.menu-body {
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  user-select: none;
+}
+
+#backdrop {
+  position: absolute;
+  inset: 0;
+}
+
+#menu {
+  position: absolute;
+  width: 260px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--menu-bg);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  animation: pop 0.12s ease-out;
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+/* サイトの権限の確認(オーバーレイ上。Edge風にアドレスバーのアイコンからぶら下げる) */
+#perm-popup {
+  position: absolute;
+  width: 320px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--menu-bg);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  animation: pop 0.12s ease-out;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.perm-title {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--text);
+  /* 長いホスト名でも枠からはみ出させない(ボタンが押せなくなるため) */
+  overflow-wrap: anywhere;
+}
+
+/* 求められている権限。カメラとマイクのように2つ同時に来ることがあるので行で並べる */
+#perm-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.perm-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--card);
+  font-size: 13px;
+  color: var(--text);
+}
+
+.perm-item .perm-icon {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.perm-item .perm-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.perm-note {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+/* 3択(許可 / 今回だけ許可 / ブロック)は横に並べると窮屈なので縦に積む */
+.perm-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.perm-actions .btn {
+  height: 34px;
+  font-size: 13px;
+}
+
+/* 翻訳のドロップダウン(オーバーレイ上。Edgeの翻訳フライアウトに合わせた並び) */
+#translate-popup {
+  position: absolute;
+  width: 332px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--menu-bg);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  animation: pop 0.12s ease-out;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tr-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.tr-title {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.tr-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.tr-more:hover {
+  background: var(--hover);
+}
+
+.tr-more svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  stroke: none;
+}
+
+/* 「…」の中身。ポップアップの中に重ねて出す */
+.tr-more-menu {
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tr-more-menu .menu-item {
+  height: 32px;
+  font-size: 12px;
+}
+
+/* 翻訳元 → 翻訳先(Edgeは横に並べる) */
+.tr-langs {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.tr-field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tr-field-label {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.tr-source {
+  height: 30px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  border-radius: 8px;
+  background: var(--card);
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tr-select {
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+}
+
+.tr-select:disabled {
+  opacity: 0.6;
+}
+
+.tr-arrow {
+  width: 16px;
+  height: 16px;
+  margin-bottom: 7px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: var(--text-dim);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* 選択テキストの翻訳(原文は控えめに、訳文を主役にする) */
+.tr-selection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.tr-selection-original {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+
+.tr-selection-result {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.tr-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.tr-status {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+
+/* Edgeと同じく主ボタンを右端に置く */
+.tr-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.tr-actions .btn {
+  height: 32px;
+  font-size: 12px;
+}
+
+/* QRコードのポップアップ(オーバーレイ上) */
+#qr-popup {
+  position: absolute;
+  width: 300px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--menu-bg);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  animation: pop 0.12s ease-out;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.qr-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.qr-canvas-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 10px;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+#qr-canvas {
+  width: 240px;
+  height: 240px;
+  image-rendering: pixelated;
+}
+
+.qr-field-label {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.qr-text {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
+  font: 12px/1.5 Consolas, "Cascadia Mono", monospace;
+  outline: none;
+  resize: vertical;
+  min-height: 42px;
+}
+
+.qr-text:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+.qr-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.qr-actions .btn {
+  flex: 1;
+  height: 32px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.menu-label {
+  padding: 6px 10px 4px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menu-item:hover {
+  background: var(--menu-hover);
+}
+
+.menu-item .avatar {
+  width: 24px;
+  height: 24px;
+  font-size: 11px;
+}
+
+.menu-item .avatar.emoji {
+  font-size: 14px;
+}
+
+.menu-item .icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  flex-shrink: 0;
+  color: var(--text-dim);
+}
+
+.menu-item .name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.menu-item .check {
+  flex-shrink: 0;
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.menu-item .icon svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.menu-item .shortcut {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.menu-separator {
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--border);
+}
+
+/* 拡張機能メニュー(Edgeのパズルボタン風)。体裁は #menu と揃える */
+#ext-menu {
+  position: absolute;
+  width: 280px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--menu-bg);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  animation: pop 0.12s ease-out;
+}
+
+#ext-items {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+/* 設定画面のカード用 .ext-icon(36px)と同名なので、idで打ち消してメニュー用の大きさにする */
+#ext-menu .ext-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--card-hover);
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+#ext-menu .ext-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+#ext-menu .ext-empty {
+  padding: 10px;
+  color: var(--text-dim);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* ピン留めの切替。ツールバーに出している拡張はアクセント色で塗る */
+#ext-menu .ext-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  color: var(--text-dim);
+  opacity: 0.55;
+}
+
+#ext-menu .ext-pin:hover {
+  background: var(--menu-bg);
+  color: var(--text);
+  opacity: 1;
+}
+
+#ext-menu .ext-pin.active {
+  color: var(--accent);
+  opacity: 1;
+}
+
+#ext-menu .ext-pin svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#ext-menu .ext-pin.active svg {
+  fill: currentColor;
+}

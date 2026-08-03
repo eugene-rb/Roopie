@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https: data:; style-src 'self'" />
+  <title>プロファイルと設定</title>
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body>
+  <div class="settings-shell">
+    <nav class="settings-toc">
+      <a href="#section-profiles" class="toc-link">プロフィール</a>
+      <a href="#section-google" class="toc-link">Googleアカウント</a>
+      <a href="#section-extensions" class="toc-link">拡張機能</a>
+      <a href="#section-gestures" class="toc-link">マウスジェスチャー</a>
+      <a href="#section-passwords" class="toc-link">保存したパスワード</a>
+      <a href="#section-autofill" class="toc-link">自動入力</a>
+      <a href="#section-site-permissions" class="toc-link">サイトの権限</a>
+      <a href="#section-translate" class="toc-link">翻訳</a>
+      <a href="#section-theme" class="toc-link">テーマ</a>
+      <a href="#section-tabs" class="toc-link">タブ</a>
+      <a href="#section-start" class="toc-link">スタート画面</a>
+      <a href="#section-browser" class="toc-link">ブラウザ設定</a>
+      <a href="#section-toolbar" class="toc-link">ツールバー</a>
+      <a href="#section-shortcuts" class="toc-link">ショートカット</a>
+      <a href="#section-about" class="toc-link">Roopieについて</a>
+    </nav>
+    <main class="page settings-content">
+    <section id="section-profiles">
+    <div class="page-header">
+      <h1>プロファイルと設定</h1>
+      <button id="add-btn" class="btn">＋ プロファイルを追加</button>
+    </div>
+
+    <p class="note">
+      プロファイルを切り替えると、Cookie・ログインセッションは完全に分離されます。
+      下の項目は「共有する」をオンにすると全プロファイル共通のデータを使い、オフにするとそのプロファイル専用のデータを使います。
+    </p>
+
+    <div id="profiles"></div>
+    </section>
+
+    <section id="section-google">
+    <h2 class="section-title">Googleアカウント<span class="scope-badge is-global" title="プロファイルに関わらず、ブラウザ全体で1つの一覧を使います">常に全体共通</span></h2>
+    <div class="card">
+      <p class="note note-tight">
+        ブラウザに登録したアカウントを、各プロファイルで「使う/使わない」と「プライマリ(既定でログインするアカウント)」として選べます。
+        実際のログインは各プロファイルのセッションで一度行う必要があり、以降はそのプロファイル内でログイン状態が保持されます。
+      </p>
+      <div class="account-add">
+        <input id="account-email" class="search" type="email" placeholder="メールアドレス(例: you@gmail.com)" autocomplete="off" />
+        <input id="account-label" class="search" type="text" placeholder="表示名(任意)" autocomplete="off" />
+        <button id="account-add-btn" class="btn">登録</button>
+      </div>
+      <div id="accounts" class="list"></div>
+    </div>
+    </section>
+
+    <section id="section-extensions">
+    <h2 class="section-title">拡張機能<span class="scope-badge" title="共有トグルはなく、常に使用中のプロファイルだけに保存されます">プロファイル個別</span></h2>
+    <div class="card">
+      <p class="note note-tight">
+        Chromeウェブストアの拡張機能ID(URLの <code>chrome.google.com/webstore/detail/.../<b>ここ</b></code> の部分)を指定してインストールできます。
+        ウェブストア以外の拡張機能は、<b>manifest.json のあるフォルダ</b>を「フォルダから読み込む」で追加できます(zipで配布されているものは展開してから選んでください)。
+        拡張機能は使用中のプロファイルにコピーして保存されます。<br />
+        ⚠ Electronの制約上、<b>uBlock Originなどのブロッキング型拡張機能は動作しません</b>(広告ブロックは内蔵機能をご利用ください)。Dark Readerなどコンテンツスクリプト型の拡張機能は動作します。
+      </p>
+      <div class="account-add">
+        <input id="extension-id" class="search" type="text" placeholder="拡張機能ID(32文字の英字)" autocomplete="off" />
+        <button id="extension-install-btn" class="btn">インストール</button>
+        <button id="extension-unpacked-btn" class="btn">フォルダから読み込む</button>
+      </div>
+      <div id="extensions-list" class="ext-list"></div>
+    </div>
+    </section>
+
+    <section id="section-gestures">
+    <h2 class="section-title">マウスジェスチャー<span class="scope-badge" data-scope-key="gestures"></span></h2>
+    <div class="card">
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">マウスジェスチャーを有効にする</div>
+          <div class="setting-desc">右クリックしたままマウスを動かし、ボタンを離すと実行されます</div>
+        </div>
+        <label class="switch">
+          <input id="gesture-enabled" type="checkbox" />
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div id="gesture-list" class="list"></div>
+
+      <div class="gesture-add">
+        <div class="gesture-arrows">
+          <button class="btn gesture-dir" data-dir="L" title="左">←</button>
+          <button class="btn gesture-dir" data-dir="U" title="上">↑</button>
+          <button class="btn gesture-dir" data-dir="D" title="下">↓</button>
+          <button class="btn gesture-dir" data-dir="R" title="右">→</button>
+        </div>
+        <div id="gesture-new-pattern" class="gesture-pattern empty">方向ボタンでジェスチャーを作成</div>
+        <button id="gesture-backspace" class="btn" title="1つ戻す">⌫</button>
+        <select id="gesture-action" class="gesture-select"></select>
+        <button id="gesture-add-btn" class="btn">追加</button>
+      </div>
+
+      <div class="gesture-footer">
+        <button id="gesture-reset" class="btn">既定の割り当てに戻す</button>
+      </div>
+    </div>
+    </section>
+
+    <section id="section-passwords">
+    <h2 class="section-title">保存したパスワード<span class="scope-badge" data-scope-key="passwords"></span></h2>
+    <div class="card">
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">パスワードの保存と自動入力</div>
+          <div class="setting-desc" id="passwords-desc">ログイン時に保存を確認し、次回から自動入力します(OSの暗号化で保護)</div>
+        </div>
+        <label class="switch">
+          <input id="save-passwords" type="checkbox" />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="account-add passwords-tools">
+        <input id="passwords-search" class="search" type="text" placeholder="パスワードを検索" autocomplete="off" />
+        <button id="passwords-import" class="btn">インポート</button>
+        <button id="passwords-export" class="btn">エクスポート</button>
+      </div>
+      <div id="passwords-list" class="list"></div>
+      <div id="passwords-excluded-wrap" class="hidden">
+        <div class="setting-name excluded-title">保存しないサイト</div>
+        <div id="passwords-excluded" class="list"></div>
+      </div>
+      <div class="gesture-footer">
+        <button id="passwords-clear" class="btn danger">すべて削除</button>
+      </div>
+    </div>
+    </section>
+
+    <section id="section-autofill">
+    <h2 class="section-title">自動入力<span class="scope-badge" data-scope-key="autofill"></span></h2>
+    <div class="card">
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">住所や個人情報の保存と自動入力</div>
+          <div class="setting-desc">フォームにフォーカスすると保存した住所・氏名・電話番号などを候補として表示します</div>
+        </div>
+        <label class="switch">
+          <input id="autofill-addresses" type="checkbox" />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div id="addresses-list" class="list"></div>
+      <div class="gesture-footer">
+        <button id="address-add" class="btn">住所を追加</button>
+      </div>
+    </div>
+    <div class="card autofill-card-gap">
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">お支払い方法の保存と自動入力</div>
+          <div class="setting-desc" id="cards-desc">カード番号はOSの暗号化で保護されます。セキュリティコード(CVC)は保存しません</div>
+        </div>
+        <label class="switch">
+          <input id="autofill-cards" type="checkbox" />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div id="cards-list" class="list"></div>
+      <div class="gesture-footer">
+        <button id="card-add" class="btn">カードを追加</button>
+      </div>
+    </div>
+    </section>
+
+    <section id="section-site-permissions">
+    <h2 class="section-title">サイトの権限<span class="scope-badge" data-scope-key="settings"></span></h2>
+    <div class="card">
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">サイトごとの許可</div>
+          <div class="setting-desc">
+            カメラ・マイク・現在地・通知・全画面表示は、サイトから求められたときにアドレスバーの下で確認します。
+            ここに並ぶのは「許可」を選んだサイトだけです(「今回だけ許可」と「ブロック」は覚えません)
+          </div>
+        </div>
+      </div>
+      <!-- 種類ごとの一覧は settings.js が生成する(カメラ/マイク/現在地/通知/全画面表示) -->
+      <div id="permission-kinds"></div>
+      <div class="gesture-footer">
+        <button id="permission-sites-clear" class="btn danger">すべて取り消す</button>
+      </div>
+    </div>
+    </section>
+
+    <section id="section-translate">
+    <h2 class="section-title">翻訳<span class="scope-badge" data-scope-key="settings"></span></h2>
+    <div class="card">
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">翻訳先の言語</div>
+          <div class="setting-desc">
+            ページ翻訳と選択テキストの翻訳で使う言語です。アドレスバーの翻訳アイコンから選び直すと、ここも変わります
+          </div>
+        </div>
+        <select id="translate-target" class="gesture-select"></select>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">読めない言語のページで翻訳を提案する</div>
+          <div class="setting-desc">
+            翻訳先と違う言語のページを開いたとき、アドレスバーの下に確認を出します(同じサイトでは起動中1度だけ)
+          </div>
+        </div>
+        <label class="switch">
+          <input id="translate-auto-offer" type="checkbox" />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <!-- 常に翻訳する言語 / 翻訳しない言語 / 翻訳しないサイト の一覧は settings.js が生成する -->
+      <div id="translate-lists"></div>
+    </div>
+    </section>
+
+    <section id="section-theme">
+    <h2 class="section-title">テーマ<span class="scope-badge" data-scope-key="theme"></span></h2>
+    <div class="card">
+      <!-- ウィンドウ全体の外観。プロファイルごとに別々にできる -->
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">ウィンドウの明るさ</div>
+          <div class="setting-desc">ブラウザのUIと内部ページの配色。「システムに合わせる」はOSの設定に追従します</div>
+        </div>
+        <select id="window-mode" class="gesture-select">
+          <option value="system">システムに合わせる</option>
+          <option value="dark">ダーク</option>
+          <option value="light">ライト</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">ウィンドウの外観</div>
+          <div class="setting-desc">
+            「半透明」「liquidglass」は後ろのデスクトップがぼけて透けます(Windows 11 のみ。使えない環境では単色になります)
+          </div>
+        </div>
+        <select id="window-style" class="gesture-select">
+          <option value="solid">単色</option>
+          <option value="translucent">半透明</option>
+          <option value="gradient">グラデーション(ぼかし)</option>
+          <option value="glass">liquidglass</option>
+          <option value="pattern">パターン</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">ウィンドウの基準色</div>
+          <div class="setting-desc">ツールバーやタブの色はここから作られます。未指定なら明るさに応じた既定色です</div>
+        </div>
+        <div class="range-fields">
+          <input id="window-color" type="color" class="color-input" />
+          <button id="window-color-reset" class="btn">既定に戻す</button>
+        </div>
+      </div>
+      <div class="setting-row" id="window-translucency-row">
+        <div>
+          <div class="setting-name">UIの透け具合</div>
+          <div class="setting-desc">タブバーやツールバーをどれだけ透かすか。低いほど背後がよく見えます</div>
+        </div>
+        <label class="range-field">
+          <input id="window-translucency" type="range" min="20" max="100" step="1" />
+          <span class="range-value" id="window-translucency-value">62%</span>
+        </label>
+      </div>
+      <div class="setting-row" id="window-gradient-row">
+        <div>
+          <div class="setting-name">ウィンドウのグラデーション</div>
+          <div class="setting-desc">色は2〜5色。角度は0°が下から上、180°が上から下です</div>
+        </div>
+        <div class="gradient-editor">
+          <div id="window-gradient-preview" class="gradient-preview"></div>
+          <div id="window-gradient-stops" class="gradient-stops"></div>
+          <div class="range-fields">
+            <button id="window-gradient-add" class="btn">色を追加</button>
+            <label class="range-field">
+              <span class="range-label">角度</span>
+              <input id="window-gradient-angle" type="range" min="0" max="360" step="1" />
+              <span class="range-value" id="window-gradient-angle-value">160°</span>
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="setting-row" id="window-pattern-row">
+        <div>
+          <div class="setting-name">ウィンドウのパターン</div>
+          <div class="setting-desc">模様の種類と色を選べます。下地は基準色です</div>
+        </div>
+        <div class="range-fields">
+          <select id="window-pattern" class="gesture-select">
+            <option value="dots">ドット</option>
+            <option value="grid">グリッド</option>
+            <option value="diagonal">ストライプ(斜め)</option>
+            <option value="crosshatch">クロスハッチ</option>
+            <option value="hexagon">三角格子</option>
+            <option value="wave">波紋</option>
+            <option value="circuit">回路</option>
+          </select>
+          <label class="range-field">
+            <span class="range-label">模様</span>
+            <input id="window-pattern-color" type="color" class="color-input" />
+          </label>
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">アクセントカラー</div>
+          <div class="setting-desc">ボタンや選択状態などの強調色</div>
+        </div>
+        <div class="swatches">
+          <div id="accent-swatches"></div>
+          <input id="accent-custom" type="color" title="好きな色を選ぶ" />
+        </div>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">新しいタブの背景</div>
+          <div class="setting-desc">「自動」は時間帯(夜明け/昼/夕暮れ/夜)で変化します</div>
+        </div>
+        <select id="theme-bg" class="gesture-select">
+          <option value="auto">自動(時間帯で変化)</option>
+          <option value="dawn">夜明け</option>
+          <option value="day">昼</option>
+          <option value="dusk">夕暮れ</option>
+          <option value="night">夜</option>
+          <option value="plain">シンプル(単色)</option>
+          <option value="image">画像</option>
+          <option value="pattern">パターン</option>
+          <option value="gradient">グラデーション(自由設定)</option>
+          <option value="threebody">三体問題シミュレーション</option>
+        </select>
+      </div>
+      <div class="setting-row" id="bg-image-row">
+        <div>
+          <div class="setting-name">背景画像</div>
+          <div class="setting-desc">「画像」を選んでいるときに使われます</div>
+        </div>
+        <div class="profile-actions">
+          <button id="bg-image-upload" class="btn">画像をアップロード</button>
+          <button id="bg-image-clear" class="btn danger">画像を削除</button>
+        </div>
+      </div>
+      <div class="setting-row" id="bg-blur-row">
+        <div>
+          <div class="setting-name">画像のぼかし・暗さ</div>
+          <div class="setting-desc">写真の上でも時計や検索欄が読みやすくなります</div>
+        </div>
+        <div class="range-fields">
+          <label class="range-field">
+            <span class="range-label">ぼかし</span>
+            <input id="bg-blur" type="range" min="0" max="40" step="1" />
+            <span class="range-value" id="bg-blur-value">0px</span>
+          </label>
+          <label class="range-field">
+            <span class="range-label">暗さ</span>
+            <input id="bg-dim" type="range" min="0" max="80" step="1" />
+            <span class="range-value" id="bg-dim-value">0%</span>
+          </label>
+        </div>
+      </div>
+      <div class="setting-row" id="bg-pattern-row">
+        <div>
+          <div class="setting-name">パターン</div>
+          <div class="setting-desc">模様の種類と2色を選べます</div>
+        </div>
+        <div class="range-fields">
+          <select id="bg-pattern" class="gesture-select">
+            <option value="dots">ドット</option>
+            <option value="grid">グリッド</option>
+            <option value="diagonal">ストライプ(斜め)</option>
+            <option value="crosshatch">クロスハッチ</option>
+            <option value="hexagon">三角格子</option>
+            <option value="wave">波紋</option>
+            <option value="circuit">回路</option>
+          </select>
+          <label class="range-field">
+            <span class="range-label">模様</span>
+            <input id="pattern-color" type="color" class="color-input" />
+          </label>
+          <label class="range-field">
+            <span class="range-label">下地</span>
+            <input id="pattern-base" type="color" class="color-input" />
+          </label>
+        </div>
+      </div>
+      <div class="setting-row" id="bg-gradient-row">
+        <div>
+          <div class="setting-name">グラデーション</div>
+          <div class="setting-desc">色は2〜5色。角度は0°が下から上、180°が上から下です</div>
+        </div>
+        <div class="gradient-editor">
+          <div id="gradient-preview" class="gradient-preview"></div>
+          <div id="gradient-stops" class="gradient-stops"></div>
+          <div class="range-fields">
+            <button id="gradient-add" class="btn">色を追加</button>
+            <label class="range-field">
+              <span class="range-label">角度</span>
+              <input id="gradient-angle" type="range" min="0" max="360" step="1" />
+              <span class="range-value" id="gradient-angle-value">165°</span>
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">ウィンドウの不透明度</div>
+          <div class="setting-desc" id="window-opacity-desc">ウィンドウ全体(UIも含む)が半透明になり、後ろのデスクトップが透けます</div>
+        </div>
+        <label class="range-field">
+          <input id="window-opacity" type="range" min="30" max="100" step="1" />
+          <span class="range-value" id="window-opacity-value">100%</span>
+        </label>
+      </div>
+      <div class="theme-css">
+        <div class="setting-name">カスタムCSS(上級者向け)</div>
+        <div class="setting-desc">ブラウザのUIと内部ページに適用されます。空にして適用すると解除されます</div>
+        <textarea id="custom-css" spellcheck="false" placeholder="/* 例: .btn { border-radius: 4px; } */"></textarea>
+        <div><button id="custom-css-apply" class="btn">適用</button></div>
+      </div>
+    </div>
+    </section>
+
+    <section id="section-tabs">
+    <h2 class="section-title">タブ<span class="scope-badge" data-scope-key="settings"></span></h2>
+    <div class="card">
+      <!-- タブの見た目のエフェクト。アクティブ / メディア再生中 / タブグループ の3系統ぶんを
+           settings.js が同じ作りで組み立てる(選択・色・プレビューの3行 × 3) -->
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">タブの見た目</div>
+          <div class="setting-desc">
+            アクティブなタブ・メディア再生中のタブ・タブグループに、それぞれ別のエフェクトを設定できます。タブグループのぶんは1段目のグループそのものに表示され、条件が重なったタブには重ねて表示されます
+          </div>
+        </div>
+      </div>
+      <div id="tab-effects"></div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">タブの最小幅</div>
+          <div class="setting-desc">
+            タブはここまでしか縮みません。小さくすると一度にたくさん並び、大きくするとタイトルが読めます。
+            入りきらない分はタブバーの横スクロール(ホイールでも動きます)で、端をフェードさせて続きがあることを示します
+          </div>
+        </div>
+        <label class="range-field">
+          <input id="tab-min-width" type="range" min="56" max="200" step="4" />
+          <span class="range-value" id="tab-min-width-value">140px</span>
+        </label>
+      </div>
+    </div>
+    </section>
+
+    <section id="section-start">
+    <h2 class="section-title">スタート画面<span class="scope-badge" data-scope-key="settings"></span></h2>
+    <div class="card">
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">アイコンの最大サイズ</div>
+          <div class="setting-desc">列数・行数はウィンドウの大きさに合わせて自動調整されます。アイコン自体の大きさはウィンドウをリサイズしても変わりません</div>
+        </div>
+        <div class="grid-size-inputs">
+          <label><input id="start-icon-size" type="number" class="search" min="48" max="160" step="4" /> px</label>
+        </div>
+      </div>
+    </div>
+    </section>
+
+    <section id="section-browser">
+    <h2 class="section-title">ブラウザ設定<span class="scope-badge" data-scope-key="settings"></span></h2>
+    <div class="card">
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">既定のブラウザ</div>
+          <div class="setting-desc" id="default-browser-desc">
+            他のアプリでリンクを開いたときにRoopieを使います
+          </div>
+        </div>
+        <button id="default-browser-btn" class="btn">既定のブラウザにする</button>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">検索エンジン</div>
+          <div class="setting-desc">アドレスバーやドラッグ検索・右クリック検索で使う検索エンジン</div>
+        </div>
+        <select id="search-engine" class="gesture-select">
+          <option value="google">Google</option>
+          <option value="duckduckgo">DuckDuckGo</option>
+          <option value="yahoo">Yahoo!検索</option>
+          <option value="bing">Bing</option>
+          <option value="ecosia">Ecosia</option>
+          <option value="startpage">Startpage</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">起動時に前回のタブを復元する</div>
+          <div class="setting-desc">
+            Roopieを終了したときに開いていたタブを、次の起動時に開き直します。オフのときは新しいタブで始まります
+          </div>
+        </div>
+        <label class="switch">
+          <input id="restore-tabs-on-start" type="checkbox" />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">タブを閉じたら直前のタブに戻る</div>
+          <div class="setting-desc">
+            アクティブなタブを閉じたときと、ドラッグ&amp;ドロップで別のウィンドウへ移したときに、直前まで使っていたタブに切り替えます。オフのときは右隣のタブに移ります
+          </div>
+        </div>
+        <label class="switch">
+          <input id="activate-previous-tab" type="checkbox" />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">ブックマークバーを表示</div>
+          <div class="setting-desc">ツールバーの下にブックマークを常時表示します(Ctrl+Shift+B)</div>
+        </div>
+        <label class="switch">
+          <input id="show-bookmark-bar" type="checkbox" />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">広告・トラッカーをブロック</div>
+          <div class="setting-desc">内蔵の広告ブロック(EasyList等のフィルタ)でリクエストを遮断します</div>
+        </div>
+        <label class="switch">
+          <input id="adblock-toggle" type="checkbox" />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">ダウンロード先</div>
+          <div class="setting-desc" id="download-path-desc">OSの既定のダウンロードフォルダ</div>
+        </div>
+        <div class="profile-actions">
+          <button id="download-path-change" class="btn">変更</button>
+          <button id="download-path-reset" class="btn">既定に戻す</button>
+        </div>
+      </div>
+    </div>
+    </section>
+
+    <section id="section-toolbar">
+    <h2 class="section-title">ツールバー<span class="scope-badge" data-scope-key="settings"></span></h2>
+    <div class="card">
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">ツールバーの項目</div>
+          <div class="setting-desc">チェックで表示/非表示を切り替え、ドラッグで並べ替えできます(戻る/進む/アドレスバーなどは固定)。ツールバーのアイコンを右クリックしても切り替えられます</div>
+        </div>
+      </div>
+      <div id="toolbar-items-list" class="toolbar-items-list"></div>
+    </div>
+    </section>
+
+    <section id="section-shortcuts">
+    <h2 class="section-title">ショートカット<span class="scope-badge">すべてのプロファイル共通</span></h2>
+    <div class="card">
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">キーボードショートカット</div>
+          <div class="setting-desc">項目をクリックして新しいキーの組み合わせを押すと変更できます(Escで取り消し、Backspaceで無効化)。修飾キー(Ctrl/Alt/Shift)との組み合わせが必要です。ショートカットは全プロファイル共通です</div>
+        </div>
+        <button id="shortcuts-reset-all" class="btn">すべて既定に戻す</button>
+      </div>
+      <div id="shortcuts-list" class="shortcuts-list"></div>
+    </div>
+    </section>
+
+    <section id="section-about">
+    <h2 class="section-title">Roopieについて</h2>
+    <div class="card">
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">バージョン</div>
+          <div id="about-version" class="setting-desc">読み込み中…</div>
+        </div>
+        <button id="about-check" class="btn">更新を確認</button>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">変更履歴</div>
+          <div class="setting-desc">これまでのバージョンで追加された機能をまとめて見ます</div>
+        </div>
+        <button id="about-notes" class="btn">変更履歴を見る</button>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">はじめかたの案内</div>
+          <div class="setting-desc">初回起動時のイントロをもう一度表示します</div>
+        </div>
+        <button id="about-intro" class="btn">イントロを見る</button>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-name">ソースコード</div>
+          <div class="setting-desc">GitHubのリポジトリを既定のブラウザで開きます</div>
+        </div>
+        <button id="about-repo" class="btn">GitHubを開く</button>
+      </div>
+    </div>
+    </section>
+    </main>
+  </div>
+
+  <script src="window-theme.js"></script>
+  <script src="theme.js"></script>
+  <script src="icon-picker.js"></script>
+  <script src="settings.js"></script>
+</body>
+</html>

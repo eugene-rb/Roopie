@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 質問・アイデアの相談
+    url: https://github.com/eugene-rb/Roopie/discussions
+    about: 使い方の質問や、まだ形になっていないアイデアはこちらへどうぞ
+  - name: 脆弱性の報告(非公開)
+    url: https://github.com/eugene-rb/Roopie/security/advisories/new
+    about: セキュリティの問題は公開のIssueではなく、こちらから非公開で報告してください
+  - name: 最新版のダウンロード
+    url: https://github.com/eugene-rb/Roopie/releases/latest
+    about: 報告の前に、最新のリリースで再現するか確認してください

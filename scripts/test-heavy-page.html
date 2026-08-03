@@ -1,0 +1,30 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>重いページ(ジェスチャー検証用)</title>
+<!--
+  ページのJSが重い(レンダラーのメインスレッドが詰まっている)状態を作る検証用ページ。
+  配信: node scripts/serve-test-page.js test-heavy-page.html 8947
+  scripts/test-gesture-input.js もこのファイルを配信して使う。
+-->
+<style>
+  body { font: 16px "Yu Gothic UI", sans-serif; padding: 20px; height: 3000px; background: #f6f7fb; }
+  button { font-size: 18px; padding: 14px 22px; background: #d9394a; color: #fff; border: 0; border-radius: 8px; cursor: pointer; }
+  #bottom { position: absolute; bottom: 20px; color: #888; }
+</style>
+<h3>ジェスチャー検証用の重いページ</h3>
+<p>ボタンを押すと1秒後から8秒間フリーズします。その間に右ドラッグでジェスチャーを試してください。</p>
+<button id="b">1秒後から8秒間フリーズさせる</button>
+<div id="bottom">ページの末尾(スクロール系ジェスチャーの確認用)</div>
+<script>
+  document.getElementById('b').onclick = () => {
+    const b = document.getElementById('b');
+    b.textContent = '1秒後にフリーズします…';
+    setTimeout(() => {
+      const t0 = performance.now();
+      console.log('page: ブロック開始');
+      while (performance.now() - t0 < 8000);
+      console.log('page: ブロック解除');
+      b.textContent = '1秒後から8秒間フリーズさせる';
+    }, 1000);
+  };
+</script>

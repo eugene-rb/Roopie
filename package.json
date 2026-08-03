@@ -1,0 +1,90 @@
+{
+  "name": "roopie",
+  "version": "0.1.0",
+  "description": "Roopie - Chromiumベース(Electron)の独自ブラウザ",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "start:debug": "electron . --remote-debugging-port=9222",
+    "start:verify": "set ROOPIE_LOG_CONSOLE=1&& electron .",
+    "build:css": "tailwindcss -i src/renderer/tailwind.css -o src/renderer/pages/app.css --minify",
+    "watch:css": "tailwindcss -i src/renderer/tailwind.css -o src/renderer/pages/app.css --watch",
+    "gen:icon": "electron scripts/gen-icon.js",
+    "gen:installer-art": "electron scripts/gen-installer-art.js",
+    "fetch:tor": "node scripts/fetch-tor.js --latest",
+    "dist": "node scripts/fetch-tor.js --ensure && electron-builder --win",
+    "release": "node scripts/fetch-tor.js --ensure && electron-builder --win --publish always"
+  },
+  "keywords": [],
+  "author": "eugene-rb",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/eugene-rb/Roopie.git"
+  },
+  "build": {
+    "appId": "com.eugene-rb.roopie",
+    "productName": "Roopie",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "vendor/tor",
+        "to": "tor"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
+      "shortcutName": "Roopie",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "installerHeader": "build/installerHeader.bmp",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/uninstallerSidebar.bmp",
+      "uninstallDisplayName": "Roopie",
+      "include": "build/installer.nsh",
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "eugene-rb",
+      "repo": "Roopie",
+      "releaseType": "release"
+    }
+  },
+  "type": "commonjs",
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.2",
+    "electron": "^43.1.0",
+    "electron-builder": "^26.15.3",
+    "preline": "^4.2.0",
+    "tailwindcss": "^4.3.2"
+  },
+  "overrides": {
+    "adm-zip": "^0.6.0"
+  },
+  "dependencies": {
+    "@ghostery/adblocker-electron": "^2.18.1",
+    "electron-chrome-extensions": "^4.9.0",
+    "electron-chrome-web-store": "^0.13.0",
+    "electron-updater": "^6.8.9",
+    "qrcode-generator": "^2.0.4",
+    "tldts": "^7.4.9"
+  }
+}

@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https: data:; style-src 'self'" />
+  <title>サイドパネル</title>
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body class="panel-body">
+  <!-- 左端のリサイズハンドル(Edge/Vivaldiと同じくドラッグでパネル幅を変えられる) -->
+  <div id="resize-handle" title="ドラッグして幅を変更"></div>
+
+  <!-- アイコンレールは常時表示。クリックした先(組み込みセクション/Webパネル)をコンテンツ側に表示する -->
+  <div id="home">
+    <div class="section-content">
+      <div id="panel-header">
+        <span id="panel-header-title"></span>
+        <!-- Webパネル表示中だけ表示するアクション -->
+        <button id="web-reload" class="hbtn hidden" title="再読み込み">
+          <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36L21 8"/><path d="M21 3v5h-5"/></svg>
+        </button>
+        <button id="web-open-tab" class="hbtn hidden" title="タブで開く">
+          <svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>
+        </button>
+      </div>
+
+      <div id="section-bookmarks" class="section">
+        <!-- VSCodeのエクスプローラー風ツールバー: 新しいブックマーク/新しいフォルダ/すべて折りたたむ -->
+        <div class="bm-toolbar">
+          <button id="bookmark-new-btn" class="hbtn" title="新しいブックマーク">
+            <svg viewBox="0 0 24 24"><path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/><path d="M12 7v6"/><path d="M9 10h6"/></svg>
+          </button>
+          <button id="bookmark-new-folder-btn" class="hbtn" title="新しいフォルダ">
+            <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 11v6"/><path d="M9 14h6"/></svg>
+          </button>
+          <button id="bookmark-collapse-btn" class="hbtn" title="すべて折りたたむ">
+            <svg viewBox="0 0 24 24"><path d="M7 14l5-5 5 5"/><path d="M7 20l5-5 5 5"/></svg>
+          </button>
+        </div>
+        <div id="bookmark-list" class="panel-list bm-tree"></div>
+      </div>
+
+      <div id="section-downloads" class="section">
+        <div id="downloads-list" class="panel-list"></div>
+      </div>
+
+      <div id="section-history" class="section">
+        <input id="history-search" class="panel-input" type="text" placeholder="履歴を検索" spellcheck="false" autocomplete="off" />
+        <div id="history-list" class="panel-list"></div>
+      </div>
+
+      <div id="section-notes" class="section">
+        <textarea id="notes" placeholder="メモを入力(自動保存されます)" spellcheck="false"></textarea>
+      </div>
+
+      <div id="section-readlist" class="section">
+        <button id="readlist-add-btn" class="btn readlist-add">現在のページを追加</button>
+        <div class="readlist-toolbar">
+          <button id="readlist-filter-btn" class="item-btn">未読のみ</button>
+          <button id="readlist-clear-btn" class="item-btn">既読を消す</button>
+        </div>
+        <div id="readlist-list" class="panel-list"></div>
+      </div>
+
+      <!-- 機能ごとに画面を分ける(iOSの時計アプリと同じ考え方)。
+           タイマー=プリセット+進捗リング / アラーム=時刻とON-OFFスイッチ / ストップウォッチ=大きい表示とラップ -->
+      <div id="section-timers" class="section">
+        <div class="timer-topbar">
+          <div class="timer-tabs">
+            <button type="button" class="timer-tab active" data-tt="countdown">タイマー</button>
+            <button type="button" class="timer-tab" data-tt="clock">アラーム</button>
+            <button type="button" class="timer-tab" data-tt="stopwatch">ストップウォッチ</button>
+          </div>
+          <!-- フロート側の「格納」ボタンで消したあと、ここからしか戻せないので必ず残す -->
+          <button id="timer-float-toggle" class="timer-pin-btn" title="フローティング表示">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="12" width="7" height="5" rx="1.5"/></svg>
+          </button>
+        </div>
+
+        <div id="tv-countdown" class="timer-view">
+          <div id="timer-presets" class="timer-presets"></div>
+          <div id="timers-list" class="panel-list"></div>
+          <button id="timer-add-btn" class="btn timers-add">カスタムタイマーを作る</button>
+        </div>
+
+        <div id="tv-clock" class="timer-view hidden">
+          <div id="alarm-list" class="panel-list"></div>
+          <button id="alarm-add-btn" class="btn timers-add">アラームを追加</button>
+        </div>
+
+        <div id="tv-stopwatch" class="timer-view hidden">
+          <div id="sw-body" class="sw-body"></div>
+        </div>
+      </div>
+
+      <div id="section-trackers" class="section">
+        <div class="tr-toolbar">
+          <button id="trackers-refresh-btn" class="item-btn">再分析</button>
+          <button id="trackers-forget-all-btn" class="item-btn">すべて削除</button>
+        </div>
+        <div id="trackers-body" class="panel-list"></div>
+      </div>
+
+      <div id="section-now-playing" class="section">
+        <div id="now-playing-body"></div>
+      </div>
+    </div>
+
+    <!-- アイコンレール(常時表示)。並びはVivaldiのパネルと同じ:
+         ブックマーク/ダウンロード/履歴/メモ/リーディングリスト → Webパネル → 追加(+)。
+         何もないところを右クリックすると左右切替/追加/非表示のメニューが出る -->
+    <div class="section-tabs" id="rail">
+      <button class="section-tab" data-section="bookmarks" title="ブックマーク">
+        <svg viewBox="0 0 24 24"><path d="M12 3l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.8 6.2 20.9l1.1-6.5L2.6 9.8l6.5-.9z"/></svg>
+      </button>
+      <button class="section-tab" data-section="downloads" title="ダウンロード">
+        <svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 11l5 5 5-5"/><path d="M5 21h14"/></svg>
+      </button>
+      <button class="section-tab" data-section="history" title="履歴">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+      </button>
+      <button class="section-tab" data-section="notes" title="メモ">
+        <svg viewBox="0 0 24 24"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>
+      </button>
+      <button class="section-tab" data-section="readlist" title="リーディングリスト(後で読む)">
+        <svg viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+      </button>
+      <button class="section-tab" data-section="trackers" title="トラッキング">
+        <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 0 1 9 9 9 9 0 0 1-9 9 9 9 0 0 1-9-9 9 9 0 0 1 9-9z"/><circle cx="12" cy="12" r="3.2"/><path d="M12 3v3.4"/><path d="M12 17.6V21"/><path d="M3 12h3.4"/><path d="M17.6 12H21"/></svg>
+      </button>
+      <button class="section-tab" data-section="timers" title="タイマー">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5"/><path d="M9 2h6"/></svg>
+      </button>
+      <!-- 登録したWebパネルをアイコンレールに直接ピン留め表示(クリックで即表示、右クリックで編集・削除) -->
+      <div id="web-pin-list"></div>
+      <!-- Vivaldiのパネル最下部の「+」と同じ: ウェブパネルの追加 -->
+      <button id="web-add-tab" class="section-tab" title="ウェブパネルを追加">
+        <svg viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+      </button>
+      <button id="now-playing-tab" class="section-tab hidden" data-section="now-playing" title="再生中">
+        <svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+      </button>
+      <div class="spacer"></div>
+    </div>
+  </div>
+
+  <!-- ブックマークの追加(パネルの「ブックマークを追加」ボタンから開く) -->
+  <div id="bookmark-add" class="modal-backdrop hidden">
+    <div class="modal">
+      <div class="modal-title">ブックマークを追加</div>
+
+      <input id="bookmark-add-url" class="panel-input" type="text" placeholder="URLを入力(例: example.com)" spellcheck="false" autocomplete="off" />
+      <input id="bookmark-add-name" class="panel-input" type="text" placeholder="名前(省略するとURL)" spellcheck="false" autocomplete="off" />
+
+      <div id="bookmark-add-error" class="modal-error hidden"></div>
+
+      <div class="modal-actions">
+        <button id="bookmark-add-cancel" class="btn">キャンセル</button>
+        <button id="bookmark-add-apply" class="btn primary">追加</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Webパネルの名前/URLの編集(右クリックメニューから開く。アイコンは共通のicon-picker.jsを使う) -->
+  <div id="web-edit" class="modal-backdrop hidden">
+    <div class="modal">
+      <div class="modal-title" id="web-edit-title"></div>
+
+      <input id="web-edit-input" class="panel-input" type="text" spellcheck="false" autocomplete="off" />
+
+      <div id="web-edit-error" class="modal-error hidden"></div>
+
+      <div class="modal-actions">
+        <button id="web-edit-cancel" class="btn">キャンセル</button>
+        <button id="web-edit-apply" class="btn primary">適用</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- タイマーの追加/編集(サイドパネルの「タイマー」セクション内のボタン/鉛筆アイコンから開く) -->
+  <div id="timer-edit" class="modal-backdrop hidden">
+    <div class="modal timer-modal">
+      <div class="modal-title" id="timer-edit-title">新しいタイマー</div>
+
+      <input id="timer-name" class="panel-input" type="text" placeholder="名前(省略可)" spellcheck="false" autocomplete="off" />
+
+      <!-- 種類はセクションのタブ(タイマー/アラーム/ストップウォッチ)で決まるため、
+           モーダル内の種類切り替えは廃止した。setTimerType() が入力欄の出し分けだけを行う -->
+
+      <div id="timer-fields-countdown" class="timer-fields hidden">
+        <div class="timer-duration-inputs">
+          <input id="timer-h" type="number" min="0" max="23" value="0" /><span>時間</span>
+          <input id="timer-m" type="number" min="0" max="59" value="5" /><span>分</span>
+          <input id="timer-s" type="number" min="0" max="59" value="0" /><span>秒</span>
+        </div>
+      </div>
+
+      <div id="timer-fields-clock" class="timer-fields hidden">
+        <input id="timer-clock-time" class="panel-input" type="time" value="09:00" />
+        <label class="timer-action-row">
+          <input type="checkbox" id="timer-repeat-enabled" /> 曜日を指定して繰り返す
+        </label>
+        <div id="timer-weekdays" class="weekday-chips hidden">
+          <button type="button" class="weekday-chip" data-day="0">日</button>
+          <button type="button" class="weekday-chip" data-day="1">月</button>
+          <button type="button" class="weekday-chip" data-day="2">火</button>
+          <button type="button" class="weekday-chip" data-day="3">水</button>
+          <button type="button" class="weekday-chip" data-day="4">木</button>
+          <button type="button" class="weekday-chip" data-day="5">金</button>
+          <button type="button" class="weekday-chip" data-day="6">土</button>
+        </div>
+      </div>
+
+      <div id="timer-actions-block" class="timer-fields hidden">
+        <div class="timer-actions-title">時間になったら</div>
+        <label class="timer-action-row"><input type="checkbox" id="act-sound" /> 音を鳴らす</label>
+        <label class="timer-action-row"><input type="checkbox" id="act-hibernate" /> タブを休止する</label>
+        <label class="timer-action-row"><input type="checkbox" id="act-close" /> ウィンドウを閉じる</label>
+        <label class="timer-action-row"><input type="checkbox" id="act-open" /> 特定のページを開く</label>
+        <input id="act-open-url" class="panel-input timer-suboption hidden" type="text" placeholder="URLを入力(例: example.com)" spellcheck="false" autocomplete="off" />
+        <label class="timer-action-row"><input type="checkbox" id="act-shutdown" /> シャットダウンする</label>
+        <label id="act-shutdown-confirm-row" class="timer-action-row timer-suboption danger hidden">
+          <input type="checkbox" id="act-shutdown-confirm" /> シャットダウンを実行することを理解しました
+        </label>
+        <label id="act-shutdown-notify-row" class="timer-action-row timer-suboption hidden">
+          <input type="checkbox" id="act-shutdown-notify" /> シャットダウン前に通知を出す(15秒待って中止できる)
+        </label>
+      </div>
+
+      <div id="timer-edit-error" class="modal-error hidden"></div>
+
+      <div class="modal-actions">
+        <button id="timer-edit-cancel" class="btn">キャンセル</button>
+        <button id="timer-edit-apply" class="btn primary">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="window-theme.js"></script>
+  <script src="theme.js"></script>
+  <script src="icon-picker.js"></script>
+  <script src="sidepanel.js"></script>
+</body>
+</html>

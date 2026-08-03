@@ -1,0 +1,40 @@
+name: 機能リクエスト
+description: あったらいい機能・改善を提案する
+title: '[Feature] '
+labels: ['enhancement']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提案ありがとうございます。ざっくりしたアイデアや相談は
+        [Discussions](https://github.com/eugene-rb/Roopie/discussions)でも歓迎です。
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 困っていること
+      description: どんなときに、何が不便ですか
+      placeholder: '例: 記事を読みながらメモを取りたいが、サイドパネルを開くとページが狭くなりすぎる'
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 提案する動き
+      description: どう動いてほしいかを書いてください
+    validations:
+      required: true
+
+  - type: input
+    id: prior-art
+    attributes:
+      label: 他のブラウザでの例(任意)
+      description: Edge / Vivaldi / Arc などに似た機能があれば、その名前と挙動を教えてください
+      placeholder: '例: Vivaldiの「ウェブパネル」と同じ挙動'
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 代わりに試したこと(任意)
+      description: 今の機能で代用しているやり方があれば

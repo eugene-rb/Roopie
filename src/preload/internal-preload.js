@@ -1,0 +1,304 @@
+const { contextBridge, ipcRenderer } = require('electron');
+
+// ライト/ダークだけは**描き始める前に**当てる。window-theme.js(body末尾)を待つと、
+// ライトのプロファイルでも最初の数十msがダークで描かれてちらつく。
+// 中身の細かい指定(スタイル・色)は今まで通り theme:state で後から入る
+if (location.protocol === 'roopie:') {
+  applyWindowModeEarly();
+}
+
+function applyWindowModeEarly() {
+  let mode;
+  try {
+    mode = ipcRenderer.sendSync('theme:window-mode-sync');
+  } catch {
+    return; // メイン側が未登録でも読み込みは止めない
+  }
+  if (mode !== 'dark' && mode !== 'light') return;
+  if (document.documentElement) {
+    document.documentElement.dataset.windowMode = mode;
+    return;
+  }
+  // preloadは <html> が作られる前に走ることがある。readystatechange まで待つと
+  // 最初の描画に間に合わないので、<html> が挿入された瞬間に入れる
+  const observer = new MutationObserver(() => {
+    if (!document.documentElement) return;
+    document.documentElement.dataset.windowMode = mode;
+    observer.disconnect();
+  });
+  observer.observe(document, { childList: true });
+}
+
+// 内部ページ(roopie://)以外では絶対にIPCを公開しない
+if (location.protocol === 'roopie:') {
+  contextBridge.exposeInMainWorld('roopieInternal', {
+    openTab: (url, background) => ipcRenderer.send('tabs:new', url, background),
+    navigate: (input) => ipcRenderer.send('tabs:navigate', input),
+
+    listBookmarks: () => ipcRenderer.invoke('bookmarks:list'),
+    listAllBookmarks: () => ipcRenderer.invoke('bookmarks:all'),
+    addBookmark: (url, title, parentId) => ipcRenderer.send('bookmarks:add', url, title, parentId ?? null),
+    // 作ったフォルダを返す({ id, title, ... } / 失敗時 null)
+    addBookmarkFolder: (parentId, title, icon) =>
+      ipcRenderer.invoke('bookmarks:add-folder', parentId ?? null, title, icon ?? null),
+    removeBookmark: (id) => ipcRenderer.send('bookmarks:remove', id),
+    renameBookmark: (id, title) => ipcRenderer.send('bookmarks:rename', id, title),
+    moveBookmark: (id, parentId) => ipcRenderer.send('bookmarks:move', id, parentId),
+
+    // スタート画面のショートカット(bookmarksの中の "start" フォルダ以下。ページ=サブフォルダ)
+    listStartPages: () => ipcRenderer.invoke('bookmarks:start-pages'),
+    addStartPage: (title) => ipcRenderer.invoke('bookmarks:start-page-add', title),
+    listShortcuts: (pageId) => ipcRenderer.invoke('bookmarks:children', pageId),
+    addShortcut: (pageId, payload) => ipcRenderer.invoke('bookmarks:add-shortcut', pageId, payload),
+    updateShortcut: (id, patch) => ipcRenderer.send('bookmarks:update-item', id, patch),
+    removeShortcut: (id) => ipcRenderer.send('bookmarks:remove', id),
+    pickShortcutFolder: () => ipcRenderer.invoke('fs:pick-folder'),
+    fetchPageTitle: (url) => ipcRenderer.invoke('page:fetch-title', url),
+    openShortcutFolder: (folderPath) => ipcRenderer.send('fs:open-folder', folderPath),
+
+    // スタート画面のウィジェット(グリッド配置・天気・RSS)
+    getWidgetLayout: (pageId) => ipcRenderer.invoke('widgets:layout', pageId),
+    setWidgetLayout: (pageId, items) => ipcRenderer.send('widgets:set-layout', pageId, items),
+    addWidget: (pageId, widgetType) => ipcRenderer.invoke('widgets:add', pageId, widgetType),
+    removeWidget: (pageId, id) => ipcRenderer.send('widgets:remove', pageId, id),
+    setWidgetConfig: (pageId, id, patch) => ipcRenderer.send('widgets:config', pageId, id, patch),
+    geocodeCity: (query) => ipcRenderer.invoke('widgets:geocode', query),
+    getWeather: (lat, lon) => ipcRenderer.invoke('widgets:weather', lat, lon),
+    getRss: (url) => ipcRenderer.invoke('widgets:rss', url),
+
+    listHistory: (query) => ipcRenderer.invoke('history:list', query),
+    removeHistory: (id) => ipcRenderer.send('history:remove', id),
+    clearHistory: () => ipcRenderer.send('history:clear'),
+
+    listDownloads: () => ipcRenderer.invoke('downloads:list'),
+    openDownload: (id) => ipcRenderer.send('downloads:open', id),
+    showDownloadInFolder: (id) => ipcRenderer.send('downloads:show-in-folder', id),
+    pauseDownload: (id) => ipcRenderer.send('downloads:pause', id),
+    resumeDownload: (id) => ipcRenderer.send('downloads:resume', id),
+    cancelDownload: (id) => ipcRenderer.send('downloads:cancel', id),
+    removeDownload: (id) => ipcRenderer.send('downloads:remove', id),
+    clearDownloads: () => ipcRenderer.send('downloads:clear'),
+
+    listProfiles: () => ipcRenderer.invoke('profiles:list'),
+    createProfile: (name) => ipcRenderer.send('profiles:create', name),
+    renameProfile: (id, name) => ipcRenderer.send('profiles:rename', id, name),
+    removeProfile: (id) => ipcRenderer.send('profiles:remove', id),
+    switchProfile: (id) => ipcRenderer.send('profiles:switch', id),
+    setProfileShared: (id, key, shared) =>
+      ipcRenderer.send('profiles:set-shared', id, key, shared),
+    setProfileIcon: (id, icon) => ipcRenderer.send('profiles:set-icon', id, icon),
+    setProfileTor: (id, enabled) => ipcRenderer.send('profiles:set-tor', id, enabled),
+
+    getTorStatus: () => ipcRenderer.invoke('tor:status'),
+    onTorStatus: (cb) => ipcRenderer.on('tor:status', (_e, s) => cb(s)),
+
+    listGoogleAccounts: () => ipcRenderer.invoke('google:list'),
+    addGoogleAccount: (email, label) => ipcRenderer.send('google:add', email, label),
+    removeGoogleAccount: (accountId) => ipcRenderer.send('google:remove', accountId),
+    setGoogleEnabled: (profileId, accountId, enabled) =>
+      ipcRenderer.send('google:set-enabled', profileId, accountId, enabled),
+    setGooglePrimary: (profileId, accountId) =>
+      ipcRenderer.send('google:set-primary', profileId, accountId),
+    signedInGoogleAccounts: (profileId) => ipcRenderer.invoke('google:signed-in', profileId),
+    googleLogin: (profileId, accountId) => ipcRenderer.send('google:login', profileId, accountId),
+    googleSignOut: (profileId) => ipcRenderer.send('google:signout', profileId),
+
+    // 既定のブラウザ(設定画面)
+    getDefaultBrowser: () => ipcRenderer.invoke('default-browser:get'),
+    requestDefaultBrowser: () => ipcRenderer.invoke('default-browser:request'),
+
+    getSettings: () => ipcRenderer.invoke('settings:get'),
+    setSetting: (key, value) => ipcRenderer.send('settings:set', key, value),
+    pickDownloadFolder: () => ipcRenderer.invoke('fs:pick-folder'),
+
+    // トラッキング分析(サイドパネル)
+    analyzeTrackers: () => ipcRenderer.invoke('trackers:analyze'),
+    forgetTracker: (companyName) => ipcRenderer.invoke('trackers:forget', companyName),
+    forgetAllTrackers: () => ipcRenderer.invoke('trackers:forget-all'),
+
+    // ローカルサーバー検知(スタートページのサジェスト)
+    listLocalServers: () => ipcRenderer.invoke('local-servers:list'),
+    dismissLocalServer: (port) => ipcRenderer.send('local-servers:dismiss', port),
+
+    // ショートカット割り当て
+    getKeybindings: () => ipcRenderer.invoke('keybindings:get'),
+    setKeybinding: (id, accelerator) => ipcRenderer.invoke('keybindings:set', id, accelerator),
+    resetKeybinding: (id) => ipcRenderer.invoke('keybindings:reset', id),
+    resetAllKeybindings: () => ipcRenderer.invoke('keybindings:reset-all'),
+    onKeybindings: (cb) => ipcRenderer.on('keybindings:state', (_e, config) => cb(config)),
+
+    // メディアプレイヤー(複数タブが同時に再生し得るため、どのタブへの操作かをtabIdで指定する)
+    onMediaState: (cb) => ipcRenderer.on('media:state', (_e, state) => cb(state)),
+    listMedia: () => ipcRenderer.invoke('media:list'),
+    mediaToggle: (tabId) => ipcRenderer.send('media:control', tabId, 'toggle'),
+    mediaSeek: (tabId, time) => ipcRenderer.send('media:control', tabId, 'seek', time),
+    mediaPip: (tabId) => ipcRenderer.send('media:control', tabId, 'pip'),
+    mediaNext: (tabId) => ipcRenderer.send('media:control', tabId, 'next'),
+    mediaPrev: (tabId) => ipcRenderer.send('media:control', tabId, 'prev'),
+    mediaToggleMute: (tabId) => ipcRenderer.send('media:toggle-mute', tabId),
+    mediaSetDocked: (tabId, docked) => ipcRenderer.send('media:set-docked', tabId, docked),
+
+    // 画面分割のペイン間リサイズ(仕切りView)
+    onSplitDivider: (cb) => ipcRenderer.on('split:divider', (_e, info) => cb(info)),
+    splitResizeStart: () => ipcRenderer.send('split:resize-start'),
+    splitResize: (dx, dy) => ipcRenderer.send('split:resize', dx, dy),
+    splitResizeEnd: () => ipcRenderer.send('split:resize-end'),
+
+    // D&D分割: タブのドラッグ中にオーバーレイへドロップゾーンを出す
+    onDropZones: (cb) => ipcRenderer.on('overlay:drop-zones', (_e, info) => cb(info)),
+    splitDrop: (zone) => ipcRenderer.send('split:drop', zone),
+    mediaSwitchToTab: (tabId) => ipcRenderer.send('media:switch-to-tab', tabId),
+    mediaDismiss: () => ipcRenderer.send('media:dismiss'),
+    mediaDragStart: () => ipcRenderer.send('media:drag-start'),
+    mediaDrag: (dx, dy) => ipcRenderer.send('media:drag', dx, dy),
+    mediaDragEnd: () => ipcRenderer.send('media:drag-end'),
+
+    // サイドパネル
+    getSidePanel: () => ipcRenderer.invoke('sidepanel:state'),
+    toggleSidePanel: () => ipcRenderer.send('sidepanel:toggle'),
+    hideSidePanel: () => ipcRenderer.send('sidepanel:hide'),
+    openSidePanelSection: (key) => ipcRenderer.send('sidepanel:open-section', key),
+    sidePanelRailContextMenu: () => ipcRenderer.send('sidepanel:rail-context-menu'),
+    addWebPanel: (url) => ipcRenderer.send('sidepanel:add-web', url),
+    removeWebPanel: (id) => ipcRenderer.send('sidepanel:remove-web', id),
+    webPanelContextMenu: (id) => ipcRenderer.send('sidepanel:web-context-menu', id),
+    setWebPanel: (id, patch) => ipcRenderer.send('sidepanel:set-web', id, patch),
+    promptAddWebPanel: () => ipcRenderer.send('sidepanel:prompt-add-web'),
+    sidePanelEditDone: () => ipcRenderer.send('sidepanel:edit-done'),
+    onEditWebPanel: (cb) => ipcRenderer.on('sidepanel:edit-web', (_e, payload) => cb(payload)),
+    onAddWebPrompt: (cb) => ipcRenderer.on('sidepanel:add-web-prompt', () => cb()),
+    openWebPanel: (id) => ipcRenderer.send('sidepanel:open-web', id),
+    closeWebPanel: () => ipcRenderer.send('sidepanel:close-web'),
+    reloadWebPanel: () => ipcRenderer.send('sidepanel:reload-web'),
+    setSidePanelNotes: (text) => ipcRenderer.send('sidepanel:set-notes', text),
+    resizeSidePanel: (deltaX) => ipcRenderer.send('sidepanel:resize', deltaX),
+    onSidePanelState: (cb) => ipcRenderer.on('sidepanel:state', (_e, s) => cb(s)),
+
+    // リードリスト(後で読む)
+    listReadlist: () => ipcRenderer.invoke('readlist:list'),
+    addCurrentToReadlist: () => ipcRenderer.send('readlist:add-current'),
+    removeReadlist: (id) => ipcRenderer.send('readlist:remove', id),
+    setReadlistRead: (id, read) => ipcRenderer.send('readlist:set-read', id, read),
+    clearReadReadlist: () => ipcRenderer.send('readlist:clear-read'),
+    onReadlistState: (cb) => ipcRenderer.on('readlist:state', (_e, items) => cb(items)),
+
+    // タイマー(カウントダウン/時刻指定/ストップウォッチ)
+    listTimers: () => ipcRenderer.invoke('timer:list'),
+    addTimer: (payload) => ipcRenderer.send('timer:add', payload),
+    updateTimer: (id, patch) => ipcRenderer.send('timer:update', id, patch),
+    removeTimer: (id) => ipcRenderer.send('timer:remove', id),
+    startTimer: (id) => ipcRenderer.send('timer:start', id),
+    pauseTimer: (id) => ipcRenderer.send('timer:pause', id),
+    resetTimer: (id) => ipcRenderer.send('timer:reset', id),
+    lapTimer: (id) => ipcRenderer.send('timer:lap', id),
+    addTimerTime: (id, deltaMs) => ipcRenderer.send('timer:add-time', id, deltaMs),
+    acknowledgeTimer: (id) => ipcRenderer.send('timer:acknowledge', id),
+    cancelTimerFire: (fireId) => ipcRenderer.send('timer:cancel-fire', fireId),
+    timerContextMenu: (id) => ipcRenderer.send('timer:context-menu', id),
+    onTimerState: (cb) => ipcRenderer.on('timer:state', (_e, items) => cb(items)),
+    onTimerRing: (cb) => ipcRenderer.on('timer:ring', (_e, payload) => cb(payload)),
+    onTimerRingClear: (cb) => ipcRenderer.on('timer:ring-clear', (_e, fireId) => cb(fireId)),
+    timerDragStart: () => ipcRenderer.send('timer:drag-start'),
+    timerDrag: (dx, dy) => ipcRenderer.send('timer:drag', dx, dy),
+    timerDragEnd: () => ipcRenderer.send('timer:drag-end'),
+    timerDismiss: () => ipcRenderer.send('timer:dismiss'),
+
+    // 保存パスワード(管理画面用)
+    listPasswords: () => ipcRenderer.invoke('passwords:list'),
+    revealPassword: (id) => ipcRenderer.invoke('passwords:reveal', id),
+    passwordsAvailable: () => ipcRenderer.invoke('passwords:available'),
+    removePassword: (id) => ipcRenderer.send('passwords:remove', id),
+    clearPasswords: () => ipcRenderer.send('passwords:clear'),
+    onPasswordsState: (cb) => ipcRenderer.on('passwords:state', (_e, items) => cb(items)),
+    updatePassword: (id, patch) => ipcRenderer.invoke('passwords:update', id, patch),
+    exportPasswords: () => ipcRenderer.invoke('passwords:export'),
+    importPasswords: () => ipcRenderer.invoke('passwords:import'),
+    listExcludedPasswordSites: () => ipcRenderer.invoke('passwords:excluded'),
+    removeExcludedPasswordSite: (origin) => ipcRenderer.send('passwords:excluded-remove', origin),
+
+    // 自動入力(住所・個人情報/お支払い方法)
+    listAddresses: () => ipcRenderer.invoke('autofill:addresses'),
+    saveAddress: (patch) => ipcRenderer.invoke('autofill:address-save', patch),
+    removeAddress: (id) => ipcRenderer.send('autofill:address-remove', id),
+    listCards: () => ipcRenderer.invoke('autofill:cards'),
+    saveCard: (payload) => ipcRenderer.invoke('autofill:card-save', payload),
+    removeCard: (id) => ipcRenderer.send('autofill:card-remove', id),
+    autofillAvailable: () => ipcRenderer.invoke('autofill:available'),
+    onAutofillState: (cb) => ipcRenderer.on('autofill:state', (_e, state) => cb(state)),
+
+    // 拡張機能
+    installExtension: (extensionId) => ipcRenderer.invoke('extensions:install', extensionId),
+    loadUnpackedExtension: () => ipcRenderer.invoke('extensions:load-unpacked'),
+    listExtensions: () => ipcRenderer.invoke('extensions:list'),
+    removeExtension: (extensionId) => ipcRenderer.send('extensions:remove', extensionId),
+    onExtensionsState: (cb) => ipcRenderer.on('extensions:state', (_e, items) => cb(items)),
+    setExtensionEnabled: (extensionId, enabled) => ipcRenderer.send('extensions:set-enabled', extensionId, enabled),
+    openExtensionOptions: (extensionId) => ipcRenderer.send('extensions:open-options', extensionId),
+
+    // テーマ
+    getTheme: () => ipcRenderer.invoke('theme:get'),
+    setTheme: (patch) => ipcRenderer.send('theme:set', patch),
+    onThemeState: (cb) => ipcRenderer.on('theme:state', (_e, t) => cb(t)),
+    getThemeFor: (profileId) => ipcRenderer.invoke('theme:get-for', profileId),
+    setThemeFor: (profileId, patch) => ipcRenderer.send('theme:set-for', profileId, patch),
+
+    getGestures: () => ipcRenderer.invoke('gestures:config'),
+    setGestures: (config) => ipcRenderer.send('gestures:set', config),
+    resetGestures: () => ipcRenderer.send('gestures:reset'),
+    onGesturesState: (cb) => ipcRenderer.on('gestures:state', (_e, s) => cb(s)),
+
+    // プルダウンメニュー(オーバーレイ)用
+    onMenuShow: (cb) => ipcRenderer.on('menu:show', (_e, payload) => cb(payload)),
+    closeMenu: () => ipcRenderer.send('menu:close'),
+
+    // 拡張機能メニュー(Edgeのパズルボタン風)
+    onExtensionsMenu: (cb) => ipcRenderer.on('menu:show-extensions', (_e, payload) => cb(payload)),
+    setPinnedExtensions: (ids) => ipcRenderer.send('extensions:set-pinned', ids),
+    // electron-chrome-extensions のリモートAPIで拡張のポップアップを開く
+    // (anchorRectはウィンドウ座標。allowRemoteなハンドラのため内部ページから呼べる)
+    activateBrowserAction: (partition, details) =>
+      ipcRenderer.invoke('crx-msg-remote', partition, 'browserAction.activate', details),
+    newWindow: () => ipcRenderer.send('window:new'),
+    newIncognitoWindow: () => ipcRenderer.send('window:new-incognito'),
+
+    // サイトの権限の確認(Edge風のドロップダウン。オーバーレイに描く)。
+    // 返事は3択: 'always'(記憶する)/ 'once'(今回だけ)/ 'block'
+    onPermissionShow: (cb) => ipcRenderer.on('perm:show', (_e, payload) => cb(payload)),
+    onPermissionClose: (cb) => ipcRenderer.on('perm:close', () => cb()),
+    respondPermission: (answer) => ipcRenderer.send('permission:respond', answer),
+
+    // 翻訳先に選べる言語(設定画面の選択肢。一覧はメインの translate.js が持つ)
+    getTranslateLangs: () => ipcRenderer.invoke('translate:langs'),
+
+    // 翻訳のドロップダウン(Edge風。オーバーレイに描く)
+    onTranslateShow: (cb) => ipcRenderer.on('translate:show', (_e, payload) => cb(payload)),
+    onTranslateUpdate: (cb) => ipcRenderer.on('translate:update', (_e, payload) => cb(payload)),
+    runTranslate: (targetLang) => ipcRenderer.send('translate:run', targetLang),
+    undoTranslate: () => ipcRenderer.send('translate:undo'),
+    neverTranslateSite: () => ipcRenderer.send('translate:never-site'),
+    neverTranslateLang: (lang) => ipcRenderer.send('translate:never-lang', lang),
+    alwaysTranslateLang: (lang, on) => ipcRenderer.send('translate:always-lang', lang, on),
+    closeTranslateSelection: () => ipcRenderer.send('translate:selection-close'),
+
+    // QRコードのポップアップ(オーバーレイ)用
+    onQrShow: (cb) => ipcRenderer.on('qr:show', (_e, payload) => cb(payload)),
+    saveQr: (dataUrl, filename) => ipcRenderer.invoke('qr:save', dataUrl, filename),
+
+    // イントロ(初回起動)/ 変更点 / アプリ情報
+    getAppInfo: () => ipcRenderer.invoke('app:info'),
+    introDone: () => ipcRenderer.send('app:intro-done'),
+    notesSeen: () => ipcRenderer.send('app:notes-seen'),
+    getUpdateStatus: () => ipcRenderer.invoke('app:update-status'),
+    checkForUpdates: () => ipcRenderer.invoke('app:check-updates'),
+    quitAndInstall: () => ipcRenderer.send('app:quit-and-install'),
+    openExternal: (url) => ipcRenderer.send('app:open-external', url),
+
+    onDownloadsState: (cb) =>
+      ipcRenderer.on('downloads:state', (_e, state) => cb(state)),
+    onBookmarksState: (cb) =>
+      ipcRenderer.on('bookmarks:state', (_e, items) => cb(items)),
+    onProfilesState: (cb) =>
+      ipcRenderer.on('profiles:state', (_e, state) => cb(state)),
+    onSettings: (cb) => ipcRenderer.on('ui:settings', (_e, s) => cb(s)),
+  });
+}

@@ -1,0 +1,71 @@
+name: バグ報告
+description: うまく動かないところを報告する
+title: '[Bug] '
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        報告ありがとうございます。**脆弱性(セキュリティの問題)はここではなく**
+        [非公開の報告フォーム](https://github.com/eugene-rb/Roopie/security/advisories/new)からお願いします。
+
+  - type: textarea
+    id: what
+    attributes:
+      label: 何が起きましたか
+      description: 起きたことと、代わりにどうなってほしかったかを書いてください
+      placeholder: |
+        例: タブを別のウィンドウへドラッグすると、動画の再生が止まってしまう。
+        移動しても再生が続いてほしい。
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 再現手順
+      description: できるだけ短い手順でお願いします
+      placeholder: |
+        1. YouTubeを開いて再生する
+        2. そのタブを別のウィンドウへドラッグする
+        3. 再生が止まる
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Roopieのバージョン
+      description: 設定 →「Roopieについて」で確認できます
+      placeholder: '0.1.42'
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Windowsのバージョン
+      options:
+        - Windows 11
+        - Windows 10
+        - その他 / わからない
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: スクリーンショット・ログ(任意)
+      description: |
+        画像はこの欄に貼り付けられます。
+        エラーが出ている場合は `npm run start:verify` で起動したときのターミナルの出力も助かります。
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 確認
+      options:
+        - label: 最新のリリースで再現することを確認した
+          required: true
+        - label: 同じ内容のIssueが既に無いか探した
+          required: true

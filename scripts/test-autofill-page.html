@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <title>自動入力テストページ</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 24px auto; padding: 0 16px; }
+    fieldset { margin-bottom: 24px; border-radius: 8px; }
+    label { display: block; margin: 8px 0 2px; font-size: 13px; }
+    input, select { padding: 6px 8px; width: 260px; }
+    .row { display: flex; gap: 12px; }
+    .row label { flex: 1; }
+    .row input { width: 100%; box-sizing: border-box; }
+    button { margin-top: 10px; padding: 6px 16px; }
+  </style>
+</head>
+<body>
+  <h1>自動入力テスト</h1>
+
+  <fieldset>
+    <legend>1. ログイン(保存確認バー/資格情報ドロップダウン)</legend>
+    <form id="login" action="#login" method="get">
+      <label>メールアドレス <input type="email" name="email" autocomplete="username" /></label>
+      <label>パスワード <input type="password" name="password" autocomplete="current-password" /></label>
+      <button type="submit">ログイン</button>
+    </form>
+  </fieldset>
+
+  <fieldset>
+    <legend>2. 新規登録(パスワード生成)</legend>
+    <form id="signup" action="#signup" method="get">
+      <label>メールアドレス <input type="email" name="reg-email" /></label>
+      <label>パスワード <input type="password" name="new-pass" autocomplete="new-password" /></label>
+      <label>パスワード(確認) <input type="password" name="new-pass2" autocomplete="new-password" /></label>
+      <button type="submit">登録</button>
+    </form>
+  </fieldset>
+
+  <fieldset>
+    <legend>3. 住所(日本式・ヒューリスティック分類)</legend>
+    <form id="address" action="#addr" method="get">
+      <div class="row">
+        <label>姓 <input type="text" name="sei" /></label>
+        <label>名 <input type="text" name="mei" /></label>
+      </div>
+      <div class="row">
+        <label>セイ <input type="text" name="kana_sei" /></label>
+        <label>メイ <input type="text" name="kana_mei" /></label>
+      </div>
+      <div class="row">
+        <label>郵便番号1 <input type="text" name="zip1" maxlength="3" /></label>
+        <label>郵便番号2 <input type="text" name="zip2" maxlength="4" /></label>
+      </div>
+      <label>都道府県
+        <select name="pref">
+          <option value="">選択してください</option>
+          <option>北海道</option><option>東京都</option><option>大阪府</option><option>福岡県</option>
+        </select>
+      </label>
+      <label>市区町村 <input type="text" name="city" /></label>
+      <label>番地 <input type="text" name="address1" /></label>
+      <label>建物名 <input type="text" name="address2" /></label>
+      <label>電話番号 <input type="tel" name="tel" /></label>
+      <label>メールアドレス <input type="text" name="contact_mail" placeholder="メールアドレス" /></label>
+      <button type="submit">送信</button>
+    </form>
+  </fieldset>
+
+  <fieldset>
+    <legend>4. お支払い(カード)</legend>
+    <form id="payment" action="#pay" method="get">
+      <label>カード番号 <input type="text" name="cardnumber" autocomplete="cc-number" /></label>
+      <label>カード名義 <input type="text" name="cardholder" autocomplete="cc-name" /></label>
+      <div class="row">
+        <label>月
+          <select name="exp_month" autocomplete="cc-exp-month">
+            <option value="">--</option>
+            <option value="01">01</option><option value="02">02</option><option value="03">03</option>
+            <option value="04">04</option><option value="05">05</option><option value="06">06</option>
+            <option value="07">07</option><option value="08">08</option><option value="09">09</option>
+            <option value="10">10</option><option value="11">11</option><option value="12">12</option>
+          </select>
+        </label>
+        <label>年
+          <select name="exp_year" autocomplete="cc-exp-year">
+            <option value="">----</option>
+            <option>2026</option><option>2027</option><option>2028</option><option>2029</option><option>2030</option>
+          </select>
+        </label>
+        <label>CVC <input type="text" name="cvc" maxlength="4" autocomplete="cc-csc" /></label>
+      </div>
+      <button type="submit">支払う</button>
+    </form>
+  </fieldset>
+
+  <p>結果確認用: フォーム値は送信せずページ内に留まります(action="#")。</p>
+</body>
+</html>

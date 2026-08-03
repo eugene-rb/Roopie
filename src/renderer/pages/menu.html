@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https: data:; style-src 'self'" />
+  <title>メニュー</title>
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body class="menu-body">
+  <!-- タブをドラッグして分割するためのドロップゾーン(ドラッグ中だけ表示) -->
+  <div id="drop-zones" class="hidden">
+    <div id="drop-preview"></div>
+    <!-- 中央は分割ゾーンの抜け。ここへ落とすと新しいウィンドウになるので、その目印を出す
+         (ドラッグを透過させる必要があるので pointer-events は持たせない) -->
+    <div id="drop-detach-hint">
+      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>
+      <span>新しいウィンドウで開く</span>
+    </div>
+    <div class="drop-zone" data-zone="left"></div>
+    <div class="drop-zone" data-zone="right"></div>
+    <div class="drop-zone" data-zone="top"></div>
+    <div class="drop-zone" data-zone="bottom"></div>
+  </div>
+
+  <!-- ページの上に重なる透明レイヤー。外側クリックで閉じる -->
+  <div id="backdrop">
+    <div id="menu" class="hidden">
+      <div class="menu-label">プロファイル</div>
+      <div id="items"></div>
+      <div class="menu-separator"></div>
+      <button id="new-window" class="menu-item">
+        <span class="icon">
+          <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>
+        </span>
+        <span class="name">新しいウィンドウ</span>
+        <span class="shortcut">Ctrl+N</span>
+      </button>
+      <button id="new-incognito" class="menu-item">
+        <span class="icon">
+          <svg viewBox="0 0 24 24"><circle cx="7" cy="15" r="3.5"/><circle cx="17" cy="15" r="3.5"/><path d="M10.5 15h3M5 9l2-4h10l2 4"/></svg>
+        </span>
+        <span class="name">シークレットウィンドウ</span>
+        <span class="shortcut">Ctrl+Shift+N</span>
+      </button>
+      <div class="menu-separator"></div>
+      <button id="manage" class="menu-item">
+        <span class="icon">
+          <svg viewBox="0 0 24 24"><path d="M20 7h-9M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>
+        </span>
+        <span class="name">プロファイルと設定</span>
+      </button>
+    </div>
+
+    <!-- 拡張機能メニュー(Edgeのパズルボタン風)。行クリックで実行、ピンでツールバー表示を切替 -->
+    <div id="ext-menu" class="hidden">
+      <div class="menu-label">拡張機能</div>
+      <div id="ext-items"></div>
+      <div class="menu-separator"></div>
+      <button id="ext-manage" class="menu-item">
+        <span class="icon">
+          <svg viewBox="0 0 24 24"><path d="M20 7h-9M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>
+        </span>
+        <span class="name">拡張機能の管理</span>
+      </button>
+    </div>
+
+    <!-- サイトの権限の確認(Edge風のドロップダウン)。アドレスバーのサイト情報アイコンにぶら下がる。
+         ユーザー起点ではないので、閉じる経路は必ずメインへ返事を返すこと(menu.js の closePermission) -->
+    <div id="perm-popup" class="hidden">
+      <div class="perm-title"><span id="perm-host"></span> が次の許可を求めています</div>
+      <div id="perm-items"></div>
+      <div class="perm-note">「許可」を選ぶと、このサイトでは次回から確認しません。</div>
+      <div class="perm-actions">
+        <button id="perm-allow" class="btn primary">許可</button>
+        <button id="perm-once" class="btn">今回だけ許可</button>
+        <button id="perm-block" class="btn">ブロック</button>
+      </div>
+    </div>
+
+    <!-- 翻訳(Edge風のドロップダウン)。アドレスバーの翻訳アイコンにぶら下がる。
+         ページ翻訳と選択テキストの翻訳で同じ枠を使い、中身だけ差し替える -->
+    <div id="translate-popup" class="hidden">
+      <div class="tr-head">
+        <span id="tr-title" class="tr-title"></span>
+        <button id="tr-more" class="tr-more" title="その他のオプション">
+          <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+        </button>
+      </div>
+      <!-- 「…」の中身(このサイト/この言語を翻訳しない) -->
+      <div id="tr-more-menu" class="tr-more-menu hidden">
+        <button id="tr-never-site" class="menu-item"><span class="name">このサイトは翻訳しない</span></button>
+        <button id="tr-never-lang" class="menu-item"><span class="name">この言語は翻訳しない</span></button>
+      </div>
+      <div class="tr-langs">
+        <label class="tr-field">
+          <span class="tr-field-label">翻訳元</span>
+          <span id="tr-source" class="tr-source"></span>
+        </label>
+        <svg class="tr-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        <label class="tr-field">
+          <span class="tr-field-label">翻訳先</span>
+          <select id="tr-target" class="tr-select"></select>
+        </label>
+      </div>
+      <!-- 選択テキストの翻訳のときだけ出す(原文と訳文) -->
+      <div id="tr-selection" class="tr-selection hidden">
+        <div id="tr-selection-original" class="tr-selection-original"></div>
+        <div id="tr-selection-result" class="tr-selection-result"></div>
+      </div>
+      <label id="tr-always-row" class="tr-check">
+        <input id="tr-always" type="checkbox" />
+        <span id="tr-always-label">この言語のページを常に翻訳する</span>
+      </label>
+      <div id="tr-status" class="tr-status hidden"></div>
+      <div class="tr-actions">
+        <button id="tr-run" class="btn primary">翻訳</button>
+        <button id="tr-undo" class="btn hidden">元の言語を表示</button>
+        <button id="tr-copy" class="btn hidden">コピー</button>
+        <button id="tr-cancel" class="btn">今は実行しない</button>
+      </div>
+    </div>
+
+    <!-- QRコードのポップアップ -->
+    <div id="qr-popup" class="hidden">
+      <div class="qr-title">QRコード</div>
+      <div class="qr-canvas-wrap">
+        <canvas id="qr-canvas"></canvas>
+      </div>
+      <label class="qr-field-label">内容(編集できます)</label>
+      <textarea id="qr-text" class="qr-text" rows="2" spellcheck="false"></textarea>
+      <div class="qr-actions">
+        <button id="qr-center-btn" class="btn">中央のマーク</button>
+        <button id="qr-center-clear" class="btn hidden">削除</button>
+        <button id="qr-download" class="btn primary">ダウンロード</button>
+      </div>
+      <input id="qr-logo-input" type="file" accept="image/*" class="hidden" />
+    </div>
+  </div>
+
+  <script src="window-theme.js"></script>
+  <script src="theme.js"></script>
+  <script src="qrcode.js"></script>
+  <script src="menu.js"></script>
+</body>
+</html>
