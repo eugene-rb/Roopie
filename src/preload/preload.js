@@ -465,6 +465,8 @@ contextBridge.exposeInMainWorld('roopie', {
   newTabInGroup: (groupId) => ipcRenderer.send('tab-group:new-tab', groupId),
   // ドラッグ&ドロップでグループへ入れる/外す(groupId=null で外す)
   assignTabGroup: (tabId, groupId) => ipcRenderer.send('tab-group:assign', tabId, groupId),
+  // ドラッグ&ドロップでタブ同士を重ねたときの新規グループ作成
+  createTabGroup: (tabIds) => ipcRenderer.send('tab-group:create', tabIds),
   tabGroupContextMenu: (groupId) => ipcRenderer.send('tab-group:context-menu', groupId),
   // メニューから「名前を変更」を選んだとき、タブバー側のインライン編集を開くための通知
   onTabGroupRenameRequest: (cb) => ipcRenderer.on('tab-group:rename-request', (_e, groupId) => cb(groupId)),

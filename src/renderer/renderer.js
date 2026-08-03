@@ -560,6 +560,8 @@ window.addEventListener('resize', () => updateTabOverflow());
 // スロットは実体のある隙間で、ドラッグ中はカーソル位置にリアルタイムで追従し、タブの間に差し込める。
 let draggingId = null;
 let justDroppedId = null; // ドロップ直後、確定位置へFLIPで滑らせないタブID(スロット位置にそのまま出す)
+let chipJoinEl = null; // ドラッグ中、チップに直接重ねて「このグループへ参加」をハイライトしている要素(null=無し)
+let newGroupTargetEl = null; // ドラッグ中、他のタブに重ねて「新しいグループを作る」をハイライトしている要素(null=無し)
 
 const tabBarEl = $('tab-bar');
 
@@ -657,6 +659,45 @@ function hideDropSlot() {
   dropSlot.remove();
 }
 
+// 1段目でチップそのものに重ねている間だけ、隙間への挿入プレビューの代わりにチップを光らせる
+// (=「隣に置く」ではなく「このグループに入れる」だと分かるように)
+function setChipJoin(el) {
+  if (chipJoinEl === el) return;
+  clearChipJoin();
+  chipJoinEl = el;
+  el?.classList.add('drag-over-chip');
+}
+
+function clearChipJoin() {
+  chipJoinEl?.classList.remove('drag-over-chip');
+  chipJoinEl = null;
+}
+
+// タブ本体の中央付近に重ねている間は、隙間への挿入の代わりに「このタブと新しいグループを作る」を光らせる。
+// 左右の端はこれまで通り並べ替えの挿入判定に譲る(そうしないと普通の並べ替えができなくなる)
+const NEW_GROUP_ZONE = 0.3; // 端からこの割合の範囲は並べ替え、残りの中央部分がグループ作成の対象
+
+function newGroupZoneHit(el, e) {
+  const r = el.getBoundingClientRect();
+  const vertical = isVerticalTabs();
+  const size = vertical ? r.height : r.width;
+  const pos = vertical ? e.clientY - r.top : e.clientX - r.left;
+  const margin = size * NEW_GROUP_ZONE;
+  return pos > margin && pos < size - margin;
+}
+
+function setNewGroupTarget(el) {
+  if (newGroupTargetEl === el) return;
+  clearNewGroupTarget();
+  newGroupTargetEl = el;
+  el?.classList.add('drag-over-newgroup');
+}
+
+function clearNewGroupTarget() {
+  newGroupTargetEl?.classList.remove('drag-over-newgroup');
+  newGroupTargetEl = null;
+}
+
 // ---- ドラッグ中、端に寄せたときの自動スクロール ----
 // タブバーがスクロールしていると、画面外のタブの間へは落とせない。カーソルを端に寄せている間だけ
 // 少しずつ流す。dragoverは静止すると飛んでこないので、最後のカーソル位置を覚えてrAFで回す
@@ -702,6 +743,8 @@ function stopEdgeScroll() {
 function cleanupDrag() {
   stopEdgeScroll();
   hideDropSlot();
+  clearChipJoin();
+  clearNewGroupTarget();
   tabBarEl.classList.remove('drag-search', 'dnd-armed');
   groupRowEl.classList.remove('drag-over');
   for (const el of document.querySelectorAll('.tab.dragging, .tab.drag-collapsed')) {
@@ -777,6 +820,36 @@ function attachDropTarget(barEl, container) {
     e.preventDefault();
     e.dataTransfer.dropEffect = mode === 'search' ? 'copy' : 'move';
     dropContainer = container;
+
+    // 1段目ではグループのチップも並んでいる。チップ本体の上に直接乗っている間は、
+    // 隙間への挿入(=隣に置く)ではなく「このグループへ参加」の合図に切り替える
+    const chipEl = mode !== 'search' && container === tabsEl ? e.target.closest('.tab-group-chip') : null;
+    if (chipEl) {
+      setChipJoin(chipEl);
+      clearNewGroupTarget();
+      hideDropSlot();
+      barEl.classList.remove('drag-search', 'drag-over');
+      startEdgeScroll(e);
+      return;
+    }
+    clearChipJoin();
+
+    // チップが無い1段目で、他のタブの中央付近に重ねている間は「このタブと新しいグループを作る」の合図にする。
+    // (グループの中身であるタブへ重ねた場合は対象にしない。縦タブでは展開中のグループの中身が
+    //  1段目に混ざって出るため、既存グループに入れる操作と紛れないように除く)
+    const tabEl =
+      mode !== 'search' && container === tabsEl ? e.target.closest('.tab:not(.in-group-list)') : null;
+    const groupCandidate =
+      tabEl && tabEl.dataset.id !== String(draggingId) && newGroupZoneHit(tabEl, e) ? tabEl : null;
+    if (groupCandidate) {
+      setNewGroupTarget(groupCandidate);
+      hideDropSlot();
+      barEl.classList.remove('drag-search', 'drag-over');
+      startEdgeScroll(e);
+      return;
+    }
+    clearNewGroupTarget();
+
     // 検索ドロップのときはバー全体もハイライトして「ここに落とせる」と分かるようにする
     barEl.classList.toggle(container === groupTabsEl ? 'drag-over' : 'drag-search', mode === 'search');
     showDropSlot(computeSlotIndex(e, container), container);
@@ -788,6 +861,8 @@ function attachDropTarget(barEl, container) {
     if (e.relatedTarget && barEl.contains(e.relatedTarget)) return;
     stopEdgeScroll();
     hideDropSlot();
+    clearChipJoin();
+    clearNewGroupTarget();
     barEl.classList.remove('drag-search', 'drag-over');
   });
 
@@ -795,6 +870,42 @@ function attachDropTarget(barEl, container) {
     const mode = dragMode(e);
     if (!mode) return;
     e.preventDefault();
+
+    // チップへの参加はスロット挿入と別処理(グループ側でメンバーを自動的に整列させるので、
+    // 挿入位置の計算は不要でそのまま所属を付け替えるだけでよい)
+    if (chipJoinEl) {
+      const targetGroupId = Number(chipJoinEl.dataset.groupId);
+      clearChipJoin();
+      if (mode === 'reorder') {
+        window.roopie.assignTabGroup(draggingId, targetGroupId);
+      } else if (mode === 'foreign-tab') {
+        const { tabId, windowId } = JSON.parse(e.dataTransfer.getData('application/x-roopie-tab'));
+        // 最終的な位置はgatherGroup任せ(移動直後の一瞬だけ、チップの手前に来るようにしておく)
+        const firstMember = tabState.tabs.find((t) => t.groupId === targetGroupId);
+        const provisionalIndex = firstMember ? tabState.tabs.indexOf(firstMember) : tabState.tabs.length;
+        window.roopie.moveTabFromWindow(windowId, tabId, provisionalIndex);
+        window.roopie.assignTabGroup(tabId, targetGroupId);
+      }
+      barEl.classList.remove('drag-search', 'drag-over');
+      return;
+    }
+
+    // タブ同士を重ねてのドロップ=新しいグループを2枚で作る(そのまま改名できるよう主側が続ける)
+    if (newGroupTargetEl) {
+      const targetTabId = Number(newGroupTargetEl.dataset.id);
+      clearNewGroupTarget();
+      if (mode === 'reorder') {
+        window.roopie.createTabGroup([draggingId, targetTabId]);
+      } else if (mode === 'foreign-tab') {
+        const { tabId, windowId } = JSON.parse(e.dataTransfer.getData('application/x-roopie-tab'));
+        const provisionalIndex = tabState.tabs.indexOf(tabState.tabs.find((t) => t.id === targetTabId));
+        window.roopie.moveTabFromWindow(windowId, tabId, provisionalIndex < 0 ? tabState.tabs.length : provisionalIndex);
+        window.roopie.createTabGroup([tabId, targetTabId]);
+      }
+      barEl.classList.remove('drag-search', 'drag-over');
+      return;
+    }
+
     const slot = dropSlot._index ?? computeSlotIndex(e, container);
     const index = flatDropIndex(slot, container);
     // 2段目に落とした=そのグループへ入れる。1段目に落とした=グループから外す

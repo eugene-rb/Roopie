@@ -284,6 +284,93 @@ app.whenReady().then(async () => {
       false
     );
 
+    // ---- ドラッグ&ドロップでチップに乗せてグループへ参加 ----
+    // 折りたたまれたグループ(2段目を開いていない状態)でも、チップ本体へタブをドロップすれば
+    // そのグループに入る(2段目を開いて差し込む手順を踏まなくてよい)
+    tm.switchTab(solo.id); // グループ外のタブを選び、対象のグループを閉じた(2段目なし)状態にする
+    await sleep(400);
+    const dndResult = await js(
+      wc,
+      `(() => {
+        const soloEl = document.querySelector('.tab[data-id="${solo.id}"]');
+        const chipEl = document.querySelector('.tab-group-chip[data-group-id="${group.id}"]');
+        if (!soloEl || !chipEl) return { エラー: 'チップまたはタブが見つからない' };
+        const dt = new DataTransfer();
+        const fire = (type, target) => {
+          const r = target.getBoundingClientRect();
+          target.dispatchEvent(new DragEvent(type, {
+            bubbles: true, cancelable: true, dataTransfer: dt,
+            clientX: r.left + r.width / 2, clientY: r.top + r.height / 2,
+          }));
+        };
+        fire('dragstart', soloEl);
+        fire('dragover', chipEl);
+        const highlighted = chipEl.classList.contains('drag-over-chip');
+        fire('drop', chipEl);
+        // 実際のdragendは「画面外へ切り離す」判定にOSの実カーソル位置を使うため、
+        // テストでは発火させず後始末の関数だけ直接呼ぶ(切り離し判定を避ける)
+        cleanupDrag();
+        return { ハイライト: highlighted };
+      })()`
+    );
+    await sleep(400);
+    checkTrue('チップへドラッグ中はハイライトする', dndResult.ハイライト === true, dndResult);
+    check('チップへドロップするとそのグループに入る', tm.getTab(solo.id).groupId, group.id);
+    // dragstart時に出したドロップゾーン表示を後始末(実dragendは実カーソル位置での
+    // 切り離し判定を伴うため、テストではIPC経由ではなく直接後始末する)
+    ctx.draggingTabId = null;
+    tm.hideDropZones();
+    tm.removeFromGroup([solo.id]); // 以降のセッション復元テストへ影響しないよう元に戻す
+    await sleep(200);
+
+    // ---- ドラッグ&ドロップでタブ同士を重ねて新しいグループを作る ----
+    // グループ外のタブを2枚重ねると、右クリックメニューの「新しいグループを作成」と同じく
+    // その場でグループができ、そのまま改名できる状態になる
+    const ng1 = addTab(tm, 'https://newgroup-a.test/1');
+    const ng2 = addTab(tm, 'https://newgroup-b.test/1');
+    await sleep(600);
+    const newGroupResult = await js(
+      wc,
+      `(() => {
+        const fromEl = document.querySelector('.tab[data-id="${ng1.id}"]');
+        const toEl = document.querySelector('.tab[data-id="${ng2.id}"]');
+        if (!fromEl || !toEl) return { エラー: 'タブが見つからない' };
+        const dt = new DataTransfer();
+        const fire = (type, target) => {
+          const r = target.getBoundingClientRect();
+          target.dispatchEvent(new DragEvent(type, {
+            bubbles: true, cancelable: true, dataTransfer: dt,
+            clientX: r.left + r.width / 2, clientY: r.top + r.height / 2,
+          }));
+        };
+        fire('dragstart', fromEl);
+        fire('dragover', toEl);
+        const highlighted = toEl.classList.contains('drag-over-newgroup');
+        fire('drop', toEl);
+        cleanupDrag(); // 実dragendは避ける(理由は上のチップ参加テストと同じ)
+        return { ハイライト: highlighted };
+      })()`
+    );
+    await sleep(400);
+    checkTrue('重ねたタブをハイライトする', newGroupResult.ハイライト === true, newGroupResult);
+    const ng1After = tm.getTab(ng1.id);
+    const ng2After = tm.getTab(ng2.id);
+    checkTrue(
+      'タブ同士を重ねると同じ新しいグループに入る',
+      ng1After?.groupId != null && ng1After.groupId === ng2After?.groupId,
+      [ng1After?.groupId, ng2After?.groupId]
+    );
+    const newGroup = tm.getGroup(ng1After?.groupId);
+    checkTrue('作った直後はそのままインライン改名に入れる', await js(wc, `!!document.querySelector('.group-name-input')`), true);
+    await js(wc, `document.querySelector('.group-name-input')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+    await sleep(300);
+    ctx.draggingTabId = null;
+    tm.hideDropZones();
+    tm.closeTab(ng1.id);
+    tm.closeTab(ng2.id); // 空になったグループごと消え、以降のテストへ影響しない
+    await sleep(200);
+    check('後始末で新グループも消える', tm.getGroup(newGroup?.id), null);
+
     // ---- 4) セッション復元 ----
     const snapshot = tm.snapshotTabs();
     const grouped = snapshot.tabs.filter((t) => t.group);

@@ -282,6 +282,14 @@ function registerIpc() {
     if (groupId == null) tabManager.removeFromGroup([tabId]);
     else tabManager.addToGroup(groupId, [tabId]);
   });
+  // タブをタブへドラッグ&ドロップしたときの新規グループ作成。右クリックメニューの
+  // 「新しいグループを作成」と同じく、作った直後にそのまま改名できるようにする
+  ipcMain.on('tab-group:create', (e, tabIds) => {
+    const tabManager = tabsOf(e);
+    if (!tabManager) return;
+    const group = tabManager.createGroup(tabIds);
+    if (group) tabManager.window.webContents.send('tab-group:rename-request', group.id);
+  });
   ipcMain.on('tab-group:context-menu', (e, groupId) => {
     const tabManager = tabsOf(e);
     if (tabManager) showTabGroupMenu(tabManager, groupId);
