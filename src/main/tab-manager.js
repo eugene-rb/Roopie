@@ -255,6 +255,7 @@ class TabManager {
       history = null,
       zoom = 0,
       muted = false,
+      referrer = null,
     } = {}
   ) {
     const id = nextTabId++;
@@ -351,7 +352,7 @@ class TabManager {
     if (!tab.hibernated) {
       // 履歴つきで開き直す場合(閉じたタブを戻す等)は、URLの読み込みではなく履歴ごと流し込む
       if (history?.entries?.length) restoreNavigationHistory(view.webContents, history, url);
-      else view.webContents.loadURL(url);
+      else view.webContents.loadURL(url, referrer?.url ? { httpReferrer: referrer } : undefined);
     }
     if (background) {
       // 見えない位置に置いたままタブバーにだけ足す(今見ているページから離れない)
@@ -566,6 +567,9 @@ class TabManager {
       this.createTab(details.url, {
         background: details.disposition === 'background-tab',
         openerTabId: tab.id,
+        // target="_blank" 等で新規タブに移ると既定ではリファラが消え、
+        // pixiv等のリファラチェックに引っかかる(ホットリンク防止エラー)ため引き継ぐ
+        referrer: details.referrer,
       });
       return { action: 'deny' };
     });
