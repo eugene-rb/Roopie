@@ -1,6 +1,6 @@
 // エントリポイント。アプリのライフサイクルだけを扱う。
 // ブラウザ本体は browser.js、IPCは ipc.js、メニューは menu.js。
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, components } = require('electron');
 const browser = require('./browser');
 const { registerIpc } = require('./ipc');
 const { setupMenu } = require('./menu');
@@ -39,7 +39,8 @@ if (!app.requestSingleInstanceLock()) {
 registerIpc();
 setupVerifyLog();
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  await components.whenReady(); // Widevine CDM(DRM再生)の準備完了を待つ
   browser.initData();
   appState.init();
   defaultBrowser.init();

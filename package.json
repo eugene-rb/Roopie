@@ -29,6 +29,7 @@
       "output": "dist",
       "buildResources": "build"
     },
+    "afterPack": "scripts/vmp-sign.js",
     "files": [
       "src/**/*",
       "package.json"
@@ -71,7 +72,7 @@
   "type": "commonjs",
   "devDependencies": {
     "@tailwindcss/cli": "^4.3.2",
-    "electron": "^43.1.0",
+    "electron": "github:castlabs/electron-releases#v43.2.0+wvcus",
     "electron-builder": "^26.15.3",
     "preline": "^4.2.0",
     "tailwindcss": "^4.3.2"

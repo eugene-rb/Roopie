@@ -32,6 +32,10 @@ concurrency:
 
 env:
   VERSION_BASE: '0.1'
+  # castLabs Electron for Content Security(Widevine対応)のミラー。末尾に v を付けない
+  # (electron-builder/electron側が自動で v を前置するため、付けると vv になり404になる)。
+  # 詳細: docs/decisions/ADR-0001-widevine-castlabs.md
+  ELECTRON_MIRROR: https://github.com/castlabs/electron-releases/releases/download/
 
 jobs:
   build:
@@ -44,6 +48,13 @@ jobs:
         with:
           node-version: 24
           cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: VMP署名ツール(castlabs-evs)をインストール
+        run: python -m pip install castlabs-evs
 
       - name: 依存をインストール
         run: npm ci
@@ -103,6 +114,10 @@ jobs:
         run: npm run release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # afterPackフック(scripts/vmp-sign.js)がこれを見てVMP署名する。無いと署名がスキップされ、
+          # 公開ビルドがDRM動画を再生できなくなる(要: リポジトリSecretsへの事前登録)
+          EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+          EVS_PASSWORD: ${{ secrets.EVS_PASSWORD }}
 
       - name: 公開結果を確認(exe と latest.yml が付いているか)
         shell: bash
