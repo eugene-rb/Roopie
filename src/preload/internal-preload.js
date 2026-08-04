@@ -52,9 +52,11 @@ if (location.protocol === 'roopie:') {
     addShortcut: (pageId, payload) => ipcRenderer.invoke('bookmarks:add-shortcut', pageId, payload),
     updateShortcut: (id, patch) => ipcRenderer.send('bookmarks:update-item', id, patch),
     removeShortcut: (id) => ipcRenderer.send('bookmarks:remove', id),
-    pickShortcutFolder: () => ipcRenderer.invoke('fs:pick-folder'),
+    pickShortcutFolder: (kind) => ipcRenderer.invoke('fs:pick-path', kind), // kind: 'file' | 'folder'
     fetchPageTitle: (url) => ipcRenderer.invoke('page:fetch-title', url),
     openShortcutFolder: (folderPath) => ipcRenderer.send('fs:open-folder', folderPath),
+    pickLocalPath: (kind) => ipcRenderer.invoke('fs:pick-path', kind), // kind: 'file' | 'folder'
+    pathToFileUrl: (rawPath) => ipcRenderer.invoke('fs:path-to-file-url', rawPath),
 
     // スタート画面のウィジェット(グリッド配置・天気・RSS)
     getWidgetLayout: (pageId) => ipcRenderer.invoke('widgets:layout', pageId),

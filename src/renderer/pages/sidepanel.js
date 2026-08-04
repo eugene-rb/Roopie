@@ -447,17 +447,34 @@ function closeBookmarkAddModal() {
   bookmarkAddModal.classList.add('hidden');
 }
 
-function applyBookmarkAdd() {
+async function applyBookmarkAdd() {
   const raw = bookmarkAddUrl.value.trim();
-  if (!looksLikeUrl(raw)) {
-    bookmarkAddError.textContent = '正しいURLを入力してください';
+  // 絶対パス(C:\... や /... )ならローカルのファイル/フォルダとして file:// URLに変換する
+  const localUrl = await window.roopieInternal.pathToFileUrl(raw);
+  let url;
+  if (localUrl) {
+    url = localUrl;
+  } else if (looksLikeUrl(raw)) {
+    url = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`;
+  } else {
+    bookmarkAddError.textContent = '正しいURL、またはローカルのファイル/フォルダのパスを入力してください';
     bookmarkAddError.classList.remove('hidden');
     return;
   }
-  const url = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`;
-  window.roopieInternal.addBookmark(url, bookmarkAddName.value.trim() || url, bookmarkAddParentId);
+  window.roopieInternal.addBookmark(url, bookmarkAddName.value.trim() || raw, bookmarkAddParentId);
   closeBookmarkAddModal();
 }
+
+// Windowsのネイティブダイアログは openFile と openDirectory を同時指定するとフォルダ選択優先になり
+// ファイルが選べなくなるため、ファイル用/フォルダ用のボタンを分ける
+$('bookmark-add-pick-file').addEventListener('click', async () => {
+  const picked = await window.roopieInternal.pickLocalPath('file');
+  if (picked) bookmarkAddUrl.value = picked;
+});
+$('bookmark-add-pick-folder').addEventListener('click', async () => {
+  const picked = await window.roopieInternal.pickLocalPath('folder');
+  if (picked) bookmarkAddUrl.value = picked;
+});
 
 $('bookmark-add-apply').addEventListener('click', applyBookmarkAdd);
 $('bookmark-add-cancel').addEventListener('click', closeBookmarkAddModal);
@@ -1390,7 +1407,7 @@ function looksLikeUrl(text) {
   const t = text.trim();
   if (!t || /\s/.test(t)) return false;
   try {
-    new URL(/^https?:/i.test(t) ? t : `https://${t}`);
+    new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(t) ? t : `https://${t}`);
     return true;
   } catch {
     return false;

@@ -385,7 +385,7 @@ searchEl.addEventListener('keydown', (e) => {
 });
 
 // ---- ショートカット(bookmarksの "start" フォルダ以下。ページ=サブフォルダ) ----
-// ショートカットのURLは file:// で始まればローカルフォルダ、それ以外はページ
+// ショートカットのURLは file:// で始まればローカルのファイル/フォルダ、それ以外はページ
 let pages = [];
 let currentPageId = null;
 let shortcuts = [];
@@ -2011,7 +2011,7 @@ function openShortcutModal(existing) {
   const kindRow = document.createElement('div');
   kindRow.className = 'shortcut-kind-row';
   const kindUrl = radioOption('shortcut-kind', 'url', 'ページ', existingKind !== 'folder');
-  const kindFolder = radioOption('shortcut-kind', 'folder', 'フォルダ', existingKind === 'folder');
+  const kindFolder = radioOption('shortcut-kind', 'folder', 'ファイル/フォルダ', existingKind === 'folder');
   kindRow.append(kindUrl.wrap, kindFolder.wrap);
   modal.appendChild(kindRow);
 
@@ -2029,23 +2029,35 @@ function openShortcutModal(existing) {
   urlInput.value = existingKind !== 'folder' ? existingTarget : '';
   modal.appendChild(urlInput);
 
+  // Windowsのネイティブダイアログは openFile と openDirectory を同時指定するとフォルダ選択優先になり
+  // ファイルが選べなくなるため、ファイル用/フォルダ用のボタンを分ける
   let pickedFolder = existingKind === 'folder' ? existingTarget : '';
   const folderRow = document.createElement('div');
   folderRow.className = 'shortcut-folder-row';
   const folderPathText = document.createElement('span');
   folderPathText.className = 'shortcut-folder-path';
   folderPathText.textContent = pickedFolder || '未選択';
-  const folderPickBtn = document.createElement('button');
-  folderPickBtn.className = 'btn';
-  folderPickBtn.textContent = 'フォルダを選択';
-  folderPickBtn.addEventListener('click', async () => {
-    const picked = await window.roopieInternal.pickShortcutFolder();
+  const filePickBtn = document.createElement('button');
+  filePickBtn.className = 'btn';
+  filePickBtn.textContent = 'ファイルを選択';
+  filePickBtn.addEventListener('click', async () => {
+    const picked = await window.roopieInternal.pickShortcutFolder('file');
     if (picked) {
       pickedFolder = picked;
       folderPathText.textContent = picked;
     }
   });
-  folderRow.append(folderPickBtn, folderPathText);
+  const folderPickBtn = document.createElement('button');
+  folderPickBtn.className = 'btn';
+  folderPickBtn.textContent = 'フォルダを選択';
+  folderPickBtn.addEventListener('click', async () => {
+    const picked = await window.roopieInternal.pickShortcutFolder('folder');
+    if (picked) {
+      pickedFolder = picked;
+      folderPathText.textContent = picked;
+    }
+  });
+  folderRow.append(filePickBtn, folderPickBtn, folderPathText);
   modal.appendChild(folderRow);
 
   function syncKindVisibility() {
@@ -2133,13 +2145,17 @@ function openShortcutModal(existing) {
     const target = kind === 'folder' ? pickedFolder : urlInput.value.trim();
     if (!target) return;
     if (!name) {
-      if (kind !== 'url') return;
-      // 名前が空欄ならページのタイトルを自動取得(失敗時はホスト名)
-      saveBtn.disabled = true;
-      saveBtn.textContent = 'タイトル取得中…';
-      name = (await window.roopieInternal.fetchPageTitle(target)) || hostnameOf(target) || target;
-      saveBtn.disabled = false;
-      saveBtn.textContent = '保存';
+      if (kind === 'url') {
+        // 名前が空欄ならページのタイトルを自動取得(失敗時はホスト名)
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'タイトル取得中…';
+        name = (await window.roopieInternal.fetchPageTitle(target)) || hostnameOf(target) || target;
+        saveBtn.disabled = false;
+        saveBtn.textContent = '保存';
+      } else {
+        // ファイル/フォルダは末尾の名前を既定名にする(パスの区切りはWindows/POSIXどちらも対応)
+        name = target.split(/[\\/]/).filter(Boolean).pop() || target;
+      }
     }
 
     if (existing) {

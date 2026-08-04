@@ -1,4 +1,6 @@
 const fs = require('fs');
+const path = require('path');
+const { pathToFileURL } = require('url');
 const { ipcMain, dialog, shell, net, clipboard, screen } = require('electron');
 const windows = require('./windows');
 const browser = require('./browser');
@@ -1113,6 +1115,28 @@ function registerIpc() {
   });
   ipcMain.on('fs:open-folder', (_e, folderPath) => {
     if (typeof folderPath === 'string' && folderPath) shell.openPath(folderPath);
+  });
+  // ファイルまたはフォルダを選ぶダイアログ(ブックマーク・ショートカットへのローカルパス登録用)。
+  // WindowsではopenFile+openDirectoryを同時指定するとフォルダ選択優先になりファイルを選べなくなるため、
+  // 呼び出し側が明示的にどちらのダイアログを開くか指定する('file' | 'folder')
+  ipcMain.handle('fs:pick-path', async (e, kind) => {
+    const window = ctxOf(e)?.window;
+    if (!window) return null;
+    const result = await dialog.showOpenDialog(window, {
+      properties: [kind === 'folder' ? 'openDirectory' : 'openFile'],
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
+  // OSの絶対パス文字列を file:// URLに変換する(空白や日本語を含むパスをnew URL()できる形にエンコードするため)
+  ipcMain.handle('fs:path-to-file-url', (_e, rawPath) => {
+    if (typeof rawPath !== 'string') return null;
+    const p = rawPath.trim();
+    if (!p || !path.isAbsolute(p)) return null;
+    try {
+      return pathToFileURL(p).href;
+    } catch {
+      return null;
+    }
   });
 
   // ---- 設定 ----
