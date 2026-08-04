@@ -18,9 +18,11 @@ module.exports = async function afterPack(context) {
     return;
   }
   console.log(`[vmp-sign] VMP署名を実行します: ${context.appOutDir}`);
+  // -n(非対話モード)は castlabs_evs.vmp 本体のオプションであり、sign-pkg のオプションではない。
+  // sign-pkgの後ろに置くと "unrecognized arguments: -n" で失敗する(2026-08-04 CIで実際に発生)。
   execFileSync(
     'python',
-    ['-m', 'castlabs_evs.vmp', 'sign-pkg', '-n', '-A', account, '-P', password, context.appOutDir],
+    ['-m', 'castlabs_evs.vmp', '-n', 'sign-pkg', '-A', account, '-P', password, context.appOutDir],
     { stdio: 'inherit' }
   );
 };
