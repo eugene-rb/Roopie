@@ -2,9 +2,10 @@
 
 ## State
 
-- 作業対象: `src/renderer/tailwind.css`, `src/renderer/pages/onboarding.css`
-- 完了度: 0%（着手直後）
+- 作業対象: `src/renderer/tailwind.css`, `src/renderer/pages/onboarding.css`, `scripts/gen-screenshots.js`
+- 完了度: **100%（全7ステップ完了）**
 - ブロッカー: なし
+- 残った未確認: ミニプレイヤー/タイマーの実描画の目視のみ（透明ビューであることはソースで確定済み）
 
 ## 背景
 
@@ -52,18 +53,36 @@
       いずれも既に `--card`/`--card-hover` 参照だったので、ステップ2のトークン差し替えで
       色は自動的に揃っていた。足したのは `.panel-menu` `.panel-input` のぼかしのみ。
       `.section-tabs` は背景なし（`border-left` だけ）なので対象外。
-- [ ] 4. タイマーパネル / メディアプレイヤー — `tailwind.css`
-      **要実機確認**: `.player-body` `.timerp-body` は `background: transparent` の
-      浮遊オーバーレイ。透明な WebContentsView なら `backdrop-filter` が**本物に効く**が、
-      そうでなければ黒が出る。ステップ6の検証で確かめてから実装方針を決める。
-      現状はステップ1の除外リストに入れてあり、従来通り不透明のまま（＝安全側）。
+- [x] 4. タイマーパネル / メディアプレイヤー — `tailwind.css` → `87ec2e8`
+      懸案だった「透明ビューか否か」は**ソースで決着**: `media-player.js:39` と
+      `timer-panel.js:41` がどちらも `transparent: true` かつ
+      `setBackgroundColor('#00000000')`。よって背後にあるのは自前の光ではなく
+      **実際のウェブページ**で、`backdrop-filter` が本当にページをぼかす。
+      ここだけは**本物のガラス**にできるので、面を薄めた（薄めても黒は出ない）。
+      タイマーのピルは iOS ライブアクティビティ風の固定色だが、実機のそれ自体が
+      半透明マテリアルなのでガラス化は意図に沿う。高さ44pxは `ROW_HEIGHT` と
+      対応しているので触っていない。
+      color-mix 非対応時のフォールバックは**不透明側**に落ちるので黒くならない。
+      **未実施**: この2つは `gen-screenshots.js` に写らないため、実描画の目視は未確認。
+      見るなら `npx electron scripts/test-media-player.js` / `test-timer-ui.js`。
 - [x] 5. オンボーディングの質感合わせ — `onboarding.css` → `69e1912`
       **計画から逸脱**: 当初は `--tint` 経由にする予定だったが、このページは
       `--ob-bg: #0f1117` で**常にダーク固定**と判明。`--tint` はライトモードで黒側に
       反転するので、暗い背景に黒の重ね色が乗って面が消える。よって白のまま値だけ揃えた
       （`--ob-card` 0.05→0.10、`--ob-border` 0.1→0.18）＋コンテナ級に `backdrop-filter`。
-- [ ] 6. `start:verify` + 既存ハーネスでスクショ確認
-- [ ] 7. `SPEC-theme.md` 追記・このログの仕上げ
+- [x] 6. `start:verify` + 既存ハーネスでスクショ確認 → `b9f865f`
+      `start:verify`: 起動しエラーなし。ログに出るのは既存のもの（ユーザーの拡張機能の
+      権限警告と、復元されたYouTubeタブのCORS）だけで、CSS変更由来のものは無し。
+      **注意**: Roopie が起動中だと単一インスタンスロックで検証用の起動が即 exit 0 する。
+      ログが空で終わったらまず `Get-Process Roopie` を疑うこと。
+      スクショ: `gen-screenshots.js` に `07-theme-glass-{dark,light}` を追加して撮影。
+      - glass × ダーク → 光が出てカードが半透明ガラスになる ✓
+      - glass × ライト → 光もカードも見える（`--tint` 反転が効き面が消えない）✓
+      - **solid × ダーク（既存の `04-settings`）→ 完全に従来通り。退行なし** ✓
+- [x] 7. `SPEC-theme.md` 追記・このログの仕上げ
+      「背後にあるものごとに3通り」の表を詳細節に追加。制約節に
+      「`--surface-alpha` を内部ページで下げてはならない」と単一インスタンスロックの罠を明記。
+      検証節にスクショの見どころを追加。
 
 ## 中断したときの再開手順
 
@@ -88,7 +107,23 @@
 - パターン様式の細線が blur で消える → `data-window-pattern` 系には blur を掛けない
   （`tailwind.css:191-193` の既存方針を踏襲）。
 
+## 結果
+
+`liquidglass` を選ぶと、クロームだけでなく**内部ページ・オンボーディング・
+ミニプレイヤー・タイマー**までガラスになる。設定項目は1つも増やしていない
+（既存の外観スタイル選択にすべて紐づく）。`solid` 等では1行も効かない。
+
+背後にあるものが3通りあり、それぞれ作り方が違うのがこの実装の要点:
+
+| 対象 | 背後 | 作り方 |
+| --- | --- | --- |
+| クローム | ウィンドウのacrylic | 帯を透かして `backdrop-filter` |
+| 内部ページ | **何もない**（透かすと黒） | 自前で光を敷き、その上の面をぼかす |
+| プレイヤー・タイマー | **実ページ** | 面を薄めて素通しでぼかす＝本物のガラス |
+
 ## Next Steps
 
-1. ステップ1から順に実施
-2. 各ステップ後に `npm run build:css`（`app.css` は生成物、直接編集しない）
+- ミニプレイヤー / タイマーの実描画を見る:
+  `npx electron scripts/test-media-player.js` / `scripts/test-timer-ui.js`
+- 光の強さ（`--accent` 40%/22%/26%）は控えめにしてある。もっと出したい/抑えたいと
+  言われたら `tailwind.css` の内部ページ用 `background-image` の3つの radial-gradient を触る。
