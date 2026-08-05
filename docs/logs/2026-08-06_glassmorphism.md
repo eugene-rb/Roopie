@@ -34,11 +34,34 @@
 
 ## 作業ステップ（1ステップ = 1コミット、`glassmorphism: <名前>`）
 
-- [ ] 1. ガラストークン + 内部ページ背景レイヤー — `tailwind.css`
-- [ ] 2. 汎用ページのガラス化（`.card` `.search` `.list` `.modal` `.empty-state`） — `tailwind.css`
-- [ ] 3. サイドパネルのガラス化（`.section-tabs` `.panel-menu` `.panel-input` 等） — `tailwind.css`
+- [x] 1. ガラストークン + 内部ページ背景レイヤー — `tailwind.css` → `2733e5e`
+      追加トークン: `--glass-surface` `--glass-hover` `--glass-border` `--glass-page-blur`
+      （既定は `--card`/`--card-hover`/`--border`/`0px` にエイリアス＝glass以外は無変化）
+      背景レイヤーは `body` の `background-image`(fixed) として敷く。`::before` にしないのは
+      背景伝播とスタッキングの罠を避けるため。除外: `.chrome-body` `.menu-body` `.onboarding`
+      `.player-body` `.timerp-body` `.divider-body` `[data-bg]`
+- [x] 2. 汎用ページのガラス化 — `tailwind.css` → `f49f83d`
+      **トークン差し替え方式**を採用: body スコープで `--card` / `--card-hover` を
+      `--glass-surface` / `--glass-hover` に差し替えると、`.card` `.search` `.btn` `.modal`
+      とそのホバーが一度に揃う。個々のルールを書き換えるより差分が圧倒的に小さい。
+      ぼかしは `:is(.card, .search, .modal)` だけ（行・ボタンは数が多くGPUが重い）。
+      `.list` `.empty-state` は背景を持たないコンテナなので対象外だった。
+      `.card`/`.modal` は `menu.html` でも使われている（10箇所ヒット）ため body スコープ必須。
+- [x] 3. サイドパネルのガラス化 — `tailwind.css` → `f167106`
+      `.section-tab.active` `.panel-item:hover` `.panel-menu` `.panel-input` は
+      いずれも既に `--card`/`--card-hover` 参照だったので、ステップ2のトークン差し替えで
+      色は自動的に揃っていた。足したのは `.panel-menu` `.panel-input` のぼかしのみ。
+      `.section-tabs` は背景なし（`border-left` だけ）なので対象外。
 - [ ] 4. タイマーパネル / メディアプレイヤー — `tailwind.css`
-- [ ] 5. オンボーディングの質感合わせ — `onboarding.css`
+      **要実機確認**: `.player-body` `.timerp-body` は `background: transparent` の
+      浮遊オーバーレイ。透明な WebContentsView なら `backdrop-filter` が**本物に効く**が、
+      そうでなければ黒が出る。ステップ6の検証で確かめてから実装方針を決める。
+      現状はステップ1の除外リストに入れてあり、従来通り不透明のまま（＝安全側）。
+- [x] 5. オンボーディングの質感合わせ — `onboarding.css` → `69e1912`
+      **計画から逸脱**: 当初は `--tint` 経由にする予定だったが、このページは
+      `--ob-bg: #0f1117` で**常にダーク固定**と判明。`--tint` はライトモードで黒側に
+      反転するので、暗い背景に黒の重ね色が乗って面が消える。よって白のまま値だけ揃えた
+      （`--ob-card` 0.05→0.10、`--ob-border` 0.1→0.18）＋コンテナ級に `backdrop-filter`。
 - [ ] 6. `start:verify` + 既存ハーネスでスクショ確認
 - [ ] 7. `SPEC-theme.md` 追記・このログの仕上げ
 

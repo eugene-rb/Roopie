@@ -153,6 +153,18 @@ app.whenReady().then(async () => {
     await sleep(2500);
     await shot(ctx, '06-theme-light');
 
+    // 7) liquidglass。クロームの帯だけでなく内部ページの面もガラスになる。
+    //    カードが並ぶ設定画面が一番よく分かる。面の重ね色は --tint 経由なので、
+    //    ライトでは黒側へ反転して面が消えないことを見るためダーク・ライト両方を撮る
+    ctx.sidePanel.setOpen(true);
+    ctx.sidePanel.openSection('bookmarks');
+    tabs.createTab('roopie://settings');
+    for (const windowMode of ['dark', 'light']) {
+      browser.setThemeFor(profileId, { windowMode, windowStyle: 'glass' });
+      await sleep(2500);
+      await shot(ctx, `07-theme-glass-${windowMode}`);
+    }
+
     console.log('出力先:', OUT_DIR);
   } catch (err) {
     console.error('失敗:', err);
