@@ -56,6 +56,12 @@
   /* liquidglass のときだけ効く光沢(既定では何も足さない) */
   --glass-sheen: none;
   --glass-blur: 0px;
+  /* 内部ページ(履歴・設定・サイドパネル等)のガラス面。
+     liquidglass 以外では通常の面と同じ値にしておき、うっかり参照しても見た目が変わらないようにする */
+  --glass-surface: var(--card);
+  --glass-hover: var(--card-hover);
+  --glass-border: var(--border);
+  --glass-page-blur: 0px;
   /* 音声再生中タブのエフェクトの色。設定で指定があればJSが上書きするが、
      未定義だと color-mix() ごと無効になってエフェクトが丸ごと消えるので既定値を置く */
   --audio-fx-1: var(--accent);
@@ -171,6 +177,12 @@ body {
   --glass-sheen:
     inset 0 1px 0 rgb(var(--tint) / 0.3),
     inset 0 -1px 0 rgb(var(--tint) / 0.07);
+  /* 内部ページ側の面。白決め打ちではなく --tint 経由にすることで、
+     ライトモード(--tint が 15 23 42 になる)でも黒側の重ね色になり、面が消えない */
+  --glass-surface: rgb(var(--tint) / 0.1);
+  --glass-hover: rgb(var(--tint) / 0.16);
+  --glass-border: rgb(var(--tint) / 0.18);
+  --glass-page-blur: 12px;
 }
 
 :root[data-window-style="glass"] #tab-bar,
@@ -191,6 +203,35 @@ body {
 /* グラデーションとパターンには backdrop-filter を掛けない。
    帯の背後にあるのはページではなくウィンドウ自身が描いた絵なので、
    ぼかすと自分の模様を潰してしまう(パターンの細い線が消える) */
+
+/* ---- liquidglass: 内部ページ(履歴・ブックマーク・DL・設定・サイドパネル) ----
+   クロームと違い、内部ページは**背後に透かすものが無い**。WebContentsView 自体が
+   transparent ではないため、透かしても背後のacrylicではなく黒が出る
+   (window-theme.js の冒頭コメントと SPEC-theme.md の制約を参照)。
+   そこで --surface-alpha には触れず、**ページ自身がアクセント色の光を敷き**、
+   その上の面を backdrop-filter でぼかしてガラスを作る。
+   同じドキュメント内の背景なのでぼかしが正しく効く。
+   オンボーディング(onboarding.css の .ob-glow)が既にやっている手法の一般化。
+
+   除外するもの:
+     .chrome-body    ブラウザUI。上のクローム用ルールが担当する
+     .menu-body      本物のacrylicが効いている(theme.js が overlay を渡す)。光を敷くと潰れる
+     .onboarding     自前の .ob-glow を持つ
+     .player-body /
+     .timerp-body /
+     .divider-body   背景が transparent な浮遊オーバーレイ。全面を塗ると浮遊感が壊れる
+     [data-bg]       新しいタブ。独自の背景システム(newtab.css)を持つ */
+:root[data-window-style="glass"]
+  body:not(.chrome-body):not(.menu-body):not(.onboarding):not(.player-body):not(.timerp-body):not(.divider-body):not([data-bg]) {
+  /* background-color(--bg / サイドパネルの --bg-toolbar)はそのまま活かし、絵だけを重ねる。
+     スクロールしても光が動かないよう fixed にする */
+  background-image:
+    radial-gradient(58% 68% at 10% 0%, color-mix(in srgb, var(--accent) 40%, transparent) 0%, transparent 62%),
+    radial-gradient(54% 62% at 90% 16%, color-mix(in srgb, var(--accent) 22%, transparent) 0%, transparent 64%),
+    radial-gradient(72% 60% at 50% 108%, color-mix(in srgb, var(--accent) 26%, transparent) 0%, transparent 66%);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+}
 
 /* パターン(下地色と線の色の2色。種類は data-window-pattern)。
    「新しいタブ」側(newtab.css)と同じ模様をクローム用の面へ描く */
