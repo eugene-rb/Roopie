@@ -1,12 +1,25 @@
 /* 初回起動のイントロ(welcome.html)とアップデート後の変更点(whatsnew.html)の共通スタイル。
    app.css(Tailwind生成物)の上に重ねる独立したページ用スタイル。 */
 
+/* このページは明暗の設定に関わらず**常にダーク固定**(--ob-bg が固定色)。
+   そのため app.css 側の --tint(ライトで黒側に反転する重ね色)は使わず、白のまま持つ。
+   値だけを内部ページのガラス面(--glass-surface: 0.10 / --glass-border: 0.18)に揃える */
 :root {
   --ob-bg: #0f1117;
-  --ob-card: rgba(255, 255, 255, 0.05);
-  --ob-border: rgba(255, 255, 255, 0.1);
+  --ob-card: rgba(255, 255, 255, 0.1);
+  --ob-border: rgba(255, 255, 255, 0.18);
   --ob-text: #e8eaf0;
   --ob-dim: #9aa1b1;
+}
+
+/* 背後の .ob-glow(アクセント色のぼかし光)をガラス越しに透かして、
+   内部ページの liquidglass と同じ質感にする。
+   ぼかしはコンテナ級の面だけに掛ける(app.css 側と同じ方針) */
+.ob-card,
+.ob-choice,
+.ob-result,
+.ob-btn {
+  backdrop-filter: blur(12px) saturate(160%);
 }
 
 html,
