@@ -250,6 +250,29 @@ body {
   backdrop-filter: blur(var(--glass-page-blur)) saturate(160%);
 }
 
+/* ---- liquidglass: ミニプレイヤーとタイマー(ここだけ**本物**のガラス) ----
+   この2つは transparent:true の浮遊ビュー(media-player.js:39 / timer-panel.js:41。
+   どちらも setBackgroundColor('#00000000') も入る)。上の内部ページ群と違い、
+   背後にあるのは自前で敷いた光ではなく**実際のウェブページ**なので、
+   backdrop-filter が本当にページをぼかす。だから面を薄めてよい(薄めても黒は出ない) */
+:root[data-window-style="glass"] .player-body #player {
+  background: color-mix(in srgb, var(--c-menu) 55%, transparent);
+  border-color: var(--glass-border);
+  box-shadow: var(--glass-sheen), 0 10px 28px rgb(0 0 0 / 0.4);
+  backdrop-filter: blur(14px) saturate(160%);
+}
+
+/* タイマーのピルはiOSのライブアクティビティ風の固定色(テーマに追従しない)。
+   実機のライブアクティビティ自体が半透明マテリアルなので、ガラスにするのは
+   元の意図に沿う。高さ44pxは timer-panel.js の ROW_HEIGHT と対応しているため触らない */
+:root[data-window-style="glass"] .timerp-body .timerp-row {
+  background: rgb(28 28 30 / 0.62);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.14),
+    0 6px 20px rgb(0 0 0 / 0.45);
+  backdrop-filter: blur(14px) saturate(160%);
+}
+
 /* パターン(下地色と線の色の2色。種類は data-window-pattern)。
    「新しいタブ」側(newtab.css)と同じ模様をクローム用の面へ描く */
 :root[data-window-pattern="dots"] .chrome-body {
