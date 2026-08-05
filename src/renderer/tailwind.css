@@ -62,6 +62,9 @@
   --glass-hover: var(--card-hover);
   --glass-border: var(--border);
   --glass-page-blur: 0px;
+  /* 浮遊して下を隠すのが仕事の面(メニュー・ピッカー・モーダル)用。
+     --glass-surface より濃い。理由は使う側のコメントを参照 */
+  --glass-menu: var(--menu-bg);
   /* 音声再生中タブのエフェクトの色。設定で指定があればJSが上書きするが、
      未定義だと color-mix() ごと無効になってエフェクトが丸ごと消えるので既定値を置く */
   --audio-fx-1: var(--accent);
@@ -183,6 +186,8 @@ body {
   --glass-hover: rgb(var(--tint) / 0.16);
   --glass-border: rgb(var(--tint) / 0.18);
   --glass-page-blur: 12px;
+  /* 面を隠すのが仕事のものはここまで濃くする(--glass-surface の 0.1 では下が透ける) */
+  --glass-menu: color-mix(in srgb, var(--c-menu) 88%, transparent);
 }
 
 :root[data-window-style="glass"] #tab-bar,
@@ -244,10 +249,20 @@ body {
    (履歴は数百行になりうる)。色はトークン差し替えで揃っているので見た目は破綻しない */
 :root[data-window-style="glass"]
   body:not(.chrome-body):not(.menu-body):not(.onboarding):not(.player-body):not(.timerp-body):not(.divider-body):not([data-bg])
-  :is(.card, .search, .modal, .panel-menu, .panel-input) {
+  :is(.card, .search, .modal, .panel-menu, .panel-input, .icon-picker, .tr-more-menu) {
   border-color: var(--glass-border);
   box-shadow: var(--glass-sheen);
   backdrop-filter: blur(var(--glass-page-blur)) saturate(160%);
+}
+
+/* **下を隠すのが仕事の面**は、--card のトークン差し替え(0.1)をそのまま受けると
+   後ろの内容が透けて読めてしまう。ドロップダウン・アイコンピッカー・モーダルが該当。
+   モーダルは .modal-backdrop(黒50%)の上に乗るので、薄いままだと自分の暗幕と
+   見分けがつかなくなる。ガラスの質感(ぼかしと縁)は残したまま濃さだけ戻す */
+:root[data-window-style="glass"]
+  body:not(.chrome-body):not(.menu-body):not(.onboarding):not(.player-body):not(.timerp-body):not(.divider-body):not([data-bg])
+  :is(.modal, .panel-menu, .icon-picker, .tr-more-menu) {
+  background: var(--glass-menu);
 }
 
 /* ---- liquidglass: ミニプレイヤーとタイマー(ここだけ**本物**のガラス) ----
