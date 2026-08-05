@@ -244,7 +244,7 @@ body {
    (履歴は数百行になりうる)。色はトークン差し替えで揃っているので見た目は破綻しない */
 :root[data-window-style="glass"]
   body:not(.chrome-body):not(.menu-body):not(.onboarding):not(.player-body):not(.timerp-body):not(.divider-body):not([data-bg])
-  :is(.card, .search, .modal) {
+  :is(.card, .search, .modal, .panel-menu, .panel-input) {
   border-color: var(--glass-border);
   box-shadow: var(--glass-sheen);
   backdrop-filter: blur(var(--glass-page-blur)) saturate(160%);
