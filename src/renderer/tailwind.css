@@ -231,6 +231,23 @@ body {
     radial-gradient(72% 60% at 50% 108%, color-mix(in srgb, var(--accent) 26%, transparent) 0%, transparent 66%);
   background-attachment: fixed;
   background-repeat: no-repeat;
+
+  /* 面の色は個々のルールを書き換えるのではなく**トークンを差し替える**。
+     こうすると .card / .search / .btn / .modal とそのホバーが一度に揃い、
+     液体ガラス以外では :root の既定(不透明)に戻るだけで済む */
+  --card: var(--glass-surface);
+  --card-hover: var(--glass-hover);
+}
+
+/* ぼかしはコンテナ級の面だけに掛ける。
+   行(.row)やボタン(.btn)は数が多く、1つずつ backdrop-filter を持たせるとGPUが重い
+   (履歴は数百行になりうる)。色はトークン差し替えで揃っているので見た目は破綻しない */
+:root[data-window-style="glass"]
+  body:not(.chrome-body):not(.menu-body):not(.onboarding):not(.player-body):not(.timerp-body):not(.divider-body):not([data-bg])
+  :is(.card, .search, .modal) {
+  border-color: var(--glass-border);
+  box-shadow: var(--glass-sheen);
+  backdrop-filter: blur(var(--glass-page-blur)) saturate(160%);
 }
 
 /* パターン(下地色と線の色の2色。種類は data-window-pattern)。
