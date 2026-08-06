@@ -136,6 +136,27 @@ body[data-bg="gradient"] #bg {
   animation: none;
 }
 
+/* ---- リキッドガラス ----
+   アクセント色の柔らかいオーブを深い下地に浮かべる。時計・検索欄・タイル・ウィジェットは
+   もともと backdrop-filter を持っているので、この上に置くだけで曇りガラスとして立つ。
+   #bg 既定の bg-drift(80秒)はそのまま効かせて、オーブがゆっくり動くようにする */
+body[data-bg="glass"] #bg {
+  background:
+    radial-gradient(46% 54% at 16% 20%, color-mix(in srgb, var(--accent) 78%, transparent) 0%, transparent 62%),
+    radial-gradient(40% 46% at 84% 14%, color-mix(in srgb, var(--accent) 42%, #7ad7f0) 0%, transparent 64%),
+    radial-gradient(54% 60% at 74% 90%, color-mix(in srgb, var(--accent) 34%, #ff8fa3) 0%, transparent 66%),
+    linear-gradient(168deg, #0d1022 0%, #171a33 54%, #221a3a 100%);
+}
+
+/* ウィンドウの外観も liquidglass のときは、絵を描かずに素通しする。
+   新しいタブのViewは透明なので(tab-manager.js の createTab)、ウィンドウのacrylic越しに
+   デスクトップがぼけて見える。ここだけは**本物のガラス**になる。
+   ドリフトは動かすものが無くなるので止める */
+:root[data-window-style="glass"] body[data-bg="glass"] #bg {
+  background: transparent;
+  animation: none;
+}
+
 /* ---- 三体問題シミュレーション ---- */
 #bg-sim {
   position: fixed;

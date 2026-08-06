@@ -153,7 +153,9 @@ const DEFAULT_THEME = {
   windowPattern: 'dots',
   windowPatternColor: '#6c8cff',
 };
-const THEME_BACKGROUNDS = ['auto', 'dawn', 'day', 'dusk', 'night', 'plain', 'image', 'pattern', 'gradient', 'threebody'];
+// 'glass' はウィンドウ外観の 'glass'(WINDOW_STYLES)とは別物。こちらは新しいタブの背景で、
+// 普段はページ自身がオーブを描き、ウィンドウ外観も liquidglass のときだけ本物の透過になる
+const THEME_BACKGROUNDS = ['auto', 'dawn', 'day', 'dusk', 'night', 'plain', 'image', 'pattern', 'gradient', 'threebody', 'glass'];
 const THEME_PATTERNS = ['dots', 'grid', 'diagonal', 'crosshatch', 'hexagon', 'wave', 'circuit'];
 const WINDOW_MODES = ['system', 'dark', 'light'];
 const WINDOW_STYLES = ['solid', 'translucent', 'gradient', 'glass', 'pattern'];
