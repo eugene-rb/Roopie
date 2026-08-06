@@ -228,12 +228,18 @@ body {
      [data-bg]       新しいタブ。独自の背景システム(newtab.css)を持つ */
 :root[data-window-style="glass"]
   body:not(.chrome-body):not(.menu-body):not(.onboarding):not(.player-body):not(.timerp-body):not(.divider-body):not([data-bg]) {
-  /* background-color(--bg / サイドパネルの --bg-toolbar)はそのまま活かし、絵だけを重ねる。
+  /* 下地。--page-scrim が 0%(既定)なら完全に透明になり、透明なViewを素通しして
+     ウィンドウのacrylicが出る。上げるとその分だけ下地が戻り、明るい壁紙でも文字が読める。
+     --surface-alpha とは別の仕組み(あちらを内部ページで下げると黒画面になる)なので混同しない */
+  background-color: color-mix(in srgb, var(--page-base, var(--bg)) var(--page-scrim, 0%), transparent);
+
+  /* アクセント色の光。もともと「本物の透過が使えない」ことの代替として入れたもので、
+     acrylicの上に元の濃さで重ねると濁る。liquidglassの色の個性は残したいので減光にとどめる。
      スクロールしても光が動かないよう fixed にする */
   background-image:
-    radial-gradient(58% 68% at 10% 0%, color-mix(in srgb, var(--accent) 40%, transparent) 0%, transparent 62%),
-    radial-gradient(54% 62% at 90% 16%, color-mix(in srgb, var(--accent) 22%, transparent) 0%, transparent 64%),
-    radial-gradient(72% 60% at 50% 108%, color-mix(in srgb, var(--accent) 26%, transparent) 0%, transparent 66%);
+    radial-gradient(58% 68% at 10% 0%, color-mix(in srgb, var(--accent) 22%, transparent) 0%, transparent 62%),
+    radial-gradient(54% 62% at 90% 16%, color-mix(in srgb, var(--accent) 12%, transparent) 0%, transparent 64%),
+    radial-gradient(72% 60% at 50% 108%, color-mix(in srgb, var(--accent) 14%, transparent) 0%, transparent 66%);
   background-attachment: fixed;
   background-repeat: no-repeat;
 
@@ -242,6 +248,11 @@ body {
      液体ガラス以外では :root の既定(不透明)に戻るだけで済む */
   --card: var(--glass-surface);
   --card-hover: var(--glass-hover);
+}
+
+/* サイドパネルの下地はツールバー色に揃える(不透明だった頃と同じ色から薄めるため) */
+:root[data-window-style="glass"] .panel-body {
+  --page-base: var(--bg-toolbar);
 }
 
 /* ぼかしはコンテナ級の面だけに掛ける。
