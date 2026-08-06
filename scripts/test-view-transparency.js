@@ -130,7 +130,24 @@ app.whenReady().then(async () => {
     },
   ];
 
+  // 5) 外観が solid(acrylicなし・不透明なウィンドウ)のときに、透明なViewが
+  //    ちゃんと自分の絵を描くか。liquidglass 以外を選んでいる人の**全内部ページ**が
+  //    これに当たるので、ここが黒くなるなら透明化そのものを取り下げる必要がある
+  frames.push({
+    name: '5-opaque-window-transparent-view',
+    transparent: true,
+    bodyBg: FRAME_COLOR,
+    label: 'solidウィンドウ / transparent:true / body 不透明(＝既定のCSS)',
+    opaqueWindow: true,
+  });
+
   for (const f of frames) {
+    if (f.opaqueWindow) {
+      win.setBackgroundMaterial('none');
+      win.setBackgroundColor(FRAME_COLOR);
+      win.loadFile(pageFile('chrome-solid', chrome.replace('background:transparent', `background:${FRAME_COLOR}`)));
+      await wait(700);
+    }
     const view = makeView(f.transparent);
     win.contentView.addChildView(view);
     view.webContents.loadFile(pageFile(f.name, innerPage(f.bodyBg, f.label)));
@@ -140,6 +157,29 @@ app.whenReady().then(async () => {
     view.webContents.close();
     await wait(200);
   }
+
+  // ---- color-mix の割合を var() で渡せるか ----
+  // tailwind.css の下地は color-mix(in srgb, var(--page-base) var(--page-scrim), transparent)。
+  // Chromium が計算時にこれを弾くと**プロパティごと落ちて透明のまま**になり、
+  // 設定のスライダーが何も効かないのにエラーも出ない、という形で表面化する
+  const probe = new WebContentsView({ webPreferences: { contextIsolation: true, sandbox: true } });
+  probe.setBounds(VIEW_RECT);
+  win.contentView.addChildView(probe);
+  probe.webContents.loadFile(
+    pageFile('scrim-probe', `<body style="--page-base:#16181d;--page-scrim:40%">
+      <div id="a" style="background:color-mix(in srgb, var(--page-base) var(--page-scrim), transparent)"></div>
+      <div id="b" style="background:color-mix(in srgb, #16181d 40%, transparent)"></div>
+    </body>`)
+  );
+  await wait(700);
+  const mix = await probe.webContents.executeJavaScript(`(() => {
+    const g = (id) => getComputedStyle(document.getElementById(id)).backgroundColor;
+    return { a: g('a'), b: g('b') };
+  })()`);
+  const scrimOk = mix.a === mix.b && mix.a !== 'rgba(0, 0, 0, 0)';
+  console.log(`${scrimOk ? 'OK ' : 'NG '} color-mix の割合に var() を渡せる — var=${mix.a} / 直書き=${mix.b}`);
+  win.contentView.removeChildView(probe);
+  probe.webContents.close();
 
   console.log('\n--- 出力 ---');
   console.log(OUT);
