@@ -154,8 +154,12 @@ class SidePanel {
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
+        // 内部ページと同じ理由で透明にする(tab-manager.js の createTab のコメントを参照)。
+        // 下の webView(任意サイトのWebパネル)には付けない
+        transparent: true,
       },
     });
+    this.panelView.setBackgroundColor('#00000000');
     this.window.contentView.addChildView(this.panelView);
     this.panelView.webContents.loadURL(PANEL_URL);
     this.tabManager.raiseOverlay();

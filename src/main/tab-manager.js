@@ -278,8 +278,17 @@ class TabManager {
         // YouTube等が NotAllowedError で一時停止したままになる(Chromeの既定は固定ポリシーではなく
         // よく見るサイトを学習するヒューリスティックなので、こうはならない)。
         // 裏で開いたタブが勝手に鳴る問題は「そもそも読み込まない」(hibernated)ことで塞ぐ
+
+        // 内部ページだけ透明なViewで作る。liquidglass のときCSS側がbodyの背景を透かすと、
+        // 背後にあるウィンドウのacrylicがそのまま出る(scripts/test-view-transparency.js で実測)。
+        // transparent は生成時にしか渡せないので、後から様式を切り替えても効くよう常に付ける。
+        // 既定のCSSはbodyを不透明のままにしているので、これだけでは見た目は変わらない。
+        // 通常のWebページには**絶対に付けない**。背景を宣言していないサイトが
+        // 白ではなくデスクトップを透かしてしまう
+        transparent: isInternal,
       },
     });
+    if (isInternal) view.setBackgroundColor('#00000000');
 
     // hasInternalPreload はタブ生成時に固定される(preloadは後から変えられない)
     const hibernated = background && hibernate && !isInternal;
