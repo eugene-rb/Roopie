@@ -121,6 +121,11 @@
     const translucency = Number.isFinite(theme?.windowTranslucency) ? theme.windowTranslucency : 62;
     style.setProperty('--surface-alpha', canTranslucent ? String(Math.min(100, Math.max(20, translucency)) / 100) : '1');
 
+    // 内部ページの下地の濃さ。liquidglass のとき、透明なView越しにウィンドウのacrylicを
+    // どれだけ見せるかを決める(0%=完全に透過)。--surface-alpha とは別の仕組みなので混同しない
+    const scrim = Number.isFinite(theme?.pageScrim) ? theme.pageScrim : 0;
+    style.setProperty('--page-scrim', `${Math.min(60, Math.max(0, scrim))}%`);
+
     // 帯の背後に描く面。半透明・liquidglass では何も描かず、ウィンドウのacrylicを見せる
     if (windowStyle === 'gradient') {
       const stops = Array.isArray(theme?.windowGradientStops)

@@ -2111,6 +2111,8 @@ const windowStyleEl = document.getElementById('window-style');
 const windowColorEl = document.getElementById('window-color');
 const windowTranslucencyEl = document.getElementById('window-translucency');
 const windowTranslucencyRowEl = document.getElementById('window-translucency-row');
+const pageScrimEl = document.getElementById('page-scrim');
+const pageScrimRowEl = document.getElementById('page-scrim-row');
 const windowGradientRowEl = document.getElementById('window-gradient-row');
 const windowGradientAngleEl = document.getElementById('window-gradient-angle');
 const windowGradientStopsEl = document.getElementById('window-gradient-stops');
@@ -2141,12 +2143,18 @@ function renderWindowAppearance() {
   windowColorEl.value = themeState.windowColor || DEFAULT_WINDOW_COLOR[resolved];
 
   windowTranslucencyRowEl.classList.toggle('hidden', !TRANSLUCENT_WINDOW_STYLES.includes(style));
+  // 内部ページの透過は liquidglass でしか起きないので、その行もそのときだけ出す
+  pageScrimRowEl.classList.toggle('hidden', style !== 'glass');
   windowGradientRowEl.classList.toggle('hidden', style !== 'gradient');
   windowPatternRowEl.classList.toggle('hidden', style !== 'pattern');
 
   const translucency = themeState.windowTranslucency ?? 62;
   setRange(windowTranslucencyEl, translucency);
   document.getElementById('window-translucency-value').textContent = `${translucency}%`;
+
+  const scrim = themeState.pageScrim ?? 0;
+  setRange(pageScrimEl, scrim);
+  document.getElementById('page-scrim-value').textContent = `${scrim}%`;
 
   const angle = themeState.windowGradientAngle ?? 160;
   setRange(windowGradientAngleEl, angle);
@@ -2209,6 +2217,10 @@ document.getElementById('window-color-reset').addEventListener('click', () =>
 windowTranslucencyEl.addEventListener('input', () => {
   document.getElementById('window-translucency-value').textContent = `${windowTranslucencyEl.value}%`;
   window.roopieInternal.setTheme({ windowTranslucency: Number(windowTranslucencyEl.value) });
+});
+pageScrimEl.addEventListener('input', () => {
+  document.getElementById('page-scrim-value').textContent = `${pageScrimEl.value}%`;
+  window.roopieInternal.setTheme({ pageScrim: Number(pageScrimEl.value) });
 });
 windowGradientAngleEl.addEventListener('input', () => {
   document.getElementById('window-gradient-angle-value').textContent = `${windowGradientAngleEl.value}°`;

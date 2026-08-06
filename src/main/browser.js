@@ -143,6 +143,9 @@ const DEFAULT_THEME = {
   windowColor: '',
   // 半透明・liquidglass・グラデ・パターンで、バーがどれだけ透けるか(0=透明, 100=不透明)
   windowTranslucency: 62,
+  // liquidglass のとき、内部ページ(設定・履歴・サイドパネル等)の下地の濃さ(0=完全に透過)。
+  // 0 だとウィンドウのacrylic越しに壁紙まで透けるので、明るい壁紙で文字が読みにくければ上げる
+  pageScrim: 0,
   // クローム用のグラデーション(新しいタブのものとは別に持つ)
   windowGradientAngle: 160,
   windowGradientStops: ['#1b2340', '#2d2a55', '#123b47'],
@@ -157,6 +160,8 @@ const WINDOW_STYLES = ['solid', 'translucent', 'gradient', 'glass', 'pattern'];
 // acrylicを敷くスタイル。ウィンドウのbackgroundColorを透明にしないと見えない(実機で確認済み)
 const MATERIAL_STYLES = { translucent: 'acrylic', glass: 'acrylic' };
 const WINDOW_TRANSLUCENCY_RANGE = [20, 100];
+// 60%を超えるとほぼ不透明に見え、透過を選んだ意味が無くなる(実測: test-view-transparency.js の4枚目)
+const PAGE_SCRIM_RANGE = [0, 60];
 const MAX_CUSTOM_CSS = 50000;
 const MAX_BACKGROUND_IMAGE = 4_000_000; // data URIとして保存するため大きめに許容(4MB程度)
 const BACKGROUND_BLUR_RANGE = [0, 40];
@@ -810,6 +815,9 @@ browser.applyThemePatch = (themeStore, patch) => {
   }
   if (Number.isFinite(patch.windowTranslucency)) {
     themeStore.data.windowTranslucency = Math.round(clamp(patch.windowTranslucency, WINDOW_TRANSLUCENCY_RANGE));
+  }
+  if (Number.isFinite(patch.pageScrim)) {
+    themeStore.data.pageScrim = Math.round(clamp(patch.pageScrim, PAGE_SCRIM_RANGE));
   }
   if (Number.isFinite(patch.windowGradientAngle)) {
     themeStore.data.windowGradientAngle = Math.round(clamp(patch.windowGradientAngle, [0, 360]));
