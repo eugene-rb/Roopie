@@ -23,7 +23,11 @@
 
 - **新しい設定項目は増やさない** → すべて `:root[data-window-style="glass"]` に紐づける。
   常時適用にすると `solid` を選んでいる人のUIが勝手に変わり、設定の意味が壊れるため。
-- **本物の透過は使わない** → `window-theme.js:15-19` / `SPEC-theme.md:29` の通り、
+- **本物の透過は使わない**（→ **この判断は後で覆った**。同日の
+  [[2026-08-06_glassmorphism-transparency]] を参照。「透かすと黒が出る」のは
+  `WebContentsView` の**生成時オプション**の話であってプラットフォームの限界ではなく、
+  `transparent: true` で作れば背後のacrylicがそのまま出る。実測は
+  `scripts/test-view-transparency.js`）→ `window-theme.js:15-19` / `SPEC-theme.md:29` の通り、
   内部ページは WebContentsView が transparent でないため透かすと**黒が出る**。
   代わりに**ページ自身が背景レイヤーを持ち、その上のカードを `backdrop-filter` でぼかす**。
   同一ドキュメント内の背景なので blur が正しく効く。

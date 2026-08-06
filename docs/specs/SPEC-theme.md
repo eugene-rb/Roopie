@@ -28,7 +28,7 @@
 | 対象 | 背後にあるもの | 作り方 |
 | --- | --- | --- |
 | クローム（`#tab-bar` / `#toolbar` / `#bookmark-bar` / `#address-wrap` / `.tab`） | ウィンドウのacrylic | `--surface-alpha` で帯を透かし、`backdrop-filter: blur(--glass-blur)` |
-| 内部ページ（履歴・ブックマーク・DL・設定・サイドパネル） | **何もない**（透かすと黒） | ページ自身が `--accent` の光を `background-image`(fixed) で敷き、その上の面をぼかす |
+| 内部ページ（履歴・ブックマーク・DL・設定・サイドパネル） | ウィンドウのacrylic | Viewを `transparent: true` で作り、bodyの下地を `--page-scrim`（既定 0%＝完全に透過）にして素通しする。`--accent` の光は減光して重ねる |
 | ミニプレイヤー・タイマー | **実際のウェブページ** | `transparent: true` の浮遊ビューなので面を薄めて素通しでぼかす（本物のガラス） |
 
 - 面の色は `--glass-surface` / `--glass-hover` / `--glass-border` / `--glass-page-blur`。既定（`:root`）では `--card` / `--card-hover` / `--border` / `0px` にエイリアスされ、liquidglass 以外では見た目が変わらない。
@@ -42,7 +42,10 @@
 - Windows 11のネイティブアクリル素材は `backgroundColor` が**透明**である必要がある（実機確認済み）。不透明度指定とアクリルは併用不可（`setOpacity` がぼかしを打ち消す）。
 - `nativeTheme.themeSource` は意図的に書き換えない（アプリ全体に影響しプロファイル単位のライト/ダーク切替が壊れるため）。
 - シークレットウィンドウは常にダーク＋単色を強制し、プロファイルのテーマ設定を無視する（`browser.js` のフレーム色、`window-theme.js` の `opts.incognito` 短絡の両方で）。
-- `window-theme.js`: 透過が許されるのはクローム/オーバーレイ（`opts.overlay`、`roopie://menu` 等）のみ。内部ページとサイドパネルは不透明のまま（サイドパネルの `WebContentsView` 自体は透過しないため、透過指定すると黒く見える）。**`--surface-alpha` を内部ページで下げてはならない**——これが黒画面事故の原因になる。内部ページのガラスは透過ではなく「自前で敷いた光をぼかす」方式で作る（上表を参照）。
+- **`--surface-alpha` を内部ページで下げてはならない**——これが黒画面事故の原因になる。`window-theme.js` の `--surface-alpha` はクローム/オーバーレイ（`opts.overlay`、`roopie://menu` 等）専用のまま。内部ページの透過は別系統の `--page-scrim` が担当する（2つは別の仕組みなので混同しない）。
+- 内部ページを透過させるには**Viewの生成時に `transparent: true` を渡す必要がある**。後から変えられないので、`tab-manager.js` の内部ページと `side-panel.js` の `panelView` は常に透明で作り、実際に透けるかはCSSだけで決める。通常のWebページと、任意サイトを開くWebパネル（`side-panel.js` の `webView`）には**付けない**——背景を宣言していないサイトがデスクトップを透かしてしまう。
+  - 2026-08-06 以前は「`WebContentsView` は透過しないので透かすと黒が出る」と記していたが、これは誤り。生成時オプションの話であってプラットフォームの限界ではない。`scripts/test-view-transparency.js` で実測すると、`transparent:false` のまま body だけ透かすと出るのは黒ではなく**白**、`transparent:true` にすればウィンドウのacrylicがそのまま出る。
+- `desktopCapturer`（`gen-screenshots.js`）は WGC の初期化に失敗した環境だと**透明な子Viewの中身を取りこぼす**（ページが真っ黒に写る）。これはレンダリングの不具合ではなくキャプチャ側の限界で、liquidglass の透過はスクショでは判定できず**実機の目視が要る**。画面全体のキャプチャ（`CopyFromScreen`）は他ウィンドウが重なると無関係な画面を撮るため、汎用の代替にはできない。
 - ミニプレイヤー（`media-player.js:39`）とタイマー（`timer-panel.js:41`）だけは例外で、`transparent: true` + `setBackgroundColor('#00000000')` の**本物の透明ビュー**。背後に実ページがあるので `backdrop-filter` が実際に効き、面を薄めても黒は出ない。
 - 検証用の起動（`npm run start:verify`）は、既に Roopie が動いていると単一インスタンスロックで即 `exit 0` する。ログが空なら `Get-Process Roopie` をまず疑う。
 - 文字色は単純なライト/ダーク判定ではなく**実際の背景輝度計算**から導出（カスタム背景色がダークなライトモード等に対応するため）。
@@ -62,3 +65,4 @@
 ## 変更履歴
 - 2026-08-04: 初版作成（docs/specs/ 新設、3層クエリルールの運用開始に伴う）
 - 2026-08-06: liquidglass を内部ページ・オンボーディング・ミニプレイヤー・タイマーへ拡張。背後にあるものごとに3通りの作り分けを追加（詳細節の表）。設定項目は増やしていない
+- 2026-08-06: 内部ページとサイドパネルを**本物の透過**に切り替え（Viewを `transparent: true` で作る）。下地の濃さの設定 `pageScrim` を追加。新しいタブの背景に `glass`（リキッドガラス）を追加
