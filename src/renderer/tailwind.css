@@ -5897,8 +5897,21 @@ select.row-btn {
   overflow-y: auto;
 }
 
+/* .row既定の背景(--card)は不透明固定色で、テーマの半透明設定(--surface-alpha)に追従しない。
+   ドロップダウン自体(#history-popup / #downloads-popup)は var(--menu-bg) で追従しているため、
+   行だけ --card のままだと透過0%の設定でも行が不透明な板として浮いて見える。
+   加算チント(--tint)に差し替え、ポップアップ自身の透け具合をそのまま行にも反映させる */
 .dd-list .row {
   padding: 8px 10px;
+  background: rgb(var(--tint) / 0.06);
+}
+
+.dd-list .row:hover {
+  background: rgb(var(--tint) / 0.12);
+}
+
+.dd-list .empty-icon {
+  background: rgb(var(--tint) / 0.06);
 }
 
 .dd-actions {

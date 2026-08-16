@@ -85,6 +85,25 @@ app.whenReady().then(async () => {
     check('履歴ドロップダウンに追加したエントリが出る', historyRowTitle, 'Example Site');
     await shot(overlay, 'history-dropdown.png');
 
+    // 透過はテーマ(--surface-alpha)と連動するか: ドロップダウン本体は下げると透けるが、
+    // 行(.row)は不透明な --card ではなく薄いチント(--tint)なので下地の透過を邪魔しない
+    const alphaLink = await js(
+      overlay,
+      `(() => {
+        document.documentElement.style.setProperty('--surface-alpha', '0');
+        const popupBg = getComputedStyle(document.getElementById('history-popup')).backgroundColor;
+        const rowBg = getComputedStyle(document.querySelector('#history-list .row')).backgroundColor;
+        document.documentElement.style.setProperty('--surface-alpha', '1');
+        return { popupBg, rowBg };
+      })()`
+    );
+    check(
+      '透過0%でドロップダウン本体が透明になる(alpha=0)',
+      /[,/]\s*0\s*\)$/.test(alphaLink.popupBg),
+      true
+    );
+    check('行の背景は不透明な--cardではなく薄いチント(0.06)のまま', alphaLink.rowBg.includes('0.06'), true);
+
     // 履歴を消去 → 空状態になる
     await clickSelector(overlay, '#history-clear');
     await sleep(300);
