@@ -286,6 +286,10 @@ if (location.protocol === 'roopie:') {
     onQrShow: (cb) => ipcRenderer.on('qr:show', (_e, payload) => cb(payload)),
     saveQr: (dataUrl, filename) => ipcRenderer.invoke('qr:save', dataUrl, filename),
 
+    // 履歴・ダウンロードのドロップダウン(オーバーレイ)用。中身は listHistory / listDownloads で取りに行く
+    onHistoryShow: (cb) => ipcRenderer.on('history:show', (_e, payload) => cb(payload)),
+    onDownloadsShow: (cb) => ipcRenderer.on('downloads:show', (_e, payload) => cb(payload)),
+
     // イントロ(初回起動)/ 変更点 / アプリ情報
     getAppInfo: () => ipcRenderer.invoke('app:info'),
     introDone: () => ipcRenderer.send('app:intro-done'),

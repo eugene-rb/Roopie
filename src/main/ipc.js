@@ -431,6 +431,22 @@ function registerIpc() {
     tabManager.overlay.webContents.send('qr:show', payload ?? {});
   });
 
+  // 履歴・ダウンロードのドロップダウン(Edge風)。ツールバーの各アイコンにぶら下がる。
+  // アンカーはQRと同じくツールバーボタンのクリック位置からそのまま届くので補正不要。
+  // 中身の一覧はオーバーレイ側(menu.js)が history:list / downloads:list を叩いて取りに行く
+  ipcMain.on('menu:open-history', (e, payload) => {
+    const tabManager = tabsOf(e);
+    if (!tabManager?.overlay) return;
+    tabManager.showOverlay(true);
+    tabManager.overlay.webContents.send('history:show', payload ?? {});
+  });
+  ipcMain.on('menu:open-downloads', (e, payload) => {
+    const tabManager = tabsOf(e);
+    if (!tabManager?.overlay) return;
+    tabManager.showOverlay(true);
+    tabManager.overlay.webContents.send('downloads:show', payload ?? {});
+  });
+
   // QR画像(dataURL)をPNGとして保存する。ファイル名はリンク先のページタイトルを既定にする
   ipcMain.handle('qr:save', async (e, dataUrl, filename) => {
     const window = ctxOf(e)?.window;

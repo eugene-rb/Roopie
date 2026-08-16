@@ -3,6 +3,10 @@ const menu = document.getElementById('menu');
 const itemsEl = document.getElementById('items');
 const manageBtn = document.getElementById('manage');
 const qrPopup = document.getElementById('qr-popup');
+const historyPopup = document.getElementById('history-popup');
+const historyListEl = document.getElementById('history-list');
+const downloadsPopup = document.getElementById('downloads-popup');
+const downloadsListEl = document.getElementById('downloads-list');
 
 // =========================================================
 // D&D分割: タブのドラッグ中にページ領域へドロップゾーンを出す
@@ -55,6 +59,8 @@ for (const zone of dropZones.querySelectorAll('.drop-zone')) {
 
 const MENU_WIDTH = 260;
 const QR_WIDTH = 300;
+const HISTORY_WIDTH = 320;
+const DOWNLOADS_WIDTH = 360;
 const MARGIN = 8;
 
 // メインプロセスから「このアンカー位置に、このプロファイル一覧で開いて」と指示が来る
@@ -62,6 +68,8 @@ window.roopieInternal.onMenuShow(({ profiles, activeId, anchor }) => {
   closePermission('block');
   qrPopup.classList.add('hidden');
   extMenu.classList.add('hidden');
+  historyPopup.classList.add('hidden');
+  downloadsPopup.classList.add('hidden');
   closeTranslate();
   renderItems(profiles, activeId);
   menu.classList.remove('hidden');
@@ -132,6 +140,8 @@ function close() {
   menu.classList.add('hidden');
   qrPopup.classList.add('hidden');
   extMenu.classList.add('hidden');
+  historyPopup.classList.add('hidden');
+  downloadsPopup.classList.add('hidden');
   closeTranslate();
   window.roopieInternal.closeMenu();
 }
@@ -143,7 +153,9 @@ backdrop.addEventListener('mousedown', (e) => {
     !qrPopup.contains(e.target) &&
     !extMenu.contains(e.target) &&
     !permPopup.contains(e.target) &&
-    !translatePopup.contains(e.target)
+    !translatePopup.contains(e.target) &&
+    !historyPopup.contains(e.target) &&
+    !downloadsPopup.contains(e.target)
   ) {
     close();
   }
@@ -194,6 +206,8 @@ window.roopieInternal.onPermissionShow(({ host, items, anchor }) => {
   menu.classList.add('hidden');
   extMenu.classList.add('hidden');
   qrPopup.classList.add('hidden');
+  historyPopup.classList.add('hidden');
+  downloadsPopup.classList.add('hidden');
   closeTranslate();
   permHost.textContent = host ?? '';
   renderPermissionItems(items ?? []);
@@ -260,6 +274,8 @@ window.roopieInternal.onExtensionsMenu(({ extensions, pinned, anchor, partition,
   closePermission('block');
   menu.classList.add('hidden');
   qrPopup.classList.add('hidden');
+  historyPopup.classList.add('hidden');
+  downloadsPopup.classList.add('hidden');
   closeTranslate();
   extContext = { partition, activeTabId, offset: offset ?? { x: 0, y: 0 } };
   renderExtensionItems(extensions ?? [], new Set(pinned ?? []));
@@ -379,6 +395,8 @@ window.roopieInternal.onTranslateShow((payload) => {
   menu.classList.add('hidden');
   extMenu.classList.add('hidden');
   qrPopup.classList.add('hidden');
+  historyPopup.classList.add('hidden');
+  downloadsPopup.classList.add('hidden');
   renderTranslate(payload);
   translatePopup.classList.remove('hidden');
   position(
@@ -547,6 +565,9 @@ let qrPageTitle = '';
 window.roopieInternal.onQrShow(({ url, title, anchor }) => {
   closePermission('block');
   menu.classList.add('hidden');
+  extMenu.classList.add('hidden');
+  historyPopup.classList.add('hidden');
+  downloadsPopup.classList.add('hidden');
   closeTranslate();
   closeQrCenterPicker();
   qrCenter = null;
@@ -925,3 +946,216 @@ function openQrCropModal(file) {
     close();
   }
 }
+
+// =========================================================
+// 履歴のドロップダウン(Edge風)。ツールバーの履歴アイコンにぶら下がる
+// =========================================================
+const HISTORY_LIMIT = 8;
+
+function formatHistoryTime(timestamp) {
+  return new Date(timestamp).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+}
+
+function createHistoryRow(entry) {
+  const row = document.createElement('div');
+  row.className = 'row';
+
+  const time = document.createElement('span');
+  time.className = 'time';
+  time.textContent = formatHistoryTime(entry.visitedAt);
+  row.appendChild(time);
+
+  if (entry.favicon) {
+    const icon = document.createElement('img');
+    icon.className = 'favicon';
+    icon.src = entry.favicon;
+    row.appendChild(icon);
+  }
+
+  const main = document.createElement('div');
+  main.className = 'main';
+  const title = document.createElement('span');
+  title.className = 'title';
+  title.textContent = entry.title;
+  main.appendChild(title);
+  const url = document.createElement('span');
+  url.className = 'sub';
+  url.textContent = entry.url;
+  main.appendChild(url);
+  row.appendChild(main);
+
+  // クリックで現在のタブへ移動する(アドレスバーに直接入力したときと同じ経路)
+  row.addEventListener('click', () => {
+    window.roopieInternal.navigate(entry.url);
+    close();
+  });
+
+  const actions = document.createElement('div');
+  actions.className = 'row-actions';
+  const removeBtn = document.createElement('button');
+  removeBtn.className = 'row-btn';
+  removeBtn.textContent = '削除';
+  removeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    window.roopieInternal.removeHistory(entry.id);
+    renderHistoryList();
+  });
+  actions.appendChild(removeBtn);
+  row.appendChild(actions);
+
+  return row;
+}
+
+async function renderHistoryList() {
+  const entries = await window.roopieInternal.listHistory('');
+  const recent = entries.slice(0, HISTORY_LIMIT);
+  historyListEl.textContent = '';
+  if (recent.length === 0) {
+    historyListEl.appendChild(window.roopieEmptyState('履歴はまだありません', { icon: 'clock' }));
+    return;
+  }
+  for (const entry of recent) {
+    historyListEl.appendChild(createHistoryRow(entry));
+  }
+}
+
+window.roopieInternal.onHistoryShow(({ anchor }) => {
+  closePermission('block');
+  menu.classList.add('hidden');
+  extMenu.classList.add('hidden');
+  qrPopup.classList.add('hidden');
+  downloadsPopup.classList.add('hidden');
+  closeTranslate();
+  historyPopup.classList.remove('hidden');
+  position(historyPopup, anchor ?? { right: window.innerWidth - MARGIN }, HISTORY_WIDTH);
+  renderHistoryList();
+});
+
+document.getElementById('history-manage').addEventListener('click', () => {
+  window.roopieInternal.openTab('roopie://history');
+  close();
+});
+
+document.getElementById('history-clear').addEventListener('click', () => {
+  window.roopieInternal.clearHistory();
+  renderHistoryList();
+});
+
+// =========================================================
+// ダウンロードのドロップダウン(Edge風)。ツールバーのダウンロードアイコンにぶら下がる
+// =========================================================
+const DOWNLOADS_STATE_LABELS = {
+  progressing: 'ダウンロード中',
+  paused: '一時停止中',
+  completed: '完了',
+  cancelled: 'キャンセル済み',
+  interrupted: '中断されました',
+};
+
+function formatDownloadBytes(bytes) {
+  if (!bytes) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${(bytes / 1024 ** i).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
+function createDownloadRow(item) {
+  const row = document.createElement('div');
+  row.className = 'row';
+
+  const main = document.createElement('div');
+  main.className = 'main';
+
+  const name = document.createElement('span');
+  name.className = 'title';
+  name.textContent = item.filename;
+  main.appendChild(name);
+
+  const inProgress = item.state === 'progressing' || item.state === 'paused';
+  const sub = document.createElement('span');
+  sub.className = 'sub';
+  sub.textContent = inProgress
+    ? `${DOWNLOADS_STATE_LABELS[item.state]} — ${formatDownloadBytes(item.receivedBytes)} / ${
+        item.totalBytes ? formatDownloadBytes(item.totalBytes) : '不明'
+      }`
+    : `${DOWNLOADS_STATE_LABELS[item.state] ?? item.state}`;
+  main.appendChild(sub);
+
+  if (inProgress && item.totalBytes) {
+    const progress = document.createElement('div');
+    progress.className = 'progress';
+    const fill = document.createElement('div');
+    fill.className = 'progress-fill';
+    fill.style.width = `${Math.round((item.receivedBytes / item.totalBytes) * 100)}%`;
+    progress.appendChild(fill);
+    main.appendChild(progress);
+  }
+
+  row.appendChild(main);
+
+  const actions = document.createElement('div');
+  actions.className = 'row-actions';
+  const addAction = (label, onClick, danger) => {
+    const btn = document.createElement('button');
+    btn.className = danger ? 'row-btn danger' : 'row-btn';
+    btn.textContent = label;
+    btn.addEventListener('click', onClick);
+    actions.appendChild(btn);
+  };
+
+  if (item.state === 'progressing') {
+    addAction('一時停止', () => window.roopieInternal.pauseDownload(item.id));
+    addAction('キャンセル', () => window.roopieInternal.cancelDownload(item.id), true);
+  } else if (item.state === 'paused') {
+    addAction('再開', () => window.roopieInternal.resumeDownload(item.id));
+    addAction('キャンセル', () => window.roopieInternal.cancelDownload(item.id), true);
+  } else {
+    if (item.state === 'completed') {
+      addAction('開く', () => window.roopieInternal.openDownload(item.id));
+      addAction('フォルダを表示', () => window.roopieInternal.showDownloadInFolder(item.id));
+    }
+    addAction('削除', () => window.roopieInternal.removeDownload(item.id));
+  }
+
+  row.appendChild(actions);
+  return row;
+}
+
+function renderDownloadsList(items) {
+  downloadsListEl.textContent = '';
+  if (!items || items.length === 0) {
+    downloadsListEl.appendChild(window.roopieEmptyState('ダウンロードしたファイルはありません', { icon: 'download' }));
+    return;
+  }
+  for (const item of items) {
+    downloadsListEl.appendChild(createDownloadRow(item));
+  }
+}
+
+window.roopieInternal.onDownloadsShow(({ anchor }) => {
+  closePermission('block');
+  menu.classList.add('hidden');
+  extMenu.classList.add('hidden');
+  qrPopup.classList.add('hidden');
+  historyPopup.classList.add('hidden');
+  closeTranslate();
+  downloadsPopup.classList.remove('hidden');
+  position(downloadsPopup, anchor ?? { right: window.innerWidth - MARGIN }, DOWNLOADS_WIDTH);
+  window.roopieInternal.listDownloads().then(renderDownloadsList);
+});
+
+// 進行中ダウンロードの状態はプッシュで届く。開いている間だけ再描画する
+window.roopieInternal.onDownloadsState((state) => {
+  if (downloadsPopup.classList.contains('hidden')) return;
+  renderDownloadsList(state.items);
+});
+
+document.getElementById('downloads-manage').addEventListener('click', () => {
+  window.roopieInternal.openTab('roopie://downloads');
+  close();
+});
+
+document.getElementById('downloads-clear').addEventListener('click', () => {
+  window.roopieInternal.clearDownloads();
+  window.roopieInternal.listDownloads().then(renderDownloadsList);
+});

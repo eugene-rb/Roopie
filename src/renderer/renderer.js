@@ -1543,10 +1543,22 @@ $('zoom-controls').addEventListener(
   },
   { passive: false }
 );
-downloadsBtn.addEventListener('click', () => window.roopie.newTab('roopie://downloads'));
+// ダウンロード・履歴: クリックでEdge風のドロップダウンを開く(全件はそこから roopie://downloads /
+// roopie://history へ)。ボタンの位置(ページ表示領域から見た座標)をメインプロセスへ渡す
+downloadsBtn.addEventListener('click', () => {
+  const rect = downloadsBtn.getBoundingClientRect();
+  window.roopie.openDownloadsMenu({
+    anchor: { right: Math.round(rect.right), bottom: Math.round(rect.bottom - chromeEl.offsetHeight) },
+  });
+});
 $('split-direction-btn').addEventListener('click', () => window.roopie.toggleSplitDirection());
 $('split-close-btn').addEventListener('click', () => window.roopie.closeSplit());
-$('history-btn').addEventListener('click', () => window.roopie.newTab('roopie://history'));
+$('history-btn').addEventListener('click', () => {
+  const rect = $('history-btn').getBoundingClientRect();
+  window.roopie.openHistory({
+    anchor: { right: Math.round(rect.right), bottom: Math.round(rect.bottom - chromeEl.offsetHeight) },
+  });
+});
 
 // ---- サイドパネル ----
 const sidepanelBtn = $('sidepanel-btn');
