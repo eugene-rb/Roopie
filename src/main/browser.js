@@ -1296,7 +1296,8 @@ function syncMaterialKeepAlive(ctx) {
     if (ctx.window.isDestroyed()) return stop();
     const current = browser.windowMaterial(ctx);
     if (!current || ctx.window.isFocused()) return stop();
-    if (ctx.window.isMinimized()) return; // 見えていない間は押さない(タイマーは残す)
+    // 見えていない間は押さない(タイマーは残し、再び見えたら次の周期から押す)
+    if (ctx.window.isMinimized() || !ctx.window.isVisible()) return;
     ctx.window.setBackgroundMaterial(current);
   }, MATERIAL_KEEP_ALIVE_MS);
 }
