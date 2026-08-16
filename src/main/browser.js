@@ -1279,11 +1279,12 @@ browser.windowMaterial = (ctx) => {
 // 押さなければ非アクティブになった時点で単色。mica/tabbed も同様に消えるので代替にならない。
 const MATERIAL_KEEP_ALIVE_MS = 1000;
 function syncMaterialKeepAlive(ctx) {
+  if (!ctx) return;
   const stop = () => {
     if (ctx.materialTimer) clearInterval(ctx.materialTimer);
     ctx.materialTimer = null;
   };
-  if (!ctx || ctx.window.isDestroyed()) return stop();
+  if (ctx.window.isDestroyed()) return stop();
   const material = browser.windowMaterial(ctx);
   // マテリアルを使っていないテーマ、Windows以外、アクティブなときは押す必要がない
   if (!material || typeof ctx.window.setBackgroundMaterial !== 'function') return stop();

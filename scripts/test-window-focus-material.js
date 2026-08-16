@@ -284,15 +284,15 @@ app.whenReady().then(async () => {
 
     // 押し直しの隙間でフォールバックが見えるか(=ちらつくか)を、細かく撮って生存率で測る。
     // 落ちてから押し直すまでの間は単色が見えるので、間隔が長いほどちらつきやすい
-    for (const interval of [1000]) {
+    for (const interval of [1000, 2000, 2500]) {
       keepAliveInterval = interval;
       await activate();
       await wait(600);
       await deactivate();
       let live = 0;
-      const total = 20;
+      const total = 40;
       for (let i = 0; i < total; i++) {
-        await wait(400);
+        await wait(50);
         const f = shot(`12-keepalive-${interval}ms-${i}`);
         if (measure(f).sd >= 5) live++;
       }
