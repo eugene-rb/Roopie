@@ -638,6 +638,11 @@ browser.createWindow = ({ incognito = false, url, x, y, width, height, bounds, p
     else tabManager.activeWebContents()?.focus();
   });
 
+  // 非アクティブの間はacrylicが消えるので押し直し続ける(理由は syncMaterialKeepAlive のコメント)
+  window.on('blur', () => syncMaterialKeepAlive(ctx));
+  window.on('focus', () => syncMaterialKeepAlive(ctx));
+  window.on('closed', () => syncMaterialKeepAlive(ctx));
+
   // そのプロファイルの最後のウィンドウを閉じるとき、タブ構成を保存する
   // (次にプロファイルを開いたとき同じタブで再開できるように。Edgeのワークスペース風)
   window.on('close', () => {
@@ -1258,11 +1263,48 @@ const TITLE_BAR_LIGHT = { color: '#eef0f4', symbolColor: '#1c2129' };
 // テーマをウィンドウ本体へ反映する(生成時とテーマ変更時に呼ぶ)。
 // - 半透明/liquidglass: acrylicを敷く。backgroundColorを透明にしないと見えない
 // - 不透明度(setOpacity)はacrylicのぼかしを打ち消すので、その2つは併用しない
+// テーマからそのウィンドウに敷くマテリアルを決める。
+// シークレットは紫の識別色を保つため、外観のスタイルによらず常になし
+browser.windowMaterial = (ctx) => {
+  if (!ctx || ctx.incognito) return null;
+  const theme = profileData.get(ctx.profileId)?.theme.data ?? DEFAULT_THEME;
+  return MATERIAL_STYLES[theme.windowStyle] ?? null;
+};
+
+// Windows 11 の acrylic は、ウィンドウが非アクティブになるとDWMが描くのをやめ、
+// 単色のフォールバックで塗り潰す。押し直せば非アクティブのままでも復活するが、
+// 数秒でまた戻ってしまう(押し方を 'none' 経由に変えても同じ)。
+// そのため「非アクティブの間だけ一定間隔で押し直し続ける」形にする。
+// 実測(scripts/test-window-focus-material.js): 1秒間隔で押し続ければ400ms刻み20回とも透過。
+// 押さなければ非アクティブになった時点で単色。mica/tabbed も同様に消えるので代替にならない。
+const MATERIAL_KEEP_ALIVE_MS = 1000;
+function syncMaterialKeepAlive(ctx) {
+  const stop = () => {
+    if (ctx.materialTimer) clearInterval(ctx.materialTimer);
+    ctx.materialTimer = null;
+  };
+  if (!ctx || ctx.window.isDestroyed()) return stop();
+  const material = browser.windowMaterial(ctx);
+  // マテリアルを使っていないテーマ、Windows以外、アクティブなときは押す必要がない
+  if (!material || typeof ctx.window.setBackgroundMaterial !== 'function') return stop();
+  if (ctx.window.isFocused()) return stop();
+  if (ctx.materialTimer) return; // すでに押している
+
+  ctx.window.setBackgroundMaterial(material);
+  ctx.materialTimer = setInterval(() => {
+    if (ctx.window.isDestroyed()) return stop();
+    const current = browser.windowMaterial(ctx);
+    if (!current || ctx.window.isFocused()) return stop();
+    if (ctx.window.isMinimized()) return; // 見えていない間は押さない(タイマーは残す)
+    ctx.window.setBackgroundMaterial(current);
+  }, MATERIAL_KEEP_ALIVE_MS);
+}
+
 browser.applyWindowChrome = (ctx) => {
   if (!ctx || ctx.window.isDestroyed()) return;
   const theme = profileData.get(ctx.profileId)?.theme.data ?? DEFAULT_THEME;
-  // シークレットは紫の識別色を保つため、外観のスタイルも明暗も固定する
-  const material = ctx.incognito ? null : MATERIAL_STYLES[theme.windowStyle] ?? null;
+  const material = browser.windowMaterial(ctx);
+  // シークレットは紫の識別色を保つため、明暗も固定する
   const dark = ctx.incognito || browser.resolvedWindowMode(theme) === 'dark';
 
   if (typeof ctx.window.setBackgroundMaterial === 'function') {
@@ -1286,6 +1328,9 @@ browser.applyWindowChrome = (ctx) => {
   const [min, max] = WINDOW_OPACITY_RANGE;
   const opacity = material ? 1 : Math.min(max, Math.max(min, Number.isFinite(theme.windowOpacity) ? theme.windowOpacity : 1));
   ctx.window.setOpacity(opacity);
+
+  // テーマを切り替えた相手が非アクティブなウィンドウのこともあるので、ここでも押し直しを見直す
+  syncMaterialKeepAlive(ctx);
 };
 
 // OSの明暗設定が変わったら、'system' のプロファイルのウィンドウを追従させる
