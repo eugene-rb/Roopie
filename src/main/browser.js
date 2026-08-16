@@ -1277,7 +1277,8 @@ browser.windowMaterial = (ctx) => {
 // そのため「非アクティブの間だけ一定間隔で押し直し続ける」形にする。
 // 実測(scripts/test-window-focus-material.js): 1秒間隔で押し続ければ400ms刻み20回とも透過。
 // 押さなければ非アクティブになった時点で単色。mica/tabbed も同様に消えるので代替にならない。
-const MATERIAL_KEEP_ALIVE_MS = 1000;
+// 減衰は実測で3〜5秒。1.5秒なら余裕を残したまま、起きる回数を1秒間隔より3割減らせる
+const MATERIAL_KEEP_ALIVE_MS = 1500;
 function syncMaterialKeepAlive(ctx) {
   if (!ctx) return;
   const stop = () => {
