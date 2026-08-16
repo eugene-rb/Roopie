@@ -146,6 +146,9 @@ const DEFAULT_THEME = {
   // liquidglass のとき、内部ページ(設定・履歴・サイドパネル等)の下地の濃さ(0=完全に透過)。
   // 0 だとウィンドウのacrylic越しに壁紙まで透けるので、明るい壁紙で文字が読みにくければ上げる
   pageScrim: 0,
+  // 半透明のとき、内部ページの下地の濃さ(100=不透明)。liquidglassのpageScrimと違い
+  // 既定を不透明にする(半透明は元々内部ページを透かしていなかったため、既定値では見た目を変えない)
+  translucentPageScrim: 100,
   // クローム用のグラデーション(新しいタブのものとは別に持つ)
   windowGradientAngle: 160,
   windowGradientStops: ['#1b2340', '#2d2a55', '#123b47'],
@@ -161,9 +164,13 @@ const WINDOW_MODES = ['system', 'dark', 'light'];
 const WINDOW_STYLES = ['solid', 'translucent', 'gradient', 'glass', 'pattern'];
 // acrylicを敷くスタイル。ウィンドウのbackgroundColorを透明にしないと見えない(実機で確認済み)
 const MATERIAL_STYLES = { translucent: 'acrylic', glass: 'acrylic' };
-const WINDOW_TRANSLUCENCY_RANGE = [20, 100];
+// 下限0で「UIの透け具合」も完全透過まで許可する(以前は20が下限だったが、
+// 半透明テーマの完全透過対応でクロームの帯も含めて0まで下げられるようにした)
+const WINDOW_TRANSLUCENCY_RANGE = [0, 100];
 // 60%を超えるとほぼ不透明に見え、透過を選んだ意味が無くなる(実測: test-view-transparency.js の4枚目)
 const PAGE_SCRIM_RANGE = [0, 60];
+// 半透明用は既定が不透明(100)側なので、glassのpageScrimと違い上限も100まで許可する
+const TRANSLUCENT_PAGE_SCRIM_RANGE = [0, 100];
 const MAX_CUSTOM_CSS = 50000;
 const MAX_BACKGROUND_IMAGE = 4_000_000; // data URIとして保存するため大きめに許容(4MB程度)
 const BACKGROUND_BLUR_RANGE = [0, 40];
@@ -825,6 +832,9 @@ browser.applyThemePatch = (themeStore, patch) => {
   }
   if (Number.isFinite(patch.pageScrim)) {
     themeStore.data.pageScrim = Math.round(clamp(patch.pageScrim, PAGE_SCRIM_RANGE));
+  }
+  if (Number.isFinite(patch.translucentPageScrim)) {
+    themeStore.data.translucentPageScrim = Math.round(clamp(patch.translucentPageScrim, TRANSLUCENT_PAGE_SCRIM_RANGE));
   }
   if (Number.isFinite(patch.windowGradientAngle)) {
     themeStore.data.windowGradientAngle = Math.round(clamp(patch.windowGradientAngle, [0, 360]));

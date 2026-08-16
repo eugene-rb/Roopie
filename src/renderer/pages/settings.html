@@ -269,8 +269,20 @@
           <div class="setting-desc">タブバーやツールバーをどれだけ透かすか。低いほど背後がよく見えます</div>
         </div>
         <label class="range-field">
-          <input id="window-translucency" type="range" min="20" max="100" step="1" />
+          <input id="window-translucency" type="range" min="0" max="100" step="1" />
           <span class="range-value" id="window-translucency-value">62%</span>
+        </label>
+      </div>
+      <div class="setting-row" id="translucent-page-scrim-row">
+        <div>
+          <div class="setting-name">内部ページの透過(半透明)</div>
+          <div class="setting-desc">
+            設定・履歴・サイドパネルの下地の濃さ。100%で従来通り不透明、下げるとウィンドウの背後まで透けます
+          </div>
+        </div>
+        <label class="range-field">
+          <input id="translucent-page-scrim" type="range" min="0" max="100" step="1" />
+          <span class="range-value" id="translucent-page-scrim-value">100%</span>
         </label>
       </div>
       <div class="setting-row" id="page-scrim-row">

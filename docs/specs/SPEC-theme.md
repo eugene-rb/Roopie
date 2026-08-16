@@ -15,6 +15,10 @@
 `DEFAULT_THEME`, `THEME_BACKGROUNDS`（auto/dawn/day/dusk/night/plain/image/pattern/gradient/threebody）, `THEME_PATTERNS`（dots/grid/diagonal/crosshatch/hexagon/wave/circuit）,
 `applyThemePatch(themeStore, patch)`（唯一の検証済み書き込みパス）, `themeFor(profileId)`, `setThemeFor(profileId, patch)`, `sendThemeFor(profileId)`（共有プロファイルへ `theme:state` をブロードキャスト）, `resolvedWindowMode(theme)`, `applyWindowChrome(ctx)`,
 `MATERIAL_STYLES = { translucent: 'acrylic', glass: 'acrylic' }`, `FRAME_COLOR`, `FRAME_COLOR_INCOGNITO`
+`windowTranslucency`（クロームの帯の透け具合。範囲 `WINDOW_TRANSLUCENCY_RANGE = [0, 100]`。0で完全透過）,
+`pageScrim`（liquidglassの内部ページの下地。既定0=透過、範囲 `PAGE_SCRIM_RANGE = [0, 60]`）,
+`translucentPageScrim`（半透明の内部ページの下地。既定100=不透明、範囲 `TRANSLUCENT_PAGE_SCRIM_RANGE = [0, 100]`。
+既定の向きがpageScrimと逆なので別フィールドにしている——半透明は元々内部ページを透かしていなかったため）
 
 ### IPC（`ipc.js`）
 `theme:get`（handle）, `theme:set`（on）, `theme:get-for` / `theme:set-for`（プロファイル指定、handle/on）, `theme:window-mode-sync`（on）。ブロードキャスト: `theme:state`
@@ -30,6 +34,27 @@
 | クローム（`#tab-bar` / `#toolbar` / `#bookmark-bar` / `#address-wrap` / `.tab`） | ウィンドウのacrylic | `--surface-alpha` で帯を透かし、`backdrop-filter: blur(--glass-blur)` |
 | 内部ページ（履歴・ブックマーク・DL・設定・サイドパネル） | ウィンドウのacrylic | Viewを `transparent: true` で作り、bodyの下地を `--page-scrim`（既定 0%＝完全に透過）にして素通しする。`--accent` の光は減光して重ねる |
 | ミニプレイヤー・タイマー | **実際のウェブページ** | `transparent: true` の浮遊ビューなので面を薄めて素通しでぼかす（本物のガラス） |
+
+- 2026-08-16: 内部ページの透過は「半透明」（`windowStyle: 'translucent'`）にも拡張した。ただし**既定の向きが異なる**:
+  liquidglassの `pageScrim` は既定0%（元から透過）、半透明の `translucentPageScrim` は既定100%（元は不透明だったため下げない限り見た目を変えない）。
+  クロームの帯側は元々あった `windowTranslucency` の下限20%を撤廃し、0%（完全透過）まで許可した。
+  - `--page-scrim`（背景色の不透明度そのもの）は `color-mix(page-base, page-scrim%, transparent)` で計算しているため、
+    半透明の既定(scrim=100%)では数式が「100%:0%」に落ちて**不透明側の値そのもの**になり、`:is([data-window-style="glass"], [data-window-style="translucent"])` に拡張しても安全（見た目が変わらないことを計算上保証できる）。
+    この背景色ルールと `.panel-body` の `--page-base` 上書きだけは今もこの`:is()`のまま。
+  - 一方、`--card`/`--card-hover` のトークン差し替え、アクセント色の光（`background-image`）、`backdrop-filter`、
+    「面を隠すのが仕事の面」の不透明フロア（`--glass-menu`）は**係数の掛け算ではなく固定値の上書き**なので、
+    style だけで拡張すると半透明の既定でも常時発火してしまい「見た目を変えない」に反する
+    （実測で確認: `.card` の背景・`backdrop-filter`・`body` の `background-image` が solid と食い違った）。
+    そこで `window-theme.js` が計算する `[data-page-glass="1"]` という**別の判定フラグ**でこの4箇所だけ更にガードした:
+    `windowStyle === 'glass'`（常時true。既存動作）、または `windowStyle === 'translucent'` かつ `scrim < 100`（下地を実際に下げているときだけ）。
+  - 不透明フロア（`--glass-menu`、`.modal`/`.panel-menu`/`.icon-picker`/`.tr-more-menu` 用）は**半透明には拡張していない**。
+    `--c-card`（`#1e2128`）と `--c-menu`（`#23262e`）は別の色なので、半透明の既定でこれを適用すると
+    モーダル等の色が `--card` 経由の色からわずかにずれてしまうため（実測で確認済み）
+- **面ではなく線で識別する箇所**: 帯を0%まで透かすとメニューやアクティブタブの塗りも消えるため、不透明フロアを設けず「境界線・下線だけ残す」方式にした。
+  - メニュー・ドロップダウン・モーダル: 既存の `border: 1px solid var(--border)` が元々 `--surface-alpha` と無関係に描かれているため無変更で足りる
+  - アクティブなタブ: `.tab.active` に `.tab.split` と同じ手法（`box-shadow: inset 0 -2px 0 var(--accent)`）で下線を追加。`--tab-active` の塗りが透明でも、下線と文字色（`--text` vs 非アクティブの `--text-dim`）で判別できる。
+    タブバーが横スクロールで端に張り付く間だけ付く `.tab.pinned`（`#tabs > .tab.pinned`。常にアクティブなタブに付く）は
+    `#tabs` というID込みの詳細度で `.tab.active` の `box-shadow` を上書きしてしまうため、同じ下線をそちら側にも直接追記した
 
 - 面の色は `--glass-surface` / `--glass-hover` / `--glass-border` / `--glass-page-blur`。既定（`:root`）では `--card` / `--card-hover` / `--border` / `0px` にエイリアスされ、liquidglass 以外では見た目が変わらない。
 - 色は白決め打ちではなく `rgb(var(--tint) / α)` で作る。`--tint` がダーク `255 255 255` / ライト `15 23 42` に切り替わるのでライトモードで面が消えない。
@@ -70,3 +95,4 @@
 - 2026-08-06: liquidglass を内部ページ・オンボーディング・ミニプレイヤー・タイマーへ拡張。背後にあるものごとに3通りの作り分けを追加（詳細節の表）。設定項目は増やしていない
 - 2026-08-06: 内部ページとサイドパネルを**本物の透過**に切り替え（Viewを `transparent: true` で作る）。下地の濃さの設定 `pageScrim` を追加。新しいタブの背景に `glass`（リキッドガラス）を追加
 - 2026-08-16: 非アクティブ時に透過が消える件を修正。DWMの仕様なので、非アクティブの間だけacrylicを押し直し続ける（`syncMaterialKeepAlive()`）。設定項目は増やしていない
+- 2026-08-16: 半透明（`windowStyle: 'translucent'`）を完全透過（0%）まで対応。`windowTranslucency` の下限20%を撤廃、内部ページ用に `translucentPageScrim`（既定100=不透明）を新設、`.tab.active` に線での識別を追加（詳細: [[2026-08-16_translucent-full-transparency]]）

@@ -2113,6 +2113,8 @@ const windowTranslucencyEl = document.getElementById('window-translucency');
 const windowTranslucencyRowEl = document.getElementById('window-translucency-row');
 const pageScrimEl = document.getElementById('page-scrim');
 const pageScrimRowEl = document.getElementById('page-scrim-row');
+const translucentPageScrimEl = document.getElementById('translucent-page-scrim');
+const translucentPageScrimRowEl = document.getElementById('translucent-page-scrim-row');
 const windowGradientRowEl = document.getElementById('window-gradient-row');
 const windowGradientAngleEl = document.getElementById('window-gradient-angle');
 const windowGradientStopsEl = document.getElementById('window-gradient-stops');
@@ -2143,8 +2145,10 @@ function renderWindowAppearance() {
   windowColorEl.value = themeState.windowColor || DEFAULT_WINDOW_COLOR[resolved];
 
   windowTranslucencyRowEl.classList.toggle('hidden', !TRANSLUCENT_WINDOW_STYLES.includes(style));
-  // 内部ページの透過は liquidglass でしか起きないので、その行もそのときだけ出す
+  // 内部ページの透過は liquidglass/半透明でしか起きないので、そのときだけ行を出す
+  // (どちらもフィールドが違うので行自体も別にする。既定の向きが逆で1本にまとめると分かりにくい)
   pageScrimRowEl.classList.toggle('hidden', style !== 'glass');
+  translucentPageScrimRowEl.classList.toggle('hidden', style !== 'translucent');
   windowGradientRowEl.classList.toggle('hidden', style !== 'gradient');
   windowPatternRowEl.classList.toggle('hidden', style !== 'pattern');
 
@@ -2155,6 +2159,10 @@ function renderWindowAppearance() {
   const scrim = themeState.pageScrim ?? 0;
   setRange(pageScrimEl, scrim);
   document.getElementById('page-scrim-value').textContent = `${scrim}%`;
+
+  const translucentScrim = themeState.translucentPageScrim ?? 100;
+  setRange(translucentPageScrimEl, translucentScrim);
+  document.getElementById('translucent-page-scrim-value').textContent = `${translucentScrim}%`;
 
   const angle = themeState.windowGradientAngle ?? 160;
   setRange(windowGradientAngleEl, angle);
@@ -2221,6 +2229,10 @@ windowTranslucencyEl.addEventListener('input', () => {
 pageScrimEl.addEventListener('input', () => {
   document.getElementById('page-scrim-value').textContent = `${pageScrimEl.value}%`;
   window.roopieInternal.setTheme({ pageScrim: Number(pageScrimEl.value) });
+});
+translucentPageScrimEl.addEventListener('input', () => {
+  document.getElementById('translucent-page-scrim-value').textContent = `${translucentPageScrimEl.value}%`;
+  window.roopieInternal.setTheme({ translucentPageScrim: Number(translucentPageScrimEl.value) });
 });
 windowGradientAngleEl.addEventListener('input', () => {
   document.getElementById('window-gradient-angle-value').textContent = `${windowGradientAngleEl.value}°`;

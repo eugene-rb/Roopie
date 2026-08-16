@@ -13,9 +13,8 @@
   const HEX = /^#[0-9a-fA-F]{6}$/;
 
   // 面を半透明にするのはクロームと、ページの上に重なるオーバーレイだけ。
-  // 設定や履歴などの内部ページを透かすと、後ろに透けるものが無く色が壊れる。
-  // サイドパネルも同じ理由で不透明のまま(WebContentsViewが transparent ではないので、
-  // 透かしても背後のacrylicではなく黒が出る)。色は明るさ・基準色に追従するので浮かない
+  // 内部ページ(設定・履歴等)とサイドパネルの透過は別系統(--page-scrim。tailwind.cssの
+  // liquidglass/半透明セクション参照)が担当するので、ここでは対象にしない
   const TRANSLUCENT_STYLES = new Set(['translucent', 'glass', 'gradient', 'pattern']);
 
   // モード既定の基準色(--c-bg 相当。tailwind.css の :root と揃える)
@@ -85,6 +84,7 @@
       root.dataset.windowMode = 'dark';
       delete root.dataset.windowStyle;
       delete root.dataset.windowPattern;
+      delete root.dataset.pageGlass;
       for (const name of ['--surface-alpha', '--chrome-surface', '--chrome-pattern-color', '--text', '--text-dim', '--tint', 'color-scheme', ...Object.keys(surfacesFrom('#000000'))]) {
         style.removeProperty(name);
       }
@@ -119,12 +119,25 @@
     // 帯をどれだけ透かすか。クロームとオーバーレイだけが対象
     const canTranslucent = (opts.chrome || opts.overlay) && TRANSLUCENT_STYLES.has(windowStyle);
     const translucency = Number.isFinite(theme?.windowTranslucency) ? theme.windowTranslucency : 62;
-    style.setProperty('--surface-alpha', canTranslucent ? String(Math.min(100, Math.max(20, translucency)) / 100) : '1');
+    style.setProperty('--surface-alpha', canTranslucent ? String(Math.min(100, Math.max(0, translucency)) / 100) : '1');
 
-    // 内部ページの下地の濃さ。liquidglass のとき、透明なView越しにウィンドウのacrylicを
-    // どれだけ見せるかを決める(0%=完全に透過)。--surface-alpha とは別の仕組みなので混同しない
-    const scrim = Number.isFinite(theme?.pageScrim) ? theme.pageScrim : 0;
-    style.setProperty('--page-scrim', `${Math.min(60, Math.max(0, scrim))}%`);
+    // 内部ページの下地の濃さ。liquidglass/半透明のとき、透明なView越しにウィンドウのacrylicを
+    // どれだけ見せるかを決める(0%=完全に透過)。--surface-alpha とは別の仕組みなので混同しない。
+    // スタイルごとに別フィールドを持つ(既定の向きが逆): liquidglassは既定0%(元から透過)、
+    // 半透明は既定100%(元は不透明だったので、下げない限り見た目を変えない)
+    const usesTranslucentScrim = windowStyle === 'translucent';
+    const scrimValue = usesTranslucentScrim ? theme?.translucentPageScrim : theme?.pageScrim;
+    const scrimDefault = usesTranslucentScrim ? 100 : 0;
+    const scrim = Number.isFinite(scrimValue) ? scrimValue : scrimDefault;
+    style.setProperty('--page-scrim', `${Math.min(100, Math.max(0, scrim))}%`);
+
+    // 内部ページに「板ガラス」の質感(アクセントの光・薄い--card・backdrop-filter)を
+    // 足すかどうかのフラグ。liquidglassは常に立てる(pageScrimの値に関わらず既存の見た目)。
+    // 半透明は下地を実際に下げているときだけ立てる。既定(scrim=100%)では立てないことで、
+    // --card 等のトークンを一切差し替えず、tailwind.css の :root 既定(不透明)のまま保つ
+    const showsPageGlass = windowStyle === 'glass' || (usesTranslucentScrim && scrim < 100);
+    if (showsPageGlass) root.dataset.pageGlass = '1';
+    else delete root.dataset.pageGlass;
 
     // 帯の背後に描く面。半透明・liquidglass では何も描かず、ウィンドウのacrylicを見せる
     if (windowStyle === 'gradient') {
