@@ -5,6 +5,7 @@ const path = require('path');
 const { app, session: electronSession, nativeImage, BrowserWindow } = require('electron');
 const { ElectronChromeExtensions } = require('electron-chrome-extensions');
 const { installChromeWebStore, installExtension, uninstallExtension } = require('electron-chrome-web-store');
+const ExtensionDownloadsAPI = require('./extension-downloads');
 
 // ウェブストアを介さない(=フォルダから読み込んだ)拡張機能の置き場所につける印。
 // ストアの拡張機能は必ずID(a〜pの32文字)のフォルダに入るので、これで確実に区別できる
@@ -23,6 +24,10 @@ const LOCAL_INDEX_FILE = '.roopie-local.json';
 class ExtensionSupport {
   constructor() {
     this.bySession = new Map(); // session -> ElectronChromeExtensions
+    // session -> ExtensionDownloadsAPI。electron-chrome-extensions は chrome.downloads を
+    // 実装していない(dist/chrome-extension-api.preload.js の noop; 詳細は extension-downloads.js)ため、
+    // ここでルーターに直接ハンドラを足して補っている
+    this.downloadsBySession = new Map();
     // session -> attach中のPromise。取り付けは非同期(ディスクからの読み込み)なので、
     // 2つ目以降のウィンドウや install() も「読み込み完了」まで待てるようにする
     this.attaching = new Map();
@@ -194,6 +199,7 @@ class ExtensionSupport {
       },
     });
     this.bySession.set(session, extensions);
+    this.downloadsBySession.set(session, new ExtensionDownloadsAPI(session, extensions.ctx));
 
     // Chromeウェブストアからのインストールを有効化(保存済み拡張の読み込みも行われる)。
     // allowUnpackedExtensions はウェブストア以外(=フォルダから読み込んだもの)を読み込むのに必須。

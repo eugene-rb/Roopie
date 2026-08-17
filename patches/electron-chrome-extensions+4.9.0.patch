@@ -1,0 +1,35 @@
+diff --git a/node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js b/node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js
+index 67d3be4..f85984f 100644
+--- a/node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js
++++ b/node_modules/electron-chrome-extensions/dist/chrome-extension-api.preload.js
+@@ -319,21 +319,24 @@
+             };
+           }
+         },
+-        // TODO: implement
++        // Roopie: download/search/cancel/erase/removeFile はメインプロセス側
++        // (extension-support.js が session.registerPreloadScript で挿し込む
++        // 実装 + ctx.router.handle 登録)で対応済みのため noop を外している。
++        // 他のメソッドは未対応のため noop のまま(patches/electron-chrome-extensions+*.patch)。
+         downloads: {
+           factory: (base) => {
+             return {
+               ...base,
+               acceptDanger: invokeExtension2("downloads.acceptDanger", { noop: true }),
+-              cancel: invokeExtension2("downloads.cancel", { noop: true }),
+-              download: invokeExtension2("downloads.download", { noop: true }),
+-              erase: invokeExtension2("downloads.erase", { noop: true }),
++              cancel: invokeExtension2("downloads.cancel"),
++              download: invokeExtension2("downloads.download"),
++              erase: invokeExtension2("downloads.erase"),
+               getFileIcon: invokeExtension2("downloads.getFileIcon", { noop: true }),
+               open: invokeExtension2("downloads.open", { noop: true }),
+               pause: invokeExtension2("downloads.pause", { noop: true }),
+-              removeFile: invokeExtension2("downloads.removeFile", { noop: true }),
++              removeFile: invokeExtension2("downloads.removeFile"),
+               resume: invokeExtension2("downloads.resume", { noop: true }),
+-              search: invokeExtension2("downloads.search", { noop: true }),
++              search: invokeExtension2("downloads.search"),
+               setUiOptions: invokeExtension2("downloads.setUiOptions", { noop: true }),
+               show: invokeExtension2("downloads.show", { noop: true }),
+               showDefaultFolder: invokeExtension2("downloads.showDefaultFolder", { noop: true }),
