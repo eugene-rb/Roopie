@@ -29,6 +29,22 @@ function clickAt(wc, x, y) {
   wc.sendInputEvent({ type: 'mouseUp', x: Math.round(x), y: Math.round(y), button: 'left', clickCount: 1 });
 }
 
+// mousedown〜mouseupの間に間隔を空ける版。この間に行のDOMが作り直されると
+// クリックイベントが発火しない(ボタンが差し替わって取れなくなる)ため、それを検出するのに使う
+async function clickAtSlow(wc, x, y, waitMs) {
+  wc.sendInputEvent({ type: 'mouseDown', x: Math.round(x), y: Math.round(y), button: 'left', clickCount: 1 });
+  await sleep(waitMs);
+  wc.sendInputEvent({ type: 'mouseUp', x: Math.round(x), y: Math.round(y), button: 'left', clickCount: 1 });
+}
+
+// "mm:ss" / "h:mm:ss" を秒に変換する(フロートの残り時間表示の単調減少を確認するのに使う)
+function parseDurationText(s) {
+  return String(s)
+    .split(':')
+    .map(Number)
+    .reduce((acc, n) => acc * 60 + n, 0);
+}
+
 // WebContentsViewは生成後のリサイズがレンダラーへすぐ伝わらないことがある(パネルを開いた直後は
 // レール幅44pxのままレイアウトされてしまい、クリック座標が全部ずれる)。capturePage()を打つと
 // 同期されるので、Viewの実寸と window.innerWidth が一致するまで数回叩く。UI操作の前に必ず呼ぶ
@@ -52,6 +68,17 @@ async function syncLayout(view) {
 async function clickIn(view, selector) {
   await syncLayout(view);
   await clickSelector(view.webContents, selector);
+}
+
+// mousedown〜mouseupの間隔を空けてクリックする版(clickAtSlow参照)
+async function clickInSlow(view, selector, waitMs) {
+  await syncLayout(view);
+  const pos = await js(
+    view.webContents,
+    `(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return null; const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`
+  );
+  if (!pos) throw new Error(`要素が見つかりません: ${selector}`);
+  await clickAtSlow(view.webContents, pos.x, pos.y, waitMs);
 }
 
 async function clickSelector(wc, selector) {
@@ -217,6 +244,18 @@ app.whenReady().then(async () => {
     check('フロートのカウントダウンが減る', cdBefore !== cdAfter, true);
     check('フロートのストップウォッチが増える', swBefore !== swAfter, true);
 
+    // リサイズ等、状態変化と無関係な理由で layout() が連発しても、フロートの表示が
+    // 直前に受信したスナップショットへ巻き戻らないこと(受信のたびにレンダラー側の基準時刻が
+    // リセットされる実装だと、無駄な再送のたびに「進んでは戻る」を繰り返し表示が止まって見える)
+    const cdSecBefore = parseDurationText(await floatTime('countdown'));
+    ctx.tabManager.layout();
+    ctx.tabManager.layout();
+    ctx.tabManager.layout();
+    await sleep(1200);
+    const cdSecAfter = parseDurationText(await floatTime('countdown'));
+    console.log(`   layout()連発を挟んだカウントダウン: ${cdSecBefore}秒 → ${cdSecAfter}秒`);
+    check('layout()連発を挟んでもカウントダウンが巻き戻らない', cdSecAfter < cdSecBefore, true);
+
     // ウィンドウが背面・最小化のときも進むか。Chromiumは見えていないページの
     // setInterval を1分間隔まで間引くので、放っておくと「タイマーが止まる」
     ctx.window.minimize();
@@ -241,6 +280,15 @@ app.whenReady().then(async () => {
     await clickIn(ctx.timerPanel.view, `.timerp-row[data-type="countdown"] .timerp-circle`);
     await sleep(500);
     check('フロートからそのまま再開できる', bundle.timers.find(preset.id).status, 'running');
+
+    // mousedown〜mouseupの間に1秒ティッカーの発火を挟んでも操作が効くこと。
+    // 行のDOMを毎秒作り直す実装だと、ここで押していたボタンが差し替わりクリックが失われる
+    await clickInSlow(ctx.timerPanel.view, `.timerp-row[data-type="countdown"] .timerp-circle`, 1300);
+    await sleep(500);
+    check('1秒ティッカーを挟んでもフロートの一時停止操作が効く', bundle.timers.find(preset.id).status, 'paused');
+    await clickIn(ctx.timerPanel.view, `.timerp-row[data-type="countdown"] .timerp-circle`);
+    await sleep(500);
+    check('(後始末)カウントダウンを再開しておく', bundle.timers.find(preset.id).status, 'running');
 
     // フロート上で一時停止しても行は消えない(消えると再開できなくなる)
     await clickIn(ctx.timerPanel.view, `.timerp-row[data-type="stopwatch"] .timerp-circle`);

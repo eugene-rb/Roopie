@@ -12,6 +12,14 @@ const MARGIN = 12;
 const MAX_HEIGHT = 320; // これを超える件数はパネル内でスクロール
 const MAX_RADIUS = 14;
 
+// remainingMs/elapsedMsはpresent()がnow基準で毎回計算する値なので、それ以外のフィールドだけを
+// 比較して「実質的な変化」の有無を判定する。layout()はリサイズ等状態と無関係な理由でも
+// 呼ばれるため、無条件に送ると受信のたびにレンダラー側の基準時刻がリセットされ、
+// 古いスナップショットへ表示が巻き戻る(進んでは戻るを繰り返し、実質止まって見える)
+function signatureOf(rows) {
+  return JSON.stringify(rows.map(({ remainingMs, elapsedMs, ...rest }) => rest));
+}
+
 /**
  * 画面の四隅に常駐するフローティングのタイマー表示。media-player.jsと同じ骨格だが、
  * 単一の再生状態ではなく「実行中/鳴動中のタイマー」の配列をリスト表示する点が異なる。
@@ -30,10 +38,13 @@ class TimerPanel {
     this.lastArea = null;
     this.docked = false;
     this.tempHidden = false;
+    this._lastSignature = null;
   }
 
   ensureView() {
     if (this.view) return;
+    // Viewを新規に作るときは必ず初回の状態を届ける(既存の値と偶然一致していてもスキップしない)
+    this._lastSignature = null;
     this.view = new WebContentsView({
       webPreferences: {
         preload: INTERNAL_PRELOAD,
@@ -128,7 +139,11 @@ class TimerPanel {
     this.lastArea = area;
     if (!this.view) return;
     const rows = this.visibleRows();
-    this.sendToPanel('timer:state', rows);
+    const signature = signatureOf(rows);
+    if (signature !== this._lastSignature) {
+      this._lastSignature = signature;
+      this.sendToPanel('timer:state', rows);
+    }
     const visible = rows.length > 0;
     this.view.setVisible(visible);
     if (!visible) return;

@@ -76,6 +76,7 @@ function render() {
     const row = document.createElement('div');
     row.className = 'timerp-row' + (t.ringing ? ' ringing' : '');
     row.dataset.type = t.type;
+    row.dataset.id = t.id;
 
     // 左のボタンは機能ごとに意味を変える:
     //   鳴動中 = 止める / カウントダウン・ストップウォッチ = 一時停止・再開 /
@@ -187,13 +188,40 @@ function updateBeep(shouldBeep) {
   }
 }
 
+// 1秒ごとの軽量更新。行のDOM(ボタン等)は作り直さず、進む値(残り時間・進捗リング)だけ書き換える。
+// 毎秒 render() で行を作り直すと、その瞬間にmousedown〜mouseupが重なっていた行のボタンが
+// 差し替わってクリックが発火しなくなる(「フロートのボタン操作が効かない」の原因になっていた)
+function tickRows() {
+  const elapsed = Date.now() - receivedAt;
+  for (const t of timers) {
+    const row = rowsEl.querySelector(`.timerp-row[data-id="${t.id}"]`);
+    if (!row) continue;
+    const timeEl = row.querySelector('.timerp-time');
+    if (timeEl) {
+      if (t.ringing) {
+        const remain = t.graceEndsAt ? Math.max(0, Math.ceil((t.graceEndsAt - Date.now()) / 1000)) : null;
+        timeEl.textContent = remain != null ? `あと${remain}秒` : '時間です';
+      } else {
+        timeEl.textContent = rowTime(t, elapsed);
+      }
+    }
+    if (t.type === 'countdown' && !t.ringing && t.durationMs) {
+      const prog = row.querySelector('.timerp-ring-prog');
+      if (prog) {
+        const f = Math.max(0, Math.min(1, remainingOf(t, elapsed) / t.durationMs));
+        prog.setAttribute('stroke-dasharray', `${(RING_C * f).toFixed(2)} ${RING_C.toFixed(2)}`);
+      }
+    }
+  }
+}
+
 window.roopieInternal.onTimerState((items) => {
   timers = items;
   receivedAt = Date.now();
   render();
 });
 
-setInterval(render, 1000);
+setInterval(tickRows, 1000);
 
 dockBtn.addEventListener('click', () => window.roopieInternal.setSetting('timerDocked', true));
 dismissBtn.addEventListener('click', () => window.roopieInternal.timerDismiss());
