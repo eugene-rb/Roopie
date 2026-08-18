@@ -170,6 +170,10 @@ app.whenReady().then(async () => {
     check('アラーム追加モーダルが開く', await js(panelWc, `!document.getElementById('timer-edit').classList.contains('hidden')`), true);
     check('アラームでは時刻欄が出る', await js(panelWc, `!document.getElementById('timer-fields-clock').classList.contains('hidden')`), true);
     check('アラームではカウントダウン欄は隠れる', await js(panelWc, `document.getElementById('timer-fields-countdown').classList.contains('hidden')`), true);
+    await clickSelector(panelWc, '#timer-repeat-enabled');
+    await sleep(200);
+    await shot(panelWc, 'timer-edit-modal.png');
+    await clickSelector(panelWc, '#timer-repeat-enabled');
     await js(panelWc, `document.getElementById('timer-name').value = '検証アラーム'`);
     await js(panelWc, `document.getElementById('timer-clock-time').value = '07:30'`);
     await clickSelector(panelWc, '#timer-edit-apply');

@@ -4211,6 +4211,7 @@ select.row-btn {
 }
 
 .timer-tabs {
+  position: relative;
   display: flex;
   gap: 2px;
   padding: 2px;
@@ -4220,7 +4221,22 @@ select.row-btn {
   min-width: 0;
 }
 
+/* 選択中のタブの背景を担う可動インジケータ。setTimerTab()がtranslateXで動かす */
+.timer-tabs-indicator {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: calc((100% - 4px) / 3);
+  height: calc(100% - 4px);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 0;
+}
+
 .timer-tab {
+  position: relative;
+  z-index: 1;
   flex: 1;
   padding: 6px 0;
   border: none;
@@ -4230,6 +4246,7 @@ select.row-btn {
   font-size: 11.5px;
   cursor: pointer;
   white-space: nowrap;
+  transition: color 0.15s ease;
 }
 
 .timer-tab:hover {
@@ -4237,7 +4254,6 @@ select.row-btn {
 }
 
 .timer-tab.active {
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
   color: var(--accent);
   font-weight: 600;
 }
@@ -4299,8 +4315,8 @@ select.row-btn {
 
 .cd-ring {
   position: relative;
-  width: 132px;
-  height: 132px;
+  width: 140px;
+  height: 140px;
 }
 
 .cd-ring svg {
@@ -4378,23 +4394,40 @@ select.row-btn {
 }
 
 .timer-flat-btn {
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: transparent;
+  padding: 7px 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--card-hover);
   color: var(--text);
   font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
+  transition: transform 0.1s ease-out, filter 0.15s ease;
+}
+
+.timer-flat-btn:active:not(:disabled) {
+  transform: scale(0.95);
 }
 
 .timer-flat-btn:hover:not(:disabled) {
-  background: var(--card-hover);
+  filter: brightness(1.1);
 }
 
 .timer-flat-btn:disabled {
   opacity: 0.4;
   cursor: default;
+}
+
+/* カウントダウンカード内: 左(リセット)=破壊的操作、右(+1分)=アクセントのティントで役割を区別する */
+.cd-controls .timer-flat-btn:first-child {
+  background: color-mix(in srgb, #ff453a 14%, transparent);
+  color: #ff453a;
+}
+
+.cd-controls .timer-flat-btn:last-child {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
 }
 
 /* 📌 フローティング表示への固定 */
@@ -4425,14 +4458,24 @@ select.row-btn {
   color: var(--accent);
 }
 
-/* ---- アラーム: 時刻とON/OFFスイッチ ---- */
+/* ---- アラーム: iOSの設定/アラーム一覧と同じ「1枚のグループ化カード+行区切り」 ---- */
+#alarm-list {
+  border-radius: 14px;
+  background: var(--card);
+  overflow: hidden;
+}
+
 .alarm-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px;
-  border-radius: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+}
+
+#alarm-list .alarm-item:last-child {
+  border-bottom: none;
 }
 
 .alarm-item:hover {
@@ -4445,7 +4488,6 @@ select.row-btn {
 }
 
 .alarm-item.ringing {
-  outline: 1px solid #ff3b30;
   background: color-mix(in srgb, #ff3b30 14%, transparent);
 }
 
@@ -4463,10 +4505,11 @@ select.row-btn {
 }
 
 .alarm-time {
-  font-size: 27px;
+  font-size: 30px;
   font-weight: 600;
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.3px;
   color: var(--text);
 }
 
@@ -4480,8 +4523,8 @@ select.row-btn {
 
 .timer-switch {
   position: relative;
-  width: 40px;
-  height: 24px;
+  width: 46px;
+  height: 27px;
   flex-shrink: 0;
   border: none;
   border-radius: 999px;
@@ -4498,15 +4541,16 @@ select.row-btn {
   position: absolute;
   top: 2px;
   left: 2px;
-  width: 20px;
-  height: 20px;
+  width: 23px;
+  height: 23px;
   border-radius: 50%;
   background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
   transition: transform 0.15s ease;
 }
 
 .timer-switch.on .knob {
-  transform: translateX(16px);
+  transform: translateX(19px);
 }
 
 /* ---- ストップウォッチ: 1/100秒まで出す大きい表示とラップ ---- */
@@ -4549,12 +4593,12 @@ select.row-btn {
 
 .sw-time {
   padding: 10px 0 2px;
-  font-size: 38px;
-  font-weight: 300;
+  font-size: 44px;
+  font-weight: 200;
   line-height: 1.1;
   text-align: center;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.5px;
+  letter-spacing: -1px;
   color: var(--text);
   flex-shrink: 0;
 }
@@ -4563,21 +4607,30 @@ select.row-btn {
   color: #64d2ff;
 }
 
+/* iOS純正Stopwatchと同じ: 左=ラップ/リセットの地味な円、右=スタート/停止の色付き円 */
 .sw-controls {
   display: flex;
-  gap: 8px;
+  justify-content: center;
+  align-items: center;
+  gap: 22px;
   flex-shrink: 0;
 }
 
 .sw-btn {
-  flex: 1;
-  padding: 10px 0;
+  width: 64px;
+  height: 64px;
+  padding: 0;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 50%;
   background: var(--card);
   color: var(--text);
-  font-size: 13px;
+  font-size: 12px;
   cursor: pointer;
+  transition: transform 0.1s ease-out, filter 0.15s ease;
+}
+
+.sw-btn:active:not(:disabled) {
+  transform: scale(0.93);
 }
 
 .sw-btn:hover:not(:disabled) {
@@ -4696,6 +4749,11 @@ select.row-btn {
   border-radius: 50%;
   cursor: pointer;
   background: transparent;
+  transition: transform 0.1s ease-out;
+}
+
+.timer-circle-btn:active {
+  transform: scale(0.92);
 }
 
 .timer-circle-btn svg {
@@ -4728,13 +4786,13 @@ select.row-btn {
 
 /* 実行中カード内の主ボタンは大きめ */
 .timer-circle-btn.lg {
-  width: 44px;
-  height: 44px;
+  width: 52px;
+  height: 52px;
 }
 
 .timer-circle-btn.lg svg {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
 }
 
 .modal.timer-modal {
@@ -4756,13 +4814,15 @@ select.row-btn {
 }
 
 .timer-duration-inputs input {
-  width: 56px;
-  padding: 6px 8px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--card);
+  width: 60px;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--card-hover);
   color: var(--text);
-  font-size: 13px;
+  font-size: 15px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
   text-align: center;
 }
 
@@ -4774,24 +4834,35 @@ select.row-btn {
 
 .weekday-chips {
   display: flex;
-  gap: 4px;
+  justify-content: space-between;
 }
 
+/* iOSの曜日リピート選択と同じ円形チップ */
 .weekday-chip {
-  flex: 1;
-  padding: 6px 0;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 50%;
   background: transparent;
   color: var(--text-dim);
   font-size: 12px;
   cursor: pointer;
+  transition: transform 0.1s ease-out;
+}
+
+.weekday-chip:active {
+  transform: scale(0.92);
 }
 
 .weekday-chip.active {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: #fff;
+  border-color: transparent;
+  background: var(--accent);
 }
 
 .timer-actions-title {
@@ -4800,9 +4871,13 @@ select.row-btn {
   margin-top: 4px;
 }
 
+/* iOSの設定画面のトグル行と同じ配置: ラベル左・スイッチ右。
+   実体は<input type=checkbox>のままJSは.checkedを読むので変更不要 */
 .timer-action-row {
   display: flex;
+  flex-direction: row-reverse;
   align-items: center;
+  justify-content: space-between;
   gap: 6px;
   font-size: 12.5px;
   cursor: pointer;
@@ -4814,6 +4889,45 @@ select.row-btn {
 
 .timer-action-row.danger {
   color: #ff7a7a;
+}
+
+/* チェックボックスをiOSのスイッチ風見た目に変換(構造・イベントはネイティブcheckboxのまま) */
+#timer-actions-block input[type='checkbox'],
+#timer-repeat-enabled {
+  appearance: none;
+  position: relative;
+  flex-shrink: 0;
+  width: 40px;
+  height: 24px;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--border);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+#timer-actions-block input[type='checkbox']::before,
+#timer-repeat-enabled::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s ease;
+}
+
+#timer-actions-block input[type='checkbox']:checked,
+#timer-repeat-enabled:checked {
+  background: #30d158;
+}
+
+#timer-actions-block input[type='checkbox']:checked::before,
+#timer-repeat-enabled:checked::before {
+  transform: translateX(16px);
 }
 
 /* Webパネル編集モーダル(名前/URL/アイコン) */

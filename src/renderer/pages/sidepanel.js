@@ -729,6 +729,8 @@ function setTimerTab(tab) {
   for (const btn of document.querySelectorAll('.timer-tab')) {
     btn.classList.toggle('active', btn.dataset.tt === timerTab);
   }
+  const idx = TIMER_TAB_TYPES.indexOf(timerTab);
+  $('timer-tabs-indicator').style.transform = `translateX(${idx * 100}%)`;
   $('tv-countdown').classList.toggle('hidden', timerTab !== 'countdown');
   $('tv-clock').classList.toggle('hidden', timerTab !== 'clock');
   $('tv-stopwatch').classList.toggle('hidden', timerTab !== 'stopwatch');
@@ -778,7 +780,7 @@ function renderPresets() {
 }
 renderPresets();
 
-const RING_R = 46;
+const RING_R = 50;
 const RING_C = 2 * Math.PI * RING_R;
 
 // 残り時間の割合を示すリング。上から時計回りに減っていく
@@ -787,9 +789,9 @@ function ringEl(fraction) {
   const wrap = document.createElement('div');
   wrap.className = 'cd-ring';
   wrap.innerHTML =
-    '<svg viewBox="0 0 108 108">' +
-    `<circle class="cd-ring-track" cx="54" cy="54" r="${RING_R}"/>` +
-    `<circle class="cd-ring-prog" cx="54" cy="54" r="${RING_R}" stroke-dasharray="${(RING_C * f).toFixed(2)} ${RING_C.toFixed(2)}"/>` +
+    '<svg viewBox="0 0 116 116">' +
+    `<circle class="cd-ring-track" cx="58" cy="58" r="${RING_R}"/>` +
+    `<circle class="cd-ring-prog" cx="58" cy="58" r="${RING_R}" stroke-dasharray="${(RING_C * f).toFixed(2)} ${RING_C.toFixed(2)}"/>` +
     '</svg>';
   return wrap;
 }
