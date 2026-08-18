@@ -10,7 +10,7 @@ let receivedAt = Date.now();
 let audioCtx = null;
 let beepTimer = null;
 
-const RING_R = 13;
+const RING_R = 15;
 const RING_C = 2 * Math.PI * RING_R;
 
 function formatDuration(ms) {
@@ -60,9 +60,9 @@ function progressRing(fraction) {
   const wrap = document.createElement('span');
   wrap.className = 'timerp-btnwrap';
   wrap.innerHTML =
-    `<svg class="timerp-ring" viewBox="0 0 34 34">` +
-    `<circle class="timerp-ring-track" cx="17" cy="17" r="${RING_R}"/>` +
-    `<circle class="timerp-ring-prog" cx="17" cy="17" r="${RING_R}" ` +
+    `<svg class="timerp-ring" viewBox="0 0 38 38">` +
+    `<circle class="timerp-ring-track" cx="19" cy="19" r="${RING_R}"/>` +
+    `<circle class="timerp-ring-prog" cx="19" cy="19" r="${RING_R}" ` +
     `stroke-dasharray="${(RING_C * f).toFixed(2)} ${RING_C.toFixed(2)}"/>` +
     `</svg>`;
   return wrap;

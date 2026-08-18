@@ -305,13 +305,11 @@ body {
 
 /* タイマーのピルはiOSのライブアクティビティ風の固定色(テーマに追従しない)。
    実機のライブアクティビティ自体が半透明マテリアルなので、ガラスにするのは
-   元の意図に沿う。高さ44pxは timer-panel.js の ROW_HEIGHT と対応しているため触らない */
+   元の意図に沿う。高さ48pxは timer-panel.js の ROW_HEIGHT(48+gap8=56) と対応しているため触らない。
+   通常モードでも既にマテリアル化しているので、ここでは背後が実ページになる分だけ強めのblurに差し替える */
 :root[data-window-style="glass"] .timerp-body .timerp-row {
-  background: rgb(28 28 30 / 0.62);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.14),
-    0 6px 20px rgb(0 0 0 / 0.45);
-  backdrop-filter: blur(14px) saturate(160%);
+  background: rgb(28 28 30 / 0.55);
+  backdrop-filter: blur(22px) saturate(180%);
 }
 
 /* パターン(下地色と線の色の2色。種類は data-window-pattern)。
@@ -5161,22 +5159,30 @@ select.row-btn {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 6px 6px 0;
+  gap: 8px;
+  /* padding-topはgapと同じ値にする: main/timer-panel.js の height = TOOLS_HEIGHT + n*ROW_HEIGHT が
+     成立するのはこの2値が一致して打ち消し合うおかげ(6+44n+6(n-1)=50n だった旧値と同じ理屈)。
+     変えるときは ROW_HEIGHT(=行高+gap) を必ず同じ編集で更新すること */
+  padding: 8px 8px 0;
 }
 
-/* iOSのロック画面ライブアクティビティ(タイマー)風の黒い丸ピル。
+/* iOSのロック画面ライブアクティビティ(タイマー)風の黒い丸ピル。常時マテリアル質感にして
+   実機のライブアクティビティに近づける(ガラスウィンドウ時は上のオーバーライドでさらに強めるだけ)。
    高さは固定(timer-panel.js の ROW_HEIGHT と対応。ずれると行が見切れてクリック位置も狂う) */
 .timerp-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 44px;
+  height: 48px;
   box-sizing: border-box;
-  padding: 0 12px 0 5px;
+  padding: 0 14px 0 6px;
   border-radius: 999px;
-  background: #1c1c1e;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  background: rgb(28 28 30 / 0.78);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.14),
+    0 8px 24px rgb(0 0 0 / 0.45);
+  backdrop-filter: blur(20px) saturate(180%);
+  transition: background 0.2s ease;
 }
 
 /* カウントダウンの残り割合リング(ボタンの周りを囲む。行の高さは変えない) */
@@ -5185,16 +5191,16 @@ select.row-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
   flex-shrink: 0;
 }
 
 .timerp-ring {
   position: absolute;
   inset: 0;
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
   transform: rotate(-90deg);
   /* SVGのルート要素は矩形全体でクリックを受けるため、これが無いと下の一時停止ボタンを
      覆ってしまい「カウントダウンだけフロートから止められない」状態になる */
@@ -5212,34 +5218,40 @@ select.row-btn {
   stroke: #ff9f0a;
   stroke-width: 3;
   stroke-linecap: round;
+  transition: stroke-dasharray 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .timerp-btnwrap .timerp-circle {
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
 }
 
 .timerp-btnwrap .timerp-circle svg {
-  width: 11px;
-  height: 11px;
+  width: 12px;
+  height: 12px;
 }
 
 .timerp-row.ringing {
-  background: color-mix(in srgb, #ff3b30 32%, #1c1c1e);
+  background: color-mix(in srgb, #ff3b30 38%, rgb(28 28 30 / 0.78));
 }
 
 .timerp-circle {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   flex-shrink: 0;
   border: none;
   border-radius: 50%;
   cursor: pointer;
-  background: #ff9f0a;
-  color: #2b1400;
+  background: color-mix(in srgb, #ff9f0a 26%, rgb(28 28 30 / 0.6));
+  color: #ff9f0a;
+  transition: transform 0.1s ease-out;
+}
+
+.timerp-circle:active {
+  transform: scale(0.88);
 }
 
 .timerp-circle svg {
@@ -5249,13 +5261,13 @@ select.row-btn {
 
 .timerp-circle.ringing {
   background: #ff3b30;
-  color: #2b0705;
+  color: #fff;
 }
 
 /* 機能ごとに色を分ける: カウントダウン=オレンジ / ストップウォッチ=青 / アラーム=紫 */
 .timerp-row[data-type='stopwatch'] .timerp-circle {
-  background: #64d2ff;
-  color: #06212b;
+  background: color-mix(in srgb, #64d2ff 26%, rgb(28 28 30 / 0.6));
+  color: #64d2ff;
 }
 
 /* 予約中のアラームはボタンではなくベルの表示(押しても予定を消さない) */
@@ -5274,14 +5286,19 @@ select.row-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   flex-shrink: 0;
   border: none;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.14);
   color: #fff;
   cursor: pointer;
+  transition: transform 0.1s ease-out, background 0.15s ease;
+}
+
+.timerp-lap:active {
+  transform: scale(0.88);
 }
 
 .timerp-lap svg {
@@ -5290,7 +5307,7 @@ select.row-btn {
 }
 
 .timerp-lap:hover {
-  background: rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.26);
 }
 
 .timerp-info {
@@ -5299,8 +5316,8 @@ select.row-btn {
 }
 
 .timerp-name {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.75);
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.72);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -5308,9 +5325,10 @@ select.row-btn {
 
 .timerp-time {
   flex-shrink: 0;
-  font-size: 17px;
+  font-size: 19px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.3px;
   color: #ff9f0a;
   white-space: nowrap;
 }
@@ -5327,12 +5345,26 @@ select.row-btn {
   color: #ff3b30;
 }
 
+/* 通常は隠しておき、パネルにマウスが乗っている間だけ現れる(macOSのフローティングPiPと同じ
+   考え方)。display:noneではなくopacityで隠すため、レイアウト上の高さは常に確保され
+   main/timer-panel.js の TOOLS_HEIGHT 前提は崩れない */
 #timerp-tools {
   display: flex;
   align-items: center;
   gap: 2px;
   padding: 4px 6px;
   flex-shrink: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(2px);
+  transition: opacity 0.18s ease-out, transform 0.18s ease-out;
+}
+
+#timerp:hover #timerp-tools,
+#timerp:focus-within #timerp-tools {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
 }
 
 /* サイドパネルの「再生中」セクション */

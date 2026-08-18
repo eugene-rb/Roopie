@@ -5,8 +5,8 @@ const PANEL_URL = 'roopie://timerpanel';
 const INTERNAL_PRELOAD = path.join(__dirname, '..', 'preload', 'internal-preload.js');
 
 const WIDTH = 280;
-// 行の高さ44px + 行間6px(CSSの .timerp-row / #timerp-rows と対応させる)
-const ROW_HEIGHT = 50;
+// 行の高さ48px + 行間8px(CSSの .timerp-row / #timerp-rows と対応させる)
+const ROW_HEIGHT = 56;
 const TOOLS_HEIGHT = 30;
 const MARGIN = 12;
 const MAX_HEIGHT = 320; // これを超える件数はパネル内でスクロール
