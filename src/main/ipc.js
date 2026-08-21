@@ -18,7 +18,6 @@ const {
   showTimerMenu,
   showBookmarkBarMenu,
 } = require('./toolbar-context-menu');
-const { searchUrl } = require('./search-engines');
 const { shouldDetach } = require('./tab-drag');
 const { normalizeToolbarItems } = require('./toolbar-items');
 const { geocode, weather, fetchRss } = require('./widgets');
@@ -148,12 +147,12 @@ function registerIpc() {
 
   // ---- タブ ----
   ipcMain.on('tabs:new', (e, url, background) => tabsOf(e)?.createTab(url || undefined, { background: !!background }));
-  // タブバーへのドラッグ&ドロップ検索(Edgeオマージュ): 選択テキストは常に検索する
+  // タブバーへのドラッグ&ドロップ(Edgeオマージュ): URLらしければそのまま開き、それ以外は検索する
   ipcMain.on('tabs:search-new-tab', (e, text, index) => {
     const query = String(text ?? '').trim();
     if (!query) return;
     const tabs = tabsOf(e);
-    const tab = tabs?.createTab(searchUrl(bundleOf(e)?.settings.data.searchEngine, query));
+    const tab = tabs?.createTab(TabManager.toUrl(query, bundleOf(e)?.settings.data.searchEngine));
     // ドロップ位置(タブの間)に差し込む。未指定なら末尾のまま
     if (tab && Number.isInteger(index)) tabs.moveTab(tab.id, index);
   });

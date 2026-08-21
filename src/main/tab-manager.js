@@ -1762,3 +1762,4 @@ function toUrl(input, engineId) {
 module.exports = TabManager;
 module.exports.NEW_TAB_URL = NEW_TAB_URL;
 module.exports.applyPermissionPolicy = applyPermissionPolicy;
+module.exports.toUrl = toUrl;
