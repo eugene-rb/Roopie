@@ -64,11 +64,26 @@ app.whenReady().then(async () => {
     await Promise.race([new Promise((r) => tm.activeWebContents().once('did-finish-load', r)), sleep(6000)]);
     await sleep(300);
     check('別ページへ移動済み', tm.activeWebContents().getURL().startsWith(`http://localhost:${PORT}`), true);
+    check('この時点でタブは1枚', tm.tabs.length, 1);
 
     await clickSelector(ctx.window.webContents, '#home-btn');
     await Promise.race([new Promise((r) => tm.activeWebContents().once('did-finish-load', r)), sleep(6000)]);
     await sleep(300);
     check('クリックでスタート画面(roopie://newtab)に戻る', tm.activeWebContents().getURL(), 'roopie://newtab/');
+    check('新しいタブを追加せず、アクティブタブ自身が遷移する(タブ枚数は1枚のまま)', tm.tabs.length, 1);
+    check('遷移後もアクティブタブがホーム', tm.getTab(tm.activeTabId)?.view.webContents.getURL(), 'roopie://newtab/');
+
+    // タブのタイトル/ファビコンが「ホーム」になっているか
+    const homeTitle = await js(tm.activeWebContents(), `document.title`);
+    check('新しいタブのタイトルは「ホーム」', homeTitle, 'ホーム');
+    await Promise.race([
+      new Promise((r) => {
+        const check2 = () => (tm.getTab(tm.activeTabId)?.favicon ? r() : setTimeout(check2, 100));
+        check2();
+      }),
+      sleep(4000),
+    ]);
+    check('新しいタブにファビコンが設定される', !!tm.getTab(tm.activeTabId)?.favicon, true);
 
     server.close();
     browser.flushAll();

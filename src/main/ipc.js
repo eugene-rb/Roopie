@@ -263,6 +263,7 @@ function registerIpc() {
     targetCtx.window.focus();
   });
   ipcMain.on('tabs:navigate', (e, input) => tabsOf(e)?.navigate(input));
+  ipcMain.on('tabs:go-home', (e) => tabsOf(e)?.goHome());
   ipcMain.on('tabs:back', (e) => tabsOf(e)?.goBack());
   ipcMain.on('tabs:forward', (e) => tabsOf(e)?.goForward());
   ipcMain.on('tabs:reload', (e) => tabsOf(e)?.reload());

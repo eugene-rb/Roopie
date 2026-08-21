@@ -1223,6 +1223,21 @@ class TabManager {
     tab.view.webContents.loadURL(url);
   }
 
+  // ホームボタン: アクティブタブをホームへ遷移させる(新しいタブを追加しない)。
+  // 内部ページはpreloadを持つタブでしか動かせない(navigate()と同じ制約)ため、
+  // 通常タブの場合はその場でloadURLできない。同じ位置・同じグループへ新しいタブを
+  // 差し込んでから元のタブを閉じることで、見た目上は同じ場所でホームへ遷移したようにする。
+  goHome() {
+    const tab = this.getTab(this.activeTabId);
+    if (!tab) return;
+    if (tab.hasInternalPreload) {
+      tab.view.webContents.loadURL(NEW_TAB_URL);
+      return;
+    }
+    this.createTab(NEW_TAB_URL, { nearActive: true, groupId: tab.groupId });
+    this.closeTab(tab.id);
+  }
+
   goBack() {
     const wc = this.activeWebContents();
     if (wc?.navigationHistory.canGoBack()) wc.navigationHistory.goBack();
@@ -1675,7 +1690,7 @@ class TabManager {
           // 拡張機能システム(electron-chrome-extensions)から見たタブID。
           // ツールバーの <browser-action-list> に「このウィンドウの今のタブ」を教えるのに使う
           wcId: wc.id,
-          title: wc.getTitle() || t.hibernatedTitle || (t.hibernated ? hostnameOf(t.hibernatedUrl) : '新しいタブ'),
+          title: wc.getTitle() || t.hibernatedTitle || (t.hibernated ? hostnameOf(t.hibernatedUrl) : 'ホーム'),
           // 新しいタブページではアドレスバーを空にする(Chromeと同じ挙動)
           url: isNewTabUrl(url) ? '' : url,
           favicon: t.favicon,
