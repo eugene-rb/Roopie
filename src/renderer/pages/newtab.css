@@ -279,9 +279,12 @@ body[data-bg="plain"] #vignette {
   justify-self: center;
 }
 
-/* aタグ・imgは既定でネイティブドラッグ対象になり、独自のpointerドラッグと衝突するため無効化 */
+/* aタグ・imgは既定でネイティブドラッグ対象になり、独自のpointerドラッグと衝突するため無効化。
+   フォルダビュー内のタイル(.grid-itemを持たない)も同じ独自ドラッグを使うため対象に含める */
 .grid-item,
-.grid-item * {
+.grid-item *,
+.folder-view-grid .quick-link,
+.folder-view-grid .quick-link * {
   -webkit-user-drag: none;
 }
 

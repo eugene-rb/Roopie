@@ -750,6 +750,25 @@ app.whenReady().then(async () => {
   check('Escapeはフォルダビューだけを閉じる', await js(`!!document.querySelector('.folder-view')`), false);
   check('編集モードはフォルダを閉じても維持される', await js(`document.getElementById('quick-links').classList.contains('edit-mode')`), true);
 
+  // 編集モードを一旦抜けて、フォルダタイル自体を長押ししたときの挙動を検証する。
+  // leafと違いフォルダは編集モード中もタップで開ける設計のため、「長押しでジグルに入った
+  // 直後のクリック」と「既に編集モード中の別のタップ」を区別できていないと、長押しで
+  // ジグルへ入るつもりが指を離した瞬間にフォルダが開いてしまう
+  await js(`document.getElementById('quick-links').click()`);
+  await sleep(50);
+  check(
+    '編集モードを一旦抜ける(次の検証のため)',
+    await js(`document.getElementById('quick-links').classList.contains('edit-mode')`),
+    false
+  );
+  const folderCenterForLongPress = await centerOf(`[data-grid-key="${folderGridKey}"]`);
+  await firePointer(`[data-grid-key="${folderGridKey}"]`, 'pointerdown', 12, folderCenterForLongPress.x, folderCenterForLongPress.y);
+  await sleep(650);
+  await firePointer(`[data-grid-key="${folderGridKey}"]`, 'pointerup', 12, folderCenterForLongPress.x, folderCenterForLongPress.y);
+  await sleep(100);
+  check('フォルダを長押しして離してもフォルダは開かない', await js(`!!document.querySelector('.folder-view')`), false);
+  check('フォルダの長押しでも編集モードには入る', await js(`document.getElementById('quick-links').classList.contains('edit-mode')`), true);
+
   // 削除バッジでショートカット(leaf)を確認なしで削除できる
   await js(`document.querySelector('[data-grid-key="${leafKey}"] .grid-delete-badge').click()`);
   await sleep(300);
@@ -766,6 +785,16 @@ app.whenReady().then(async () => {
   await js(`document.querySelector('.grid-popup-item').click()`);
   await sleep(300);
   check('確認後にフォルダを削除できる', await js(`!!document.querySelector('[data-grid-key="${folderGridKey}"]')`), false);
+
+  // 削除バッジはウィジェットにも付く(overflow:hiddenの.widget内でも見える位置に配置している)
+  check(
+    'ウィジェットにも削除バッジが見える',
+    await js(`getComputedStyle(document.querySelector('.widget-weather .grid-delete-badge')).display`),
+    'flex'
+  );
+  await js(`document.querySelector('.widget-weather .grid-delete-badge').click()`);
+  await sleep(300);
+  check('削除バッジでウィジェットを削除できる', await js(`!!document.querySelector('.widget-weather')`), false);
 
   // 完了ボタンで編集モードを抜ける
   check('完了ボタンをクリックする前は編集モード', await js(`document.getElementById('quick-links').classList.contains('edit-mode')`), true);

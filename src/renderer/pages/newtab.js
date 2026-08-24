@@ -615,7 +615,14 @@ function groupItemEl(folder) {
   el.className = 'quick-link quick-link-group';
   el.title = `${folder.title}\n${count}件`;
   el.draggable = false;
-  el.addEventListener('click', () => openFolderView(folder.id));
+  el.addEventListener('click', () => {
+    // 長押しでその場で編集モードに入った直後の1クリックだけは、フォルダを開かず飲み込む
+    if (suppressNextGridClick) {
+      suppressNextGridClick = false;
+      return;
+    }
+    openFolderView(folder.id);
+  });
 
   el.appendChild(shortcutTileEl(folder));
 
@@ -1115,6 +1122,10 @@ const LONG_PRESS_MS = 500; // 長押しでジグル編集モードに入るま�
 let dragState = null;
 let editMode = false;
 let editDoneBtn = null;
+// 長押しでその場で編集モードに入った直後の1クリックだけ、フォルダを開く動作を抑制する
+// (leafは#quick-links.edit-modeの有無で判定できるが、ブックマークフォルダは編集モード中も
+// タップで開ける設計のため、「今まさに編集モードに入った操作自体」だけを区別する必要がある)
+let suppressNextGridClick = false;
 
 function currentCellPx() {
   const v = parseFloat(getComputedStyle(quickLinksEl).getPropertyValue('--cell'));
@@ -1256,6 +1267,8 @@ function attachGridDrag(el, item) {
   const handle = item.type === 'widget' ? el.querySelector('.widget-head') : el;
   handle.addEventListener('pointerdown', (e) => {
     if (dragState || e.button !== 0) return;
+    // 別アイテムでの直前の抑制フラグを持ち越さない(新しい操作の起点なので必ずリセットする)
+    suppressNextGridClick = false;
     const [w, h] = itemSpan(item);
     const state = {
       item,
@@ -1272,12 +1285,16 @@ function attachGridDrag(el, item) {
       targetX: item.x,
       targetY: item.y,
       longPressTimer: null,
+      justEnteredEditMode: false,
     };
     // 既に編集モードなら(=既にジグル中)長押し判定は不要
     if (!editMode) {
       state.longPressTimer = setTimeout(() => {
         state.longPressTimer = null;
-        if (dragState === state && !state.moved) enterEditMode();
+        if (dragState === state && !state.moved) {
+          state.justEnteredEditMode = true;
+          enterEditMode();
+        }
       }, LONG_PRESS_MS);
     }
     dragState = state;
@@ -1453,7 +1470,14 @@ function onGridPointerUp(e) {
     clearTimeout(state.mergeArmTimer);
     state.mergeArmTimer = null;
   }
-  if (!state.moved) return; // 動いていなければ通常のクリックとして扱う(何もしない)
+  if (!state.moved) {
+    // 長押しでこの場で編集モードに入った直後のclickは、フォルダを開く動作だけ抑制する
+    // (leafはeditModeクラスの有無で自前判定できるので対象外。ここで#quick-links.edit-mode
+    // の有無を判定しないのは、抑制したいのは「今まさに入った操作」であって、
+    // 既に編集モード中の別のタップまで巻き込まないため)
+    if (state.justEnteredEditMode) suppressNextGridClick = true;
+    return; // 動いていなければ通常のクリックとして扱う(何もしない)
+  }
   endDragVisual(state);
   clearDropHighlights();
   if (state.pageDropTarget) {
