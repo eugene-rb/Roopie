@@ -511,6 +511,11 @@ app.whenReady().then(async () => {
   await sleep(100);
   await js(`[...document.querySelectorAll('.grid-popup-item')].find((b) => b.textContent.includes('ショートカット')).click()`);
   await sleep(150);
+  check(
+    'ショートカット追加モーダルは初期フォーカスがURL欄',
+    await js(`document.activeElement === document.querySelector('.shortcut-modal input[placeholder^="URL"]')`),
+    true
+  );
   await js(`[...document.querySelectorAll('.btn')].find((b) => b.textContent === 'アイコンを変更').click()`);
   await sleep(100);
   const overflowInfo = await js(`(() => {

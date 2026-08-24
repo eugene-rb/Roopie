@@ -2173,7 +2173,8 @@ function openShortcutModal(existing) {
 
   backdrop.appendChild(modal);
   document.body.appendChild(backdrop);
-  nameInput.focus();
+  // 種別が「ファイル/フォルダ」のときはURL欄が非表示のため名前欄、既定の「ページ」ではURL欄にフォーカス
+  (kindFolder.input.checked ? nameInput : urlInput).focus();
 
   function close() {
     backdrop.remove();
