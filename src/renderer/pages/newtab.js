@@ -637,26 +637,27 @@ function groupItemEl(folder) {
   return el;
 }
 
+// 中身のリンクも一緒に消えるので、ページの削除と同じくもう一段確認を挟む(グループメニュー/
+// 編集モードの削除バッジの両方から使う)
+function deleteFolderWithConfirm(anchor, folder) {
+  popupMenu(anchor, [
+    {
+      label: `⚠ 「${folder.title}」を中身ごと削除`,
+      action: async () => {
+        if (openFolderId === folder.id) closeFolderView();
+        window.roopieInternal.removeShortcut(folder.id);
+        await loadShortcuts();
+      },
+    },
+  ]);
+}
+
 function openGroupMenu(anchor, folder) {
   popupMenu(anchor, [
     { label: '📂 開く', action: () => openFolderView(folder.id) },
     // 名前だけならフォルダを開いたときのタイトルをダブルクリックしてもその場で変えられる
     { label: '✏️ 名前・アイコンを変更', action: () => openFolderModal(folder) },
-    {
-      // 中身のリンクも一緒に消えるので、ページの削除と同じくもう一段確認を挟む
-      label: '🗑 フォルダを削除',
-      action: () =>
-        popupMenu(anchor, [
-          {
-            label: `⚠ 「${folder.title}」を中身ごと削除`,
-            action: async () => {
-              if (openFolderId === folder.id) closeFolderView();
-              window.roopieInternal.removeShortcut(folder.id);
-              await loadShortcuts();
-            },
-          },
-        ]),
-    },
+    { label: '🗑 フォルダを削除', action: () => deleteFolderWithConfirm(anchor, folder) },
   ]);
 }
 
@@ -777,10 +778,16 @@ function shortcutItemEl(shortcut) {
   el.className = 'quick-link';
   el.title = `${shortcut.title}\n${target}`;
   el.draggable = false; // <a>は既定でネイティブドラッグ対象になり、独自のpointerドラッグと衝突するため無効化
+  // 編集モード中(メイングリッドのみ。フォルダビューは対象外)はタップで開かない(iPhoneのジグル中と同じ)
+  el.addEventListener('click', (e) => {
+    if (el.closest('#quick-links.edit-mode')) e.preventDefault();
+  });
   if (kind === 'url') {
     el.href = shortcut.url;
   } else {
-    el.addEventListener('click', () => window.roopieInternal.openShortcutFolder(target));
+    el.addEventListener('click', () => {
+      if (!el.closest('#quick-links.edit-mode')) window.roopieInternal.openShortcutFolder(target);
+    });
   }
 
   el.appendChild(shortcutTileEl(shortcut));
@@ -844,6 +851,29 @@ function applyItemPosition(el, x, y, w, h) {
   el.style.gridRow = `${y + 1} / span ${h}`;
 }
 
+// 編集モード中だけ表示される左上の削除バッジ(iPhoneの「−」と同じ役割)。
+// 種別ごとに既存の削除経路(確認あり/なし)へそのままつなぐ
+function deleteBadgeEl(item) {
+  const btn = document.createElement('button');
+  btn.className = 'grid-delete-badge';
+  btn.title = '削除';
+  btn.textContent = '−';
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (item.type === 'widget') {
+      window.roopieInternal.removeWidget(currentPageId, item.id);
+      loadShortcuts();
+    } else if (isGroup(item.shortcut)) {
+      deleteFolderWithConfirm(btn, item.shortcut);
+    } else {
+      window.roopieInternal.removeShortcut(item.shortcut.id);
+      loadShortcuts();
+    }
+  });
+  return btn;
+}
+
 function renderGrid() {
   quickLinksEl.textContent = '';
   gridElToItem = new Map();
@@ -854,6 +884,7 @@ function renderGrid() {
     el.dataset.gridKey = item.type === 'shortcut' ? `s:${item.shortcut.id}` : `w:${item.id}`;
     const [w, h] = itemSpan(item);
     applyItemPosition(el, item.x, item.y, w, h);
+    el.appendChild(deleteBadgeEl(item));
     gridElToItem.set(el, item);
     attachGridDrag(el, item);
     quickLinksEl.appendChild(el);
@@ -967,7 +998,10 @@ function openWidgetMenu(anchorEl, widgetEl, item) {
 // 追従し、他のアイテムは自動で詰め直さない。ドロップ先が空きセルなら移動、同じ大きさの
 // アイテムと重なったら入れ替え、それ以外(サイズ違いと重なる等)は元の位置に戻すだけ) ----
 const DRAG_THRESHOLD = 6; // px。これ未満の移動はクリック扱い(誤爆防止)
+const LONG_PRESS_MS = 500; // 長押しでジグル編集モードに入るまでの時間(iPhoneのHaptic Touchと同じ目安)
 let dragState = null;
+let editMode = false;
+let editDoneBtn = null;
 
 function currentCellPx() {
   const v = parseFloat(getComputedStyle(quickLinksEl).getPropertyValue('--cell'));
@@ -1058,13 +1092,59 @@ function hideGridOverlay() {
   dragOverlay = null;
 }
 
+// ---- 編集モード(iPhoneのホーム画面編集風。長押しで入り、全アイテムがジグルして左上に
+// 削除バッジが出る。タップでは何も起きず、完了ボタン/背景クリック/Escapeで抜ける) ----
+function enterEditMode() {
+  if (editMode) return;
+  editMode = true;
+  quickLinksEl.classList.add('edit-mode');
+  showEditDoneButton();
+  document.addEventListener('keydown', onEditModeKeydown);
+}
+
+function exitEditMode() {
+  if (!editMode) return;
+  editMode = false;
+  quickLinksEl.classList.remove('edit-mode');
+  hideEditDoneButton();
+  document.removeEventListener('keydown', onEditModeKeydown);
+}
+
+function onEditModeKeydown(e) {
+  // 上に開いているもの(編集モーダル・アイコンピッカー・ポップアップ・フォルダビュー)があれば
+  // そちらのEscapeを優先させる(onFolderViewKeyと同じ流儀)
+  if (e.key === 'Escape' && !document.querySelector('.shortcut-modal, .icon-picker, .grid-popup, .folder-view-backdrop')) {
+    exitEditMode();
+  }
+}
+
+function showEditDoneButton() {
+  hideEditDoneButton();
+  const btn = document.createElement('button');
+  btn.className = 'edit-done-btn';
+  btn.textContent = '完了';
+  btn.addEventListener('click', () => exitEditMode());
+  document.body.appendChild(btn);
+  editDoneBtn = btn;
+}
+
+function hideEditDoneButton() {
+  editDoneBtn?.remove();
+  editDoneBtn = null;
+}
+
+// グリッドの背景(アイテム以外)をクリックしたら編集モードを抜ける
+quickLinksEl.addEventListener('click', (e) => {
+  if (editMode && e.target === quickLinksEl) exitEditMode();
+});
+
 function attachGridDrag(el, item) {
   // ウィジェットはヘッダーだけ、ショートカットはタイル全体をつまめる
   const handle = item.type === 'widget' ? el.querySelector('.widget-head') : el;
   handle.addEventListener('pointerdown', (e) => {
     if (dragState || e.button !== 0) return;
     const [w, h] = itemSpan(item);
-    dragState = {
+    const state = {
       item,
       el,
       handle,
@@ -1078,7 +1158,16 @@ function attachGridDrag(el, item) {
       moved: false,
       targetX: item.x,
       targetY: item.y,
+      longPressTimer: null,
     };
+    // 既に編集モードなら(=既にジグル中)長押し判定は不要
+    if (!editMode) {
+      state.longPressTimer = setTimeout(() => {
+        state.longPressTimer = null;
+        if (dragState === state && !state.moved) enterEditMode();
+      }, LONG_PRESS_MS);
+    }
+    dragState = state;
   });
   handle.addEventListener('pointermove', onGridPointerMove);
   handle.addEventListener('pointerup', onGridPointerUp);
@@ -1123,6 +1212,11 @@ function onGridPointerMove(e) {
   if (!dragState.moved) {
     if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
     dragState.moved = true;
+    if (dragState.longPressTimer) {
+      clearTimeout(dragState.longPressTimer);
+      dragState.longPressTimer = null;
+    }
+    enterEditMode(); // 保持のみでなく掴んで動かした場合も、その場でジグルモードに入る(iPhoneと同じ)
     beginDragVisual(dragState);
   }
   dragState.el.style.left = `${dragState.baseLeft + dx}px`;
@@ -1139,6 +1233,12 @@ function onGridPointerUp(e) {
   if (!dragState || e.pointerId !== dragState.pointerId) return;
   const state = dragState;
   dragState = null;
+  // 通常クリック(削除バッジ/✎/リンク等)のたびに長押しタイマーが生き残らないよう、
+  // 「動いていない」判定より前に必ずクリアする
+  if (state.longPressTimer) {
+    clearTimeout(state.longPressTimer);
+    state.longPressTimer = null;
+  }
   if (!state.moved) return; // 動いていなければ通常のクリックとして扱う(何もしない)
   endDragVisual(state);
   tryMoveItem(state.item, state.targetX, state.targetY);

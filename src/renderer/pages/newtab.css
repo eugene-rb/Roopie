@@ -293,6 +293,91 @@ body[data-bg="plain"] #vignette {
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.4);
 }
 
+/* ---- 編集モード(iPhoneのホーム画面編集風。長押しで入る) ---- */
+@keyframes grid-jiggle-a {
+  0%,
+  100% {
+    transform: rotate(-1.4deg);
+  }
+  50% {
+    transform: rotate(1.4deg);
+  }
+}
+@keyframes grid-jiggle-b {
+  0%,
+  100% {
+    transform: rotate(1.4deg);
+  }
+  50% {
+    transform: rotate(-1.4deg);
+  }
+}
+#quick-links.edit-mode .grid-item {
+  animation: grid-jiggle-a 0.24s ease-in-out infinite;
+}
+#quick-links.edit-mode .grid-item:nth-child(even) {
+  animation-name: grid-jiggle-b;
+  animation-delay: -0.12s;
+}
+/* 掴んで移動中の要素は他と一緒に振動させない(iPhoneと同じ) */
+#quick-links.edit-mode .grid-item.dragging {
+  animation: none;
+}
+/* 編集モード中はウィジェットの中身(テキスト入力等)を誤操作しないよう無効化。
+   ヘッダーの⋮・ドラッグ・リサイズハンドルはウィジェット本体側にあるため影響を受けない */
+#quick-links.edit-mode .widget-body {
+  pointer-events: none;
+}
+
+.grid-delete-badge {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  z-index: 2;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 50%;
+  background: #ff453a;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+/* クイックリンクは.tileの外側に余白があるので、縁にまたがせたほうがiPhoneらしい見た目になる */
+.quick-link .grid-delete-badge {
+  top: -4px;
+  left: 2px;
+}
+#quick-links.edit-mode .grid-delete-badge {
+  display: flex;
+}
+
+.edit-done-btn {
+  position: fixed;
+  top: 20px;
+  right: 24px;
+  z-index: 45;
+  padding: 8px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(14px);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+}
+.edit-done-btn:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
 /* ドラッグ中のグリッド線+ドロップ先プレビュー(直感的に操作できるように) */
 .grid-overlay {
   position: fixed;
@@ -560,7 +645,7 @@ body[data-bg="plain"] #vignette {
   }
 }
 
-/* 編集ボタン(ホバー時のみ表示) */
+/* 編集ボタン。メイングリッドは編集モード中のみ、フォルダビュー内はホバー時のみ表示 */
 .quick-link-edit {
   position: absolute;
   top: -4px;
@@ -577,7 +662,10 @@ body[data-bg="plain"] #vignette {
   transition: opacity 0.12s;
 }
 
-.quick-link:hover .quick-link-edit {
+.folder-view-grid .quick-link:hover .quick-link-edit {
+  opacity: 1;
+}
+#quick-links.edit-mode .quick-link-edit {
   opacity: 1;
 }
 

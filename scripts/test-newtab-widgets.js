@@ -700,6 +700,96 @@ app.whenReady().then(async () => {
   await sleep(150);
   console.log(`   (作成したフォルダ: ${newFolderKey})`);
 
+  // ---- 編集モード(iPhoneのホーム画面編集風)。ここまでの状態: p1に leaf「パネルから追加」+
+  // フォルダ「仕事」(空・カスタム絵文字アイコン)が残っている ----
+  const leafKey = 's:panel1';
+  const folderGridKey = newFolderKey; // "s:folder-1"
+
+  // 長押し(動かさず500ms超保持)でジグル編集モードに入る
+  const leafCenter = await centerOf(`[data-grid-key="${leafKey}"]`);
+  await firePointer(`[data-grid-key="${leafKey}"]`, 'pointerdown', 10, leafCenter.x, leafCenter.y);
+  await sleep(650);
+  check('長押しで編集モードに入る(#quick-links.edit-mode)', await js(`document.getElementById('quick-links').classList.contains('edit-mode')`), true);
+  check(
+    '編集モード中はジグルアニメーションが付く',
+    await js(`getComputedStyle(document.querySelector('[data-grid-key="${leafKey}"]')).animationName`) !== 'none',
+    true
+  );
+  check(
+    '編集モード中は削除バッジが見える',
+    await js(`getComputedStyle(document.querySelector('[data-grid-key="${leafKey}"] .grid-delete-badge')).display`),
+    'flex'
+  );
+  check('編集モード中は完了ボタンが出る', await js(`!!document.querySelector('.edit-done-btn')`), true);
+  await firePointer(`[data-grid-key="${leafKey}"]`, 'pointerup', 10, leafCenter.x, leafCenter.y);
+  await sleep(50);
+
+  // 編集モード中はショートカット(leaf)のタップで遷移しない(件数・URL遷移とも変化なし)
+  const countBeforeTap = await js(`document.querySelectorAll('#quick-links .grid-item').length`);
+  await js(`document.querySelector('[data-grid-key="${leafKey}"]').click()`);
+  await sleep(100);
+  check(
+    '編集モード中はショートカットタップで何も起きない',
+    await js(`document.querySelectorAll('#quick-links .grid-item').length`),
+    countBeforeTap
+  );
+
+  // 編集モード中もブックマークフォルダはタップで開ける(iPhone実機と同じ)。
+  // 閉じるEscapeはフォルダビューだけを閉じ、編集モード自体は維持される
+  await js(`document.querySelector('[data-grid-key="${folderGridKey}"]').click()`);
+  await sleep(200);
+  check('編集モード中でもフォルダはタップで開く', await js(`!!document.querySelector('.folder-view')`), true);
+  await js(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))`);
+  await sleep(150);
+  check('Escapeはフォルダビューだけを閉じる', await js(`!!document.querySelector('.folder-view')`), false);
+  check('編集モードはフォルダを閉じても維持される', await js(`document.getElementById('quick-links').classList.contains('edit-mode')`), true);
+
+  // 削除バッジでショートカット(leaf)を確認なしで削除できる
+  await js(`document.querySelector('[data-grid-key="${leafKey}"] .grid-delete-badge').click()`);
+  await sleep(300);
+  check('削除バッジでショートカットを削除できる', await js(`!!document.querySelector('[data-grid-key="${leafKey}"]')`), false);
+
+  // 削除バッジでフォルダを削除しようとすると確認を挟む(グループメニューと同じ流儀)
+  await js(`document.querySelector('[data-grid-key="${folderGridKey}"] .grid-delete-badge').click()`);
+  await sleep(100);
+  check(
+    'フォルダの削除バッジは確認をもう一段挟む',
+    await js(`document.querySelector('.grid-popup-item')?.textContent.includes('中身ごと削除')`),
+    true
+  );
+  await js(`document.querySelector('.grid-popup-item').click()`);
+  await sleep(300);
+  check('確認後にフォルダを削除できる', await js(`!!document.querySelector('[data-grid-key="${folderGridKey}"]')`), false);
+
+  // 完了ボタンで編集モードを抜ける
+  check('完了ボタンをクリックする前は編集モード', await js(`document.getElementById('quick-links').classList.contains('edit-mode')`), true);
+  await js(`document.querySelector('.edit-done-btn').click()`);
+  await sleep(50);
+  check('完了ボタンで編集モードを抜けられる', await js(`document.getElementById('quick-links').classList.contains('edit-mode')`), false);
+  check('編集モードを抜けると完了ボタンが消える', await js(`!!document.querySelector('.edit-done-btn')`), false);
+  check(
+    '編集モードを抜けると削除バッジが隠れる',
+    await js(`[...document.querySelectorAll('#quick-links .grid-delete-badge')].every((b) => getComputedStyle(b).display === 'none')`),
+    true
+  );
+
+  // 掴んで動かした場合も、その場ですぐ編集モードに入る(長押し待ちなし)+ 背景クリックで抜けられる
+  await js(`window.roopieInternal.__setShortcuts('p1', [
+    { id: 'again1', type: 'bookmark', title: 'Again', url: 'https://example.com/again', favicon: null, icon: null },
+  ])`);
+  await sleep(300);
+  const againCenter = await centerOf(`[data-grid-key="s:again1"]`);
+  await firePointer(`[data-grid-key="s:again1"]`, 'pointerdown', 11, againCenter.x, againCenter.y);
+  await firePointer(`[data-grid-key="s:again1"]`, 'pointermove', 11, againCenter.x + 40, againCenter.y);
+  await sleep(30);
+  check('掴んで動かすと即座に編集モードへ入る(長押し待ちなし)', await js(`document.getElementById('quick-links').classList.contains('edit-mode')`), true);
+  await firePointer(`[data-grid-key="s:again1"]`, 'pointerup', 11, againCenter.x + 40, againCenter.y);
+  await sleep(200);
+
+  await js(`document.getElementById('quick-links').click()`);
+  await sleep(50);
+  check('グリッドの背景クリックで編集モードを抜けられる', await js(`document.getElementById('quick-links').classList.contains('edit-mode')`), false);
+
   server.close();
   console.log(failed ? `\n${failed}件失敗` : '\n全テスト成功');
   app.exit(failed ? 1 : 0);

@@ -96,12 +96,23 @@ contextBridge.exposeInMainWorld('roopieInternal', {
       return;
     }
   },
+  // 本物(bookmarks.remove)と同じく、ページ/フォルダ/ショートカットのどれでも削除できる。
+  // フォルダを消したら中身(shortcutsByPage[id])も一緒に消える(カスケード)
   removeShortcut: (id) => {
-    if (!pages.some((p) => p.id === id)) return;
-    pages = pages.filter((p) => p.id !== id);
-    delete shortcutsByPage[id];
-    delete layoutByPage[id];
-    onBookmarksCb();
+    if (pages.some((p) => p.id === id)) {
+      pages = pages.filter((p) => p.id !== id);
+      delete shortcutsByPage[id];
+      delete layoutByPage[id];
+      onBookmarksCb();
+      return;
+    }
+    for (const [pageId, list] of Object.entries(shortcutsByPage)) {
+      if (!list.some((b) => b.id === id)) continue;
+      shortcutsByPage[pageId] = list.filter((b) => b.id !== id);
+      delete shortcutsByPage[id]; // フォルダなら中身も削除
+      onBookmarksCb();
+      return;
+    }
   },
   pickShortcutFolder: async () => null,
   openShortcutFolder: () => {},
