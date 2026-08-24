@@ -695,6 +695,7 @@ function beginInlineRename(el, item, onDone) {
 }
 
 let openFolderId = null;
+let folderElToChild = new Map(); // フォルダビュー内のドラッグ判定用(タイル要素 → 中身のショートカット)
 
 function openFolderView(folderId) {
   closeFolderView();
@@ -759,6 +760,7 @@ function renderFolderView() {
 
   const grid = backdrop.querySelector('.folder-view-grid');
   grid.textContent = '';
+  folderElToChild = new Map();
   const contents = folderContents.get(folder.id) ?? [];
   if (!contents.length) {
     const empty = document.createElement('div');
@@ -767,7 +769,118 @@ function renderFolderView() {
     grid.appendChild(empty);
     return;
   }
-  for (const child of contents) grid.appendChild(shortcutItemEl(child));
+  for (const child of contents) {
+    const el = shortcutItemEl(child);
+    folderElToChild.set(el, child);
+    attachFolderItemDrag(el, child);
+    grid.appendChild(el);
+  }
+}
+
+// ---- フォルダビュー内のドラッグ(並べ替え/パネル外へ出す)。既に編集専用のオーバーレイなので
+// メイングリッドのような長押し・ジグルは不要。掴んで動かせば即ドラッグでよい ----
+let folderDragState = null;
+
+function attachFolderItemDrag(el, child) {
+  el.addEventListener('pointerdown', (e) => {
+    if (folderDragState || e.button !== 0) return;
+    folderDragState = {
+      child,
+      el,
+      pointerId: e.pointerId,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      moved: false,
+      outside: false,
+      beforeChild: null,
+    };
+  });
+  el.addEventListener('pointermove', onFolderItemPointerMove);
+  el.addEventListener('pointerup', onFolderItemPointerUp);
+  el.addEventListener('pointercancel', onFolderItemPointerUp);
+}
+
+function folderDragBeginVisual(state) {
+  const rect = state.el.getBoundingClientRect();
+  state.baseLeft = rect.left;
+  state.baseTop = rect.top;
+  state.el.classList.add('folder-item-dragging');
+  Object.assign(state.el.style, {
+    position: 'fixed',
+    left: `${rect.left}px`,
+    top: `${rect.top}px`,
+    width: `${rect.width}px`,
+    height: `${rect.height}px`,
+    zIndex: 90,
+  });
+  try {
+    state.el.setPointerCapture?.(state.pointerId);
+  } catch {
+    // 合成イベント等でキャプチャできない場合は無視
+  }
+}
+
+function folderDragEndVisual(state) {
+  state.el.classList.remove('folder-item-dragging');
+  Object.assign(state.el.style, { position: '', left: '', top: '', width: '', height: '', zIndex: '' });
+  try {
+    state.el.releasePointerCapture?.(state.pointerId);
+  } catch {
+    // 未キャプチャなら何もしない
+  }
+}
+
+// 兄弟タイルのうち、ポインタの直前に来るものを探す(通常のリスト並べ替えの要領。行を跨いでも
+// 成立するよう、各兄弟自身の中心Y/Xとポインタ位置を比べる)。該当が無ければ末尾(=null)
+function folderInsertBeforeEl(grid, excludeEl, x, y) {
+  for (const sib of grid.children) {
+    if (sib === excludeEl) continue;
+    const r = sib.getBoundingClientRect();
+    const midY = r.top + r.height / 2;
+    const midX = r.left + r.width / 2;
+    if (y < midY || (y < r.bottom && x < midX)) return sib;
+  }
+  return null;
+}
+
+function onFolderItemPointerMove(e) {
+  if (!folderDragState || e.pointerId !== folderDragState.pointerId) return;
+  const state = folderDragState;
+  const dx = e.clientX - state.startClientX;
+  const dy = e.clientY - state.startClientY;
+  if (!state.moved) {
+    if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+    state.moved = true;
+    folderDragBeginVisual(state);
+  }
+  state.el.style.left = `${state.baseLeft + dx}px`;
+  state.el.style.top = `${state.baseTop + dy}px`;
+
+  const panel = document.querySelector('.folder-view');
+  const grid = document.querySelector('.folder-view-grid');
+  state.outside = panel ? !rectHit(panel.getBoundingClientRect(), e.clientX, e.clientY) : true;
+  panel?.classList.toggle('drag-out-armed', state.outside);
+  if (!state.outside && grid) {
+    const beforeEl = folderInsertBeforeEl(grid, state.el, e.clientX, e.clientY);
+    state.beforeChild = beforeEl ? folderElToChild.get(beforeEl) : null;
+  }
+}
+
+function onFolderItemPointerUp(e) {
+  if (!folderDragState || e.pointerId !== folderDragState.pointerId) return;
+  const state = folderDragState;
+  folderDragState = null;
+  if (!state.moved) return; // 動いていなければ通常のクリック(リンクを開く等)として扱う
+  folderDragEndVisual(state);
+  document.querySelector('.folder-view')?.classList.remove('drag-out-armed');
+  if (state.outside) {
+    // フォルダの外(=ダイアログ背景)へ出したらページへ戻す。フォルダは閉じない
+    // (複数個続けて出せるように。onBookmarksState経由でrenderFolderView()が再描画して反映する)
+    window.roopieInternal.moveBookmark(state.child.id, currentPageId);
+  } else {
+    window.roopieInternal.reorderBookmark(state.child.id, state.beforeChild ? state.beforeChild.id : null);
+  }
+  loadShortcuts();
 }
 
 function shortcutItemEl(shortcut) {

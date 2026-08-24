@@ -645,6 +645,20 @@ body[data-bg="plain"] #vignette {
   }
 }
 
+/* フォルダビュー内のドラッグ(並べ替え/パネル外へ出す) */
+.folder-item-dragging {
+  cursor: grabbing;
+  user-select: none;
+  transform: scale(1.08);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.4);
+}
+
+/* パネルの外(=ダイアログ背景)まで持ち出すと、離せばフォルダから出ることを示す */
+.folder-view.drag-out-armed {
+  outline: 2px dashed rgba(255, 120, 120, 0.75);
+  outline-offset: 4px;
+}
+
 /* 編集ボタン。メイングリッドは編集モード中のみ、フォルダビュー内はホバー時のみ表示 */
 .quick-link-edit {
   position: absolute;

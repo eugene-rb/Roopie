@@ -3,7 +3,7 @@
 // src/renderer/pages を静的配信し、stub-internal-preload.js で roopieInternal を差し替えて
 // newtab.html を実際に描画。追加メニュー→各ウィジェットの描画・設定・自動保存、
 // および設定画面のグリッド列数・行数のライブ反映を検証する。
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, screen } = require('electron');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -41,10 +41,16 @@ app.whenReady().then(async () => {
     })
     .listen(PORT);
 
+  // 見える状態で出すとき(スクショモード)は作業中のモニター1を邪魔しないよう、
+  // 2枚目のモニターがあればそちらに出す(無ければ既定のモニターにフォールバック)
+  const displays = screen.getAllDisplays();
+  const targetDisplay = displays[1] ?? displays[0];
   const win = new BrowserWindow({
     show: !!SHOT_DIR,
     width: 1000,
     height: 800,
+    x: targetDisplay.bounds.x + 40,
+    y: targetDisplay.bounds.y + 40,
     webPreferences: { preload: path.join(__dirname, 'stub-internal-preload.js') },
   });
   const js = (code) => win.webContents.executeJavaScript(code, true);
@@ -877,6 +883,63 @@ app.whenReady().then(async () => {
   await js(`document.querySelector('[data-page-id="${movePage.id}"]').click()`);
   await sleep(500);
   check('移動先ページに移動している', await js(`!!document.querySelector('[data-grid-key="s:to-p2"]')`), true);
+
+  // ---- フォルダビュー内のドラッグ: 並べ替え / パネル外へ出す ----
+  await js(`document.querySelector('[data-page-id="p1"]').click()`); // 既知のページに戻しておく
+  await sleep(300);
+  await js(`window.roopieInternal.__setShortcuts('p1', [
+    { id: 'drag-folder', type: 'folder', title: 'DragFolder', icon: null },
+  ])`);
+  await js(`window.roopieInternal.__setShortcuts('drag-folder', [
+    { id: 'fc1', type: 'bookmark', title: 'FC1', url: 'https://example.com/fc1', favicon: null, icon: null },
+    { id: 'fc2', type: 'bookmark', title: 'FC2', url: 'https://example.com/fc2', favicon: null, icon: null },
+    { id: 'fc3', type: 'bookmark', title: 'FC3', url: 'https://example.com/fc3', favicon: null, icon: null },
+  ])`);
+  await sleep(300);
+  await js(`document.querySelector('[data-grid-key="s:drag-folder"]').click()`);
+  await sleep(200);
+  const folderOrder = () =>
+    js(`[...document.querySelectorAll('.folder-view-grid .quick-link')].map((el) => el.getAttribute('href'))`);
+  check('フォルダを開くと3件のリンクが並ぶ', await folderOrder(), [
+    'https://example.com/fc1',
+    'https://example.com/fc2',
+    'https://example.com/fc3',
+  ]);
+
+  // FC3をFC1の前へドラッグして並べ替える
+  const cFc3 = await centerOf('.folder-view-grid a[href="https://example.com/fc3"]');
+  const cFc1 = await centerOf('.folder-view-grid a[href="https://example.com/fc1"]');
+  await firePointer('.folder-view-grid a[href="https://example.com/fc3"]', 'pointerdown', 30, cFc3.x, cFc3.y);
+  await firePointer('.folder-view-grid a[href="https://example.com/fc3"]', 'pointermove', 30, cFc1.x - 20, cFc1.y);
+  await sleep(50);
+  await firePointer('.folder-view-grid a[href="https://example.com/fc3"]', 'pointerup', 30, cFc1.x - 20, cFc1.y);
+  await sleep(400);
+  check('ドラッグでFC3をFC1の前へ並べ替えられる', await folderOrder(), [
+    'https://example.com/fc3',
+    'https://example.com/fc1',
+    'https://example.com/fc2',
+  ]);
+
+  // FC2をパネルの外(ダイアログ背景)までドラッグして出す。フォルダは開いたまま
+  const cFc2 = await centerOf('.folder-view-grid a[href="https://example.com/fc2"]');
+  await firePointer('.folder-view-grid a[href="https://example.com/fc2"]', 'pointerdown', 31, cFc2.x, cFc2.y);
+  await firePointer('.folder-view-grid a[href="https://example.com/fc2"]', 'pointermove', 31, 5, 5);
+  await sleep(50);
+  check(
+    'パネル外まで持ち出すとハイライトされる',
+    await js(`document.querySelector('.folder-view').classList.contains('drag-out-armed')`),
+    true
+  );
+  await firePointer('.folder-view-grid a[href="https://example.com/fc2"]', 'pointerup', 31, 5, 5);
+  await sleep(400);
+  check('パネル外へ出すとフォルダから消える', await folderOrder(), [
+    'https://example.com/fc3',
+    'https://example.com/fc1',
+  ]);
+  check('フォルダは閉じたままにならず開いた状態を保つ', await js(`!!document.querySelector('.folder-view')`), true);
+  check('出したリンクはページ側に現れる', await js(`!!document.querySelector('[data-grid-key="s:fc2"]')`), true);
+  await js(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))`);
+  await sleep(150);
 
   server.close();
   console.log(failed ? `\n${failed}件失敗` : '\n全テスト成功');
