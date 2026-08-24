@@ -73,6 +73,33 @@ contextBridge.exposeInMainWorld('roopieInternal', {
     shortcutsByPage[pageId] = list;
     onBookmarksCb();
   },
+  // 本物(bookmarks.move)を模したスタブ: ショートカットを別ページ/別フォルダへ移動する
+  moveBookmark: (id, parentId) => {
+    for (const [pageId, list] of Object.entries(shortcutsByPage)) {
+      const idx = list.findIndex((b) => b.id === id);
+      if (idx === -1) continue;
+      const item = list[idx];
+      shortcutsByPage[pageId] = list.filter((b) => b.id !== id);
+      const dest = parentId || null;
+      if (dest) shortcutsByPage[dest] = [...(shortcutsByPage[dest] || []), item];
+      onBookmarksCb();
+      return;
+    }
+  },
+  // 本物(bookmarks.reorder)を模したスタブ: 同じ親の中で並び順を変える
+  reorderBookmark: (id, beforeId) => {
+    for (const [pageId, list] of Object.entries(shortcutsByPage)) {
+      const idx = list.findIndex((b) => b.id === id);
+      if (idx === -1) continue;
+      const item = list[idx];
+      const without = list.filter((b) => b.id !== id);
+      const insertAt = beforeId ? without.findIndex((b) => b.id === beforeId) : -1;
+      without.splice(insertAt === -1 ? without.length : insertAt, 0, item);
+      shortcutsByPage[pageId] = without;
+      onBookmarksCb();
+      return;
+    }
+  },
   addShortcut: async () => null,
   // 本物は bookmarks:update-item / bookmarks:remove。ページ(フォルダ)にも同じ経路が使われるので、
   // ページの改名・削除と、ページの中のアイテム(ショートカット/フォルダ)の名前・アイコンの変更を

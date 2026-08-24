@@ -490,6 +490,7 @@ function registerIpc() {
   // 管理画面用: 全アイテム(通常ブックマーク+startフォルダ/ページ/ショートカットの1ツリー)
   ipcMain.handle('bookmarks:all', (e) => bundleOf(e)?.bookmarks.all() ?? []);
   ipcMain.on('bookmarks:move', (e, id, parentId) => bundleOf(e)?.bookmarks.move(id, parentId));
+  ipcMain.on('bookmarks:reorder', (e, id, beforeId) => bundleOf(e)?.bookmarks.reorder(id, beforeId ?? null));
 
   // ---- スタート画面のショートカット(bookmarksの中の "start" フォルダ以下) ----
   ipcMain.handle('bookmarks:start-pages', (e) => bundleOf(e)?.bookmarks.startPages() ?? []);

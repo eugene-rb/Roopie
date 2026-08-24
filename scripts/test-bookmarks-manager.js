@@ -90,6 +90,26 @@ function testMainLogic() {
   check('フォルダのアイコンを既定に戻せる', iconFolder.icon, null);
   bm.move(a.id, rootFolder.id);
   check('ルートのフォルダへブックマークを移動できる', bm.children(rootFolder.id).some((b) => b.id === a.id), true);
+
+  // ---- reorder(フォルダ内の並べ替え。編集モードのドラッグ&ドロップから使う) ----
+  const orderPage = bm.addStartPage('並べ替えテスト');
+  const r1 = bm.addShortcut(orderPage.id, { kind: 'url', name: 'R1', target: 'https://r1.example/' });
+  const r2 = bm.addShortcut(orderPage.id, { kind: 'url', name: 'R2', target: 'https://r2.example/' });
+  const r3 = bm.addShortcut(orderPage.id, { kind: 'url', name: 'R3', target: 'https://r3.example/' });
+  check('初期順は追加順', bm.children(orderPage.id).map((b) => b.id), [r1.id, r2.id, r3.id]);
+
+  bm.reorder(r3.id, r1.id);
+  check('beforeIdの手前に挿し込める(R3をR1の前へ)', bm.children(orderPage.id).map((b) => b.id), [r3.id, r1.id, r2.id]);
+
+  bm.reorder(r3.id, null);
+  check('beforeId省略は末尾へ移動', bm.children(orderPage.id).map((b) => b.id), [r1.id, r2.id, r3.id]);
+
+  bm.reorder(r1.id, 'no-such-id');
+  check('存在しないbeforeIdは末尾扱い', bm.children(orderPage.id).map((b) => b.id), [r2.id, r3.id, r1.id]);
+
+  check('reorderはparentIdを変えない', bm.children(orderPage.id).length, 3);
+  bm.reorder('no-such-id', r1.id);
+  check('存在しないidは何もしない', bm.children(orderPage.id).map((b) => b.id), [r2.id, r3.id, r1.id]);
 }
 
 app.whenReady().then(async () => {

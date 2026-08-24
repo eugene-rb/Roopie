@@ -51,6 +51,17 @@ class Bookmarks {
     this.changed();
   }
 
+  // 同じ親の中での表示順を変える(配列の並び=表示順という既存の性質をそのまま使う。
+  // parentIdは変えない)。beforeIdの手前に挿し込む。beforeId省略/見つからない場合は末尾へ
+  reorder(id, beforeId) {
+    const idx = this.items.findIndex((b) => b.id === id);
+    if (idx === -1) return;
+    const [item] = this.items.splice(idx, 1);
+    const insertAt = beforeId ? this.items.findIndex((b) => b.id === beforeId) : -1;
+    this.items.splice(insertAt === -1 ? this.items.length : insertAt, 0, item);
+    this.changed();
+  }
+
   find(url) {
     return this.list().find((b) => b.url === url) || null;
   }

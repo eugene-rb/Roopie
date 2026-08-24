@@ -44,6 +44,8 @@ if (location.protocol === 'roopie:') {
     removeBookmark: (id) => ipcRenderer.send('bookmarks:remove', id),
     renameBookmark: (id, title) => ipcRenderer.send('bookmarks:rename', id, title),
     moveBookmark: (id, parentId) => ipcRenderer.send('bookmarks:move', id, parentId),
+    // 同じ親の中で並び順を変える(beforeIdの手前に挿し込む。null/省略で末尾へ)
+    reorderBookmark: (id, beforeId) => ipcRenderer.send('bookmarks:reorder', id, beforeId ?? null),
 
     // スタート画面のショートカット(bookmarksの中の "start" フォルダ以下。ページ=サブフォルダ)
     listStartPages: () => ipcRenderer.invoke('bookmarks:start-pages'),
