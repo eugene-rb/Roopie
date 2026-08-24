@@ -790,6 +790,94 @@ app.whenReady().then(async () => {
   await sleep(50);
   check('グリッドの背景クリックで編集モードを抜けられる', await js(`document.getElementById('quick-links').classList.contains('edit-mode')`), false);
 
+  // ---- メイングリッド: leaf同士を重ねると新規フォルダを自動作成する ----
+  await js(`window.roopieInternal.__setShortcuts('p1', [
+    { id: 'merge-a', type: 'bookmark', title: 'MergeA', url: 'https://example.com/merge-a', favicon: null, icon: null },
+    { id: 'merge-b', type: 'bookmark', title: 'MergeB', url: 'https://example.com/merge-b', favicon: null, icon: null },
+  ])`);
+  await sleep(300);
+  const mergeBPos = await posOf('[data-grid-key="s:merge-b"]');
+  const cMergeA = await centerOf('[data-grid-key="s:merge-a"]');
+  const cMergeB = await centerOf('[data-grid-key="s:merge-b"]');
+  await firePointer('[data-grid-key="s:merge-a"]', 'pointerdown', 20, cMergeA.x, cMergeA.y);
+  await firePointer('[data-grid-key="s:merge-a"]', 'pointermove', 20, cMergeB.x, cMergeB.y);
+  await sleep(600); // マージのアーム(500ms)待ち。誤爆防止のため一定時間重ね続けないと成立しない
+  check(
+    'leaf同士を重ね続けるとマージ対象としてハイライトされる',
+    await js(`document.querySelector('[data-grid-key="s:merge-b"]').classList.contains('merge-armed')`),
+    true
+  );
+  await firePointer('[data-grid-key="s:merge-a"]', 'pointerup', 20, cMergeB.x, cMergeB.y);
+  await sleep(400);
+  check('マージ元は単体アイテムとして消える', await js(`!!document.querySelector('[data-grid-key="s:merge-a"]')`), false);
+  check('マージ先(単体)も消えて新規フォルダになる', await js(`!!document.querySelector('[data-grid-key="s:merge-b"]')`), false);
+  check('新規フォルダが1つできる', await js(`document.querySelectorAll('.quick-link-group').length`), 1);
+  const newMergedFolderKey = await js(`document.querySelector('.quick-link-group')?.dataset.gridKey`);
+  const mergedFolderPos = await posOf(`[data-grid-key="${newMergedFolderKey}"]`);
+  check(
+    '新規フォルダはドロップ位置(マージ先の元の座標)に置かれる',
+    [mergedFolderPos.x, mergedFolderPos.y],
+    [mergeBPos.x, mergeBPos.y]
+  );
+  await js(`document.querySelector('[data-grid-key="${newMergedFolderKey}"]').click()`);
+  await sleep(200);
+  check('新規フォルダの中に両方入る', await js(`document.querySelectorAll('.folder-view-grid .quick-link').length`), 2);
+  await js(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))`);
+  await sleep(150);
+
+  // ---- メイングリッド: leafを既存フォルダへドラッグすると中に入る ----
+  await js(`window.roopieInternal.__setShortcuts('p1', [
+    { id: 'into-leaf', type: 'bookmark', title: 'IntoLeaf', url: 'https://example.com/into-leaf', favicon: null, icon: null },
+    { id: 'existing-folder', type: 'folder', title: 'Existing', icon: null },
+  ])`);
+  await js(`window.roopieInternal.__setShortcuts('existing-folder', [])`);
+  await sleep(300);
+  const cIntoLeaf = await centerOf('[data-grid-key="s:into-leaf"]');
+  const cExistingFolder = await centerOf('[data-grid-key="s:existing-folder"]');
+  await firePointer('[data-grid-key="s:into-leaf"]', 'pointerdown', 21, cIntoLeaf.x, cIntoLeaf.y);
+  await firePointer('[data-grid-key="s:into-leaf"]', 'pointermove', 21, cExistingFolder.x, cExistingFolder.y);
+  await sleep(600);
+  check(
+    '既存フォルダへの重なりもマージ対象としてハイライトされる',
+    await js(`document.querySelector('[data-grid-key="s:existing-folder"]').classList.contains('merge-armed')`),
+    true
+  );
+  await firePointer('[data-grid-key="s:into-leaf"]', 'pointerup', 21, cExistingFolder.x, cExistingFolder.y);
+  await sleep(400);
+  check('leafを既存フォルダへドラッグすると単体では消える', await js(`!!document.querySelector('[data-grid-key="s:into-leaf"]')`), false);
+  check('既存フォルダ自体は消えず残る', await js(`!!document.querySelector('[data-grid-key="s:existing-folder"]')`), true);
+  await js(`document.querySelector('[data-grid-key="s:existing-folder"]').click()`);
+  await sleep(200);
+  check('既存フォルダの中にleafが入る', await js(`document.querySelectorAll('.folder-view-grid .quick-link').length`), 1);
+  await js(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))`);
+  await sleep(150);
+
+  // ---- ページタブへドラッグ&ドロップすると別ページへ移動する ----
+  // (元々あったp2は前段のテストで削除済みのため、ここで新しいページを作って使う)
+  const movePage = await js(`window.roopieInternal.addStartPage('MoveTarget')`);
+  await sleep(200);
+  await js(`window.roopieInternal.__setShortcuts('p1', [
+    { id: 'to-p2', type: 'bookmark', title: 'ToP2', url: 'https://example.com/to-p2', favicon: null, icon: null },
+  ])`);
+  await sleep(300);
+  check('ページ1にto-p2がある', await js(`!!document.querySelector('[data-grid-key="s:to-p2"]')`), true);
+  const cToP2 = await centerOf('[data-grid-key="s:to-p2"]');
+  const cMoveTab = await centerOf(`[data-page-id="${movePage.id}"]`);
+  await firePointer('[data-grid-key="s:to-p2"]', 'pointerdown', 22, cToP2.x, cToP2.y);
+  await firePointer('[data-grid-key="s:to-p2"]', 'pointermove', 22, cMoveTab.x, cMoveTab.y);
+  await sleep(50);
+  check(
+    'ページタブへ重なるとハイライトされる(マージと違い即座に成立)',
+    await js(`document.querySelector('[data-page-id="${movePage.id}"]').classList.contains('drop-target')`),
+    true
+  );
+  await firePointer('[data-grid-key="s:to-p2"]', 'pointerup', 22, cMoveTab.x, cMoveTab.y);
+  await sleep(400);
+  check('ドロップするとページ1から消える', await js(`!!document.querySelector('[data-grid-key="s:to-p2"]')`), false);
+  await js(`document.querySelector('[data-page-id="${movePage.id}"]').click()`);
+  await sleep(500);
+  check('移動先ページに移動している', await js(`!!document.querySelector('[data-grid-key="s:to-p2"]')`), true);
+
   server.close();
   console.log(failed ? `\n${failed}件失敗` : '\n全テスト成功');
   app.exit(failed ? 1 : 0);

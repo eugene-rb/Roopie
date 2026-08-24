@@ -1227,6 +1227,103 @@ function onGridPointerMove(e) {
   dragState.targetX = Math.min(cols - dragState.w, Math.max(0, dragState.originX + Math.round(dx / step)));
   dragState.targetY = Math.max(0, dragState.originY + Math.round(dy / step));
   updateGridOverlayPreview(dragState.item, dragState.targetX, dragState.targetY);
+  updateDropTargets(dragState, e.clientX, e.clientY);
+}
+
+const MERGE_ARM_MS = 500; // 誤爆防止。同じ相手に重なり続けた時だけマージ対象として「アーム」する
+
+function rectHit(rect, x, y) {
+  return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+}
+
+function clearDropHighlights() {
+  document.querySelectorAll('.page-tab.drop-target').forEach((el) => el.classList.remove('drop-target'));
+  document.querySelectorAll('.grid-item.merge-armed').forEach((el) => el.classList.remove('merge-armed'));
+}
+
+// ドラッグ中、ページタブ/他アイテムへのドロップ候補を判定する。elementFromPointは使わず、
+// gridElToItem(ドラッグ開始時点のマップ。ドラッグ中はrenderGrid()が走らないのでそのまま有効)と
+// ページタブの矩形判定(getBoundingClientRect)で行う。対象はleafショートカットのみ
+// (フォルダ自体の移動はbookmarks.move()の型制約で不可、ウィジェットはページ間移動の概念が無い)
+function updateDropTargets(state, x, y) {
+  const isLeafShortcut = state.item.type === 'shortcut' && !isGroup(state.item.shortcut);
+
+  let pageDropEl = null;
+  if (isLeafShortcut) {
+    for (const tab of pageDotsEl.querySelectorAll('.page-tab[data-page-id]')) {
+      if (tab.dataset.pageId !== currentPageId && rectHit(tab.getBoundingClientRect(), x, y)) {
+        pageDropEl = tab;
+        break;
+      }
+    }
+  }
+  document.querySelectorAll('.page-tab.drop-target').forEach((el) => {
+    if (el !== pageDropEl) el.classList.remove('drop-target');
+  });
+  pageDropEl?.classList.add('drop-target');
+  state.pageDropTarget = pageDropEl?.dataset.pageId ?? null;
+
+  // マージ先はページドロップと同時には成立させない(ページタブへの重なりを優先)
+  let hoveredEl = null;
+  let hoveredItem = null;
+  if (!pageDropEl && isLeafShortcut) {
+    for (const [gridEl, gi] of gridElToItem) {
+      if (gridEl === state.el || gi.type !== 'shortcut') continue;
+      if (rectHit(gridEl.getBoundingClientRect(), x, y)) {
+        hoveredEl = gridEl;
+        hoveredItem = gi;
+        break;
+      }
+    }
+  }
+  const hoveredKey = hoveredItem?.shortcut.id ?? null;
+  if (hoveredKey === state.hoverKey) return;
+  state.hoverKey = hoveredKey;
+  if (state.mergeArmTimer) {
+    clearTimeout(state.mergeArmTimer);
+    state.mergeArmTimer = null;
+  }
+  state.mergeArmedTarget = null;
+  document.querySelectorAll('.grid-item.merge-armed').forEach((el) => el.classList.remove('merge-armed'));
+  if (hoveredItem) {
+    state.mergeArmTimer = setTimeout(() => {
+      state.mergeArmTimer = null;
+      state.mergeArmedTarget = hoveredItem;
+      hoveredEl.classList.add('merge-armed');
+    }, MERGE_ARM_MS);
+  }
+}
+
+// マージ: 相手が既存フォルダならそこへ入れるだけ、leaf同士なら新規フォルダを作って両方入れる
+async function performMerge(draggedItem, targetItem) {
+  const draggedId = draggedItem.shortcut.id;
+  if (isGroup(targetItem.shortcut)) {
+    window.roopieInternal.moveBookmark(draggedId, targetItem.shortcut.id);
+    await loadShortcuts();
+    return;
+  }
+  const targetId = targetItem.shortcut.id;
+  // reconcileLayoutが空きセルの先頭に置いてしまう前に、ドロップ位置(ターゲットの座標)を控えておく
+  const targetX = targetItem.x;
+  const targetY = targetItem.y;
+  const folder = await window.roopieInternal.addBookmarkFolder(currentPageId, null, null);
+  if (!folder) {
+    renderGrid();
+    return;
+  }
+  // 新フォルダの座標は、moveBookmarkを呼ぶ前にレイアウトへ確定させておく。moveBookmarkのたびに
+  // onBookmarksState経由の自動リロードが走り、こちらのawait loadShortcuts()と競合しうるため、
+  // 後から座標を上書きする方式だと「たまたま最後に処理された側が勝つ」レースで空きセルの
+  // 先頭に置かれてしまうことがある(実際に検証で再現した)。先に座標を書いておけば、
+  // どの再計算がどの順で走っても同じ座標を読むためレースにならない
+  const rawLayout = await window.roopieInternal.getWidgetLayout(currentPageId);
+  window.roopieInternal.setWidgetLayout(currentPageId, [
+    ...rawLayout,
+    { type: 'shortcut', refId: folder.id, x: targetX, y: targetY },
+  ]);
+  window.roopieInternal.moveBookmark(draggedId, folder.id);
+  window.roopieInternal.moveBookmark(targetId, folder.id);
+  await loadShortcuts();
 }
 
 function onGridPointerUp(e) {
@@ -1239,8 +1336,22 @@ function onGridPointerUp(e) {
     clearTimeout(state.longPressTimer);
     state.longPressTimer = null;
   }
+  if (state.mergeArmTimer) {
+    clearTimeout(state.mergeArmTimer);
+    state.mergeArmTimer = null;
+  }
   if (!state.moved) return; // 動いていなければ通常のクリックとして扱う(何もしない)
   endDragVisual(state);
+  clearDropHighlights();
+  if (state.pageDropTarget) {
+    window.roopieInternal.moveBookmark(state.item.shortcut.id, state.pageDropTarget);
+    loadShortcuts();
+    return;
+  }
+  if (state.mergeArmedTarget) {
+    performMerge(state.item, state.mergeArmedTarget);
+    return;
+  }
   tryMoveItem(state.item, state.targetX, state.targetY);
 }
 

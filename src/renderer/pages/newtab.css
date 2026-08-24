@@ -739,6 +739,19 @@ body[data-bg="plain"] .page-tab.active {
   color: #fff;
 }
 
+/* ドラッグ中のショートカットを重ねたときのドロップ先ハイライト
+   (ページタブ=別ページへ移動 / タイル=フォルダへ入れる・新規フォルダ作成) */
+.page-tab.drop-target {
+  outline: 2px solid rgba(120, 220, 150, 0.9);
+  outline-offset: 2px;
+  background: rgba(120, 220, 150, 0.25);
+}
+
+.grid-item.merge-armed .tile {
+  transform: scale(1.1);
+  box-shadow: 0 0 0 3px rgba(120, 200, 255, 0.85);
+}
+
 /* ---- ショートカット追加/編集モーダル ---- */
 .shortcut-backdrop {
   position: fixed;
