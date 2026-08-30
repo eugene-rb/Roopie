@@ -1082,7 +1082,12 @@ function renderExtensionActions(partition) {
   // idは設定画面の一覧(#extensions-list)と必ず分ける。CSSは1本(app.css)を
   // ブラウザUIと内部ページで共有しているので、同じidだとあちら向けの余白まで当たる
   list.id = 'toolbar-extensions';
-  list.setAttribute('alignment', 'top right');
+  // ポップアップ(拡張のフローティングUI)の出す向き。ツールバーは画面上端にあり
+  // アイコンは右寄りなので、"下・アイコンの右端に揃える"(=左へ伸びる)が正しい。
+  // electron-chrome-extensions では alignment に "top" を含めるとアイコンの上、
+  // "right" を含めると左端揃え(=右へ伸びてウィンドウの右をはみ出す)になる。
+  // READMEの例が "top right" なのでうっかり真似しないこと(実際に事故った)。
+  list.setAttribute('alignment', 'bottom left');
   list.setAttribute('partition', partition);
   area.replaceChildren(list);
   // Edge風: ピン留めした拡張だけツールバーに出す。アイコンはshadowRoot(open)に

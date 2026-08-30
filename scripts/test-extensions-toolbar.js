@@ -179,6 +179,34 @@ app.whenReady().then(async () => {
       Math.round(layout.downloads.x - (layout.puzzle.x + layout.puzzle.w))
     );
 
+    // ピン留めしたアイコンをクリックして拡張のポップアップ(フローティングUI)を開く。
+    // alignment を "top right" にしていた頃はポップアップがアイコンの上=ウィンドウ外に出て
+    // ほとんど見えなかった(DarkReader等の背の高いポップアップで顕著)。
+    // アイコンの真下・ウィンドウの横幅の内側に収まることを実測で確かめる
+    let popup = null;
+    browser.extensions.bySession.get(profileSession).on('browser-action-popup-created', (p) => {
+      popup = p;
+    });
+    await js(
+      uiWc,
+      `[...document.getElementById('toolbar-extensions').shadowRoot.querySelectorAll('.action')]
+         .find((n) => n.style.display !== 'none').click()`
+    );
+    await sleep(2000);
+    check('ピン留めアイコンのクリックでポップアップが開く', !!popup && !popup.isDestroyed(), true);
+    if (popup && !popup.isDestroyed()) {
+      const pb = popup.browserWindow.getBounds();
+      const wb = ctx.window.getBounds();
+      const icon = (await layoutState(uiWc)).icons[0];
+      console.log('   ポップアップ:', JSON.stringify(pb), ' ウィンドウ:', JSON.stringify(wb));
+      check('ポップアップがアイコンより下に出る', pb.y >= wb.y + icon.y, true);
+      check('ポップアップの上端がウィンドウの内側に収まる', pb.y >= wb.y - 2 && pb.y <= wb.y + 130, true);
+      check('ポップアップが右端をはみ出さない', pb.x + pb.width <= wb.x + wb.width + 2, true);
+      check('ポップアップが左端をはみ出さない', pb.x >= wb.x - 2, true);
+      popup.destroy();
+      await sleep(300);
+    }
+
     // 通常ページのタブと内部ページのタブを用意して行き来する
     const tabA = ctx.tabManager.tabs[0];
     const tabB = ctx.tabManager.createTab('roopie://newtab');
