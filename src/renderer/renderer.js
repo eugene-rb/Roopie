@@ -745,7 +745,8 @@ function cleanupDrag() {
   hideDropSlot();
   clearChipJoin();
   clearNewGroupTarget();
-  tabBarEl.classList.remove('drag-search', 'dnd-armed');
+  tabBarEl.classList.remove('drag-search');
+  disarmDnd();
   groupRowEl.classList.remove('drag-over');
   for (const el of document.querySelectorAll('.tab.dragging, .tab.drag-collapsed')) {
     el.classList.remove('dragging', 'drag-collapsed');
@@ -781,35 +782,52 @@ function attachTabDrag(tabEl, tab) {
   });
 }
 
-// タブバー全体でドラッグを受ける。並べ替え(自タブ)=move、ページからの選択テキスト=copy。
+// タブバー全体でドラッグを受ける。並べ替え(自タブ)=move、ページからの選択テキスト/リンク=copy。
 // どちらも同じスロットで挿入先をプレビューし、既存タブの間に差し込める
 function dragMode(e) {
   if (draggingId !== null) return 'reorder';
+  const types = [...e.dataTransfer.types];
   // 自分のIDが無いのに専用MIMEがある = 別ウィンドウから来たタブそのもの
-  if ([...e.dataTransfer.types].includes('application/x-roopie-tab')) return 'foreign-tab';
-  if ([...e.dataTransfer.types].includes('text/plain')) return 'search';
+  if (types.includes('application/x-roopie-tab')) return 'foreign-tab';
+  // 選択テキストは text/plain、ページ内リンクは text/uri-list(+ふつうは text/plain も)
+  if (types.includes('text/plain') || types.includes('text/uri-list')) return 'search';
   return null;
+}
+
+// ドロップされたテキスト/URLを取り出す。リンクは text/uri-list にしか入らないことがある
+// (先頭の # で始まる行はコメントなので飛ばす)
+function dropText(e) {
+  const plain = e.dataTransfer.getData('text/plain').trim();
+  if (plain) return plain;
+  const uri = e.dataTransfer.getData('text/uri-list');
+  return (uri.split(/\r?\n/).find((line) => line && !line.startsWith('#')) || '').trim();
 }
 
 // タブバーの空き領域はウィンドウ移動用のドラッグ領域(-webkit-app-region: drag)なので、
 // そのままだとその上でドロップイベントを一切拾えない(並べ替え・検索とも末尾への挿入が死ぬ)。
-// ドラッグセッション中だけno-dragへ切り替える。タブバー自身のdragoverを待つと空き領域へ直接
-// 進入したケースに間に合わないため、ページ側から上がってくる途中(ツールバー等)で先に検知する
-document.addEventListener('dragover', (e) => {
-  if ([...e.dataTransfer.types].includes('text/plain')) {
-    tabBarEl.classList.add('dnd-armed');
-  }
-});
-document.addEventListener('drop', () => {
+// ドラッグ中だけ #tab-bar を no-drag へ切り替える(dnd-armed)。
+//
+// 罠: 解除を「dragleave かつ relatedTarget 無し」でやると、ポインタが "まだ no-drag に
+// 切り替わっていない空き領域" に乗った瞬間にも誤発火し、武装→空き領域へ入る→即解除、の
+// ループで空き領域が永久に落とせなくなる。なので:
+//   - 武装は種類を問わず dragenter / dragover で(ページからのリンク/テキストがクロームへ
+//     入ってくる最速の合図が dragenter。空き領域へ直接入るケースに間に合わせる)
+//   - 解除は drop / dragend と、ドラッグ後に通常のマウス操作(mousemove / mouseover /
+//     click)が戻ってきた時。HTML5ドラッグ中はこれらが飛ばないので "終わった" の安全な
+//     合図になり、武装が残ってウィンドウ移動を潰すのも防げる
+function armDnd() {
+  tabBarEl.classList.add('dnd-armed');
+}
+function disarmDnd() {
+  if (!tabBarEl.classList.contains('dnd-armed')) return;
   tabBarEl.classList.remove('dnd-armed');
   stopEdgeScroll();
-});
-document.addEventListener('dragleave', (e) => {
-  if (!e.relatedTarget) {
-    tabBarEl.classList.remove('dnd-armed'); // ウィンドウの外へ出た
-    stopEdgeScroll();
-  }
-});
+}
+document.addEventListener('dragenter', armDnd);
+document.addEventListener('dragover', armDnd);
+document.addEventListener('drop', disarmDnd);
+document.addEventListener('dragend', disarmDnd);
+for (const ev of ['mousemove', 'mouseover', 'click']) document.addEventListener(ev, disarmDnd);
 
 // 1段目(タブバー)と2段目(グループの中身)は同じ受け口を使う。
 // どちらの段に落としたかで、そのタブがグループに入る/出るも決まる
@@ -925,8 +943,8 @@ function attachDropTarget(barEl, container) {
       if (targetGroupId != null) window.roopie.assignTabGroup(tabId, targetGroupId);
       hideDropSlot();
     } else {
-      const text = e.dataTransfer.getData('text/plain');
-      if (text.trim()) {
+      const text = dropText(e);
+      if (text) {
         window.roopie.searchInNewTab(text, index);
         // ドロップが受理されたと分かる短いフラッシュ
         barEl.animate(
