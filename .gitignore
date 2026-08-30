@@ -5,3 +5,6 @@ out/
 .DS_Store
 Thumbs.db
 vendor/
+
+# graphify の構造グラフ出力(生成物。3層クエリ用にローカルで持つだけ)
+graphify-out/
