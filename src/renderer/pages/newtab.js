@@ -97,7 +97,7 @@ const threeBody = (() => {
   const G = 1;
   const SOFT = 0.35; // 軟化長。これ未満の距離では引力が頭打ちになる
   const DT = 0.004;
-  const STEPS_PER_FRAME = 6;
+  const STEPS_PER_FRAME = 3;
   const TRAIL = 260; // 軌跡として保持する点の数
   const FOCAL = 2.2; // 透視投影の焦点距離(大きいほど遠近が弱い)
 
