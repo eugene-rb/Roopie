@@ -643,10 +643,14 @@ browser.createWindow = ({ incognito = false, url, x, y, width, height, bounds, p
   window.on('focus', () => {
     if (tabManager.overlayVisible) tabManager.overlay.webContents.focus();
     else tabManager.activeWebContents()?.focus();
+    window.webContents.send('window-focus-changed', true);
   });
 
   // 非アクティブの間はacrylicが消えるので押し直し続ける(理由は syncMaterialKeepAlive のコメント)
-  window.on('blur', () => syncMaterialKeepAlive(ctx));
+  window.on('blur', () => {
+    window.webContents.send('window-focus-changed', false);
+    syncMaterialKeepAlive(ctx);
+  });
   window.on('focus', () => syncMaterialKeepAlive(ctx));
   window.on('closed', () => syncMaterialKeepAlive(ctx));
 

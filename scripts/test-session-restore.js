@@ -105,7 +105,32 @@ app.whenReady().then(async () => {
   await sleep(800);
 
   const restoredCount = browser.openStartupWindows({});
+  // 復元したウィンドウのUI領域の高さが、まだ仮値(DEFAULT_CHROME_HEIGHT=84)のままかを見る。
+  // 実際の高さはレンダラーがResizeObserverで測って ui:chrome-height で報告してくるが、
+  // それが届く前に復元タブの読み込みが始まっていると、ページは誤った高さのビューポートで
+  // 初回レイアウトされる(読み込み時に一度だけ寸法を測るサイトが崩れたまま固定される)
+  const chromeHeightAtLoad = windows.normal().map((ctx) => ctx.tabManager.chromeHeight);
   await sleep(2500);
+  const chromeHeightSettled = windows.normal().map((ctx) => ctx.tabManager.chromeHeight);
+  console.log(`  UI高さ: 復元開始時=${JSON.stringify(chromeHeightAtLoad)} / 落ち着いた後=${JSON.stringify(chromeHeightSettled)}`);
+  check('復元タブの読み込み開始時点でUIの実高さが確定している', chromeHeightAtLoad, chromeHeightSettled);
+
+  // 復元直後のアクティブタブが、実際に正しい大きさのビューポートで読み込まれたか。
+  // ページ側の window.innerHeight は「読み込み時の」寸法を反映する
+  for (const ctx of windows.normal()) {
+    const tm = ctx.tabManager;
+    const tab = tm.getTab(tm.activeTabId);
+    if (!tab || tab.hibernated) continue;
+    const bounds = tab.view.getBounds();
+    const seen = await tab.view.webContents
+      .executeJavaScript('JSON.stringify({w: innerWidth, h: innerHeight, vis: document.visibilityState})', true)
+      .catch(() => null);
+    const { w, h, vis } = seen ? JSON.parse(seen) : {};
+    console.log(`  復元タブ: ページが見た ${w}x${h} / Viewの実寸 ${bounds.width}x${bounds.height} / visibilityState=${vis}`);
+    check('復元タブのビューポート高さがViewの実寸と一致する', h, bounds.height);
+    check('復元タブは表示状態で読み込まれている', vis, 'visible');
+  }
+
   check('ONなら前回のウィンドウ数だけ復元する', restoredCount, 2);
   check('復元後のウィンドウ数', windows.normal().length, 2);
 

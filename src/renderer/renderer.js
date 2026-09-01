@@ -19,6 +19,7 @@ const findCount = $('find-count');
 let tabState = { tabs: [], activeTabId: null };
 let bookmarks = [];
 let mediaList = []; // タブバーの再生ボタン用(どのタブが再生/一時停止中か)
+let isWindowFocused = true; // ウィンドウのフォーカス状態
 
 // 再生中は1秒おきに再生状態が届くが、タブバーが使うのは「どのタブが再生中か」だけ。
 // 再生位置しか変わっていない更新で再描画すると、タブのエフェクトのアニメーションが
@@ -31,6 +32,12 @@ window.roopie.onMediaState((next) => {
   if (key === mediaTabsKey) return;
   mediaTabsKey = key;
   renderTabs();
+});
+
+window.roopie.onWindowFocusChanged?.((isFocused) => {
+  isWindowFocused = isFocused;
+  chromeEl.classList.toggle('window-active', isFocused);
+  chromeEl.classList.toggle('window-inactive', !isFocused);
 });
 
 // 音声エフェクトのアニメーション位相。タブ要素は再描画のたびに作り直されるため、

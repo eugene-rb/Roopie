@@ -522,6 +522,7 @@ contextBridge.exposeInMainWorld('roopie', {
   onTabsState: (cb) => ipcRenderer.on('tabs:state', (_e, state) => cb(state)),
   // タブバーの再生ボタン用(どのタブが再生中かだけ知れればよい)
   onMediaState: (cb) => ipcRenderer.on('media:state', (_e, state) => cb(state)),
+  onWindowFocusChanged: (cb) => ipcRenderer.on('window-focus-changed', (_e, isFocused) => cb(isFocused)),
   mediaToggle: (tabId) => ipcRenderer.send('media:control', tabId, 'toggle'),
   onBookmarksState: (cb) => ipcRenderer.on('bookmarks:state', (_e, items) => cb(items)),
   onProfilesState: (cb) => ipcRenderer.on('profiles:state', (_e, state) => cb(state)),

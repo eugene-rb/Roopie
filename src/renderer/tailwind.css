@@ -6237,3 +6237,15 @@ select.row-btn {
 #ext-menu .ext-pin.active svg {
   fill: currentColor;
 }
+
+/* ---- ウィンドウフォーカス状態の表現 ---- */
+/* inactive 時は全体の不透明度を下げて、アクティブでないことを示す */
+#chrome.window-inactive {
+  opacity: 0.75;
+  transition: opacity 0.15s ease-out;
+}
+
+#chrome.window-active {
+  opacity: 1;
+  transition: opacity 0.15s ease-out;
+}
