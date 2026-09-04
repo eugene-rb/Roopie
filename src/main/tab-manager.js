@@ -1,5 +1,6 @@
 const { WebContentsView, screen } = require('electron');
 const path = require('path');
+const tldts = require('tldts');
 const { attachContextMenu } = require('./context-menu');
 const { searchUrl, DEFAULT_ENGINE } = require('./search-engines');
 const { isGoogleDomain } = require('./google-accounts');
@@ -1748,13 +1749,24 @@ function isNewTabUrl(url) {
   return url === NEW_TAB_URL || url === `${NEW_TAB_URL}/`;
 }
 
+// ホスト部分が実在するTLD(ICANN登録 or ブラウザが慣習的に信頼するprivateドメイン)を
+// 持つかどうか。「Gemini3.8」のようなドット入り文字列を誤ってURL扱いしないための判定
+function hasKnownTld(hostname) {
+  const { isIcann, isPrivate } = tldts.parse(hostname);
+  return isIcann || isPrivate;
+}
+
 // 入力文字列をURLに変換(URLでなければ設定した検索エンジンで検索するURLにする)
 function toUrl(input, engineId) {
   const text = String(input).trim();
   if (/^(https?|file|roopie|about):/i.test(text)) return text;
-  // スペースを含まず、ドットかlocalhostを含むならURLとみなす
-  if (!/\s/.test(text) && (/\./.test(text) || /^localhost(:\d+)?/.test(text))) {
-    return `https://${text}`;
+  if (!/\s/.test(text)) {
+    const host = text.split(/[/?#]/)[0].split(':')[0];
+    const isIp = /^(\d{1,3}\.){3}\d{1,3}$/.test(host);
+    const isLocalhost = /^localhost$/i.test(host);
+    if (isIp || isLocalhost || hasKnownTld(host)) {
+      return `https://${text}`;
+    }
   }
   return searchUrl(engineId, text);
 }
