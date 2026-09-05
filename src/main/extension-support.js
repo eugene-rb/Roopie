@@ -6,6 +6,7 @@ const { app, session: electronSession, nativeImage, BrowserWindow } = require('e
 const { ElectronChromeExtensions } = require('electron-chrome-extensions');
 const { installChromeWebStore, installExtension, uninstallExtension } = require('electron-chrome-web-store');
 const ExtensionDownloadsAPI = require('./extension-downloads');
+const ExtensionCommandsAPI = require('./extension-commands');
 
 // ウェブストアを介さない(=フォルダから読み込んだ)拡張機能の置き場所につける印。
 // ストアの拡張機能は必ずID(a〜pの32文字)のフォルダに入るので、これで確実に区別できる
@@ -28,6 +29,10 @@ class ExtensionSupport {
     // 実装していない(dist/chrome-extension-api.preload.js の noop; 詳細は extension-downloads.js)ため、
     // ここでルーターに直接ハンドラを足して補っている
     this.downloadsBySession = new Map();
+    // session -> ExtensionCommandsAPI。electron-chrome-extensions は chrome.commands を
+    // ほぼ実装していない(キー監視も onCommand 発火もしない)ため、拡張機能の
+    // ショートカットキー(例: DarkReader の Alt+Shift+D)が効かない。ここで補う
+    this.commandsBySession = new Map();
     // session -> attach中のPromise。取り付けは非同期(ディスクからの読み込み)なので、
     // 2つ目以降のウィンドウや install() も「読み込み完了」まで待てるようにする
     this.attaching = new Map();
@@ -200,6 +205,7 @@ class ExtensionSupport {
     });
     this.bySession.set(session, extensions);
     this.downloadsBySession.set(session, new ExtensionDownloadsAPI(session, extensions.ctx));
+    this.commandsBySession.set(session, new ExtensionCommandsAPI(session, extensions));
 
     // Chromeウェブストアからのインストールを有効化(保存済み拡張の読み込みも行われる)。
     // allowUnpackedExtensions はウェブストア以外(=フォルダから読み込んだもの)を読み込むのに必須。
@@ -238,6 +244,8 @@ class ExtensionSupport {
     const ctx = this.contextForTab(wc);
     if (!ctx) return;
     this.bySession.get(wc.session)?.addTab(wc, ctx.window);
+    // 拡張機能のショートカットキーをこのタブでも拾えるようにする(ページにフォーカスがあるとき)
+    this.commandsBySession.get(wc.session)?.attachTab(wc);
   }
 
   // タブが別ウィンドウへ移ったときに呼ぶ。addTab は登録済みのタブだと何もしないため、
