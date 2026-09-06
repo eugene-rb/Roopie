@@ -43,6 +43,8 @@
 - 「右側のタブを全て閉じる」はインデックスのズレを避けるため、対象IDを先に収集してから閉じる。
 - グループ色は固定9色パレットを使い切ったら先頭から再利用する。
 - `target="_blank"` / Ctrl+クリック等で `setWindowOpenHandler` 経由に開く新規タブは、`details.referrer` を `createTab` の `referrer` オプションへ引き継ぎ、`loadURL` に `httpReferrer` として渡す。渡さないとリファラが消え、pixiv等のホットリンク防止に引っかかる。
+- `setWindowOpenHandler` 経由で開くタブには `closeIfStillborn: true` を渡す。リンク先がダウンロードに化けた等で最初のメインフレーム遷移が何も表示せず終わった場合、`about:blank` タブを残さず閉じる（Chrome/Edge 相当）。ダウンロード化けはこの経路では `did-fail-load` も `did-navigate` も飛ばないため、セッションの `will-download` で開始元タブを引き当てる（`TabManager.attachDownloadWatch`。`switchSession` で張り直し、`dispose` で解除）。`tab.committed`（メインフレームが1度でもコミット＝エラーページ含む）が立っているタブは対象外。
+- `window.open('about:blank')`（または空URL）で先に開いてから後で `location` / `document.write` を差し込む遅延パターンは、`deny` すると `window.open()` が `null` を返して代入が失敗し `about:blank` タブが残る。`popup-window.isBlankTarget` で判定し、サイズ指定付き `window.open` と同じく本物のポップアップウィンドウで開いて `window.opener` を保つ（`tab-manager` / `side-panel` / `popup-window` の3ハンドラ共通）。
 
 ## 検証
 - コマンド: `npm run start:verify`
@@ -54,3 +56,4 @@
 ## 変更履歴
 - 2026-08-04: 初版作成（docs/specs/ 新設、3層クエリルールの運用開始に伴う）
 - 2026-08-04: 新規タブへのリファラ引き継ぎを追加（ユーザー報告「pixivでリファラエラーが出る」。target=_blankで開いた画像等のリファラが消えていたため）
+- 2026-09-07: リンククリックで about:blank タブが残る不具合を修正（ユーザー報告）。①ダウンロードに化けた遷移で取り残されるタブを `will-download` 引き当て＋`closeIfStillborn` で閉じる ②URL未確定の `window.open` はポップアップウィンドウで開いて `window.opener` を保つ
