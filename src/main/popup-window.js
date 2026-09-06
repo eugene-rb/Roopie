@@ -51,6 +51,17 @@ function isPopupRequest({ disposition, features } = {}) {
   return SHAPE_KEYS.some((key) => key in f);
 }
 
+/**
+ * URLを付けずに開く window.open('about:blank' / '')。開いた後で `w.location` や
+ * `w.document.write()` を差し込む遅延パターン(SNSの外部リンク・リダイレクタ・
+ * 印刷/レシートのポップアップ等で一般的)。
+ * `action:'deny'` にすると `window.open()` が null を返し、その後の代入が失敗して
+ * about:blank のタブが残るため、本物のウィンドウで開いて `window.opener` を保つ。
+ */
+function isBlankTarget({ url } = {}) {
+  return !url || url === 'about:blank';
+}
+
 // features の位置・大きさを、開いた側のモニタの作業領域に収めて返す
 function boundsFor(features, ownerWindow) {
   const f = parseFeatures(features);
@@ -110,7 +121,7 @@ function ownerWindowFor(webContents) {
 // ポップアップから普通のリンクを開いたとき。親ウィンドウのタブで開く(Chrome/Edgeと同じ)
 function openInOwner(tabManager, url, background = false) {
   if (tabManager && !tabManager.window.isDestroyed()) {
-    tabManager.createTab(url, { background });
+    tabManager.createTab(url, { background, closeIfStillborn: true });
     tabManager.window.focus();
     return;
   }
@@ -153,7 +164,7 @@ function setup(win, details, tabManager) {
   // ポップアップの中のリンクは親ウィンドウのタブへ。
   // ポップアップがさらにサイズ指定付きの window.open を呼んだら、それもポップアップにする
   wc.setWindowOpenHandler((d) => {
-    if (isPopupRequest(d)) return responseFor(d, win);
+    if (isPopupRequest(d) || isBlankTarget(d)) return responseFor(d, win);
     openInOwner(tabManager, d.url, d.disposition === 'background-tab');
     return { action: 'deny' };
   });
@@ -168,4 +179,4 @@ function setup(win, details, tabManager) {
   });
 }
 
-module.exports = { isPopupRequest, responseFor, setup, ownerWindowFor, parseFeatures };
+module.exports = { isPopupRequest, isBlankTarget, responseFor, setup, ownerWindowFor, parseFeatures };

@@ -44,6 +44,15 @@ const STAY = `<!doctype html><meta charset="utf-8"><title>そのまま</title>
 app.whenReady().then(async () => {
   const server = http
     .createServer((req, res) => {
+      // リンク先がダウンロードに化けるケース(Content-Disposition: attachment)
+      if (req.url === '/attach') {
+        res.writeHead(200, {
+          'content-type': 'application/octet-stream',
+          'content-disposition': 'attachment; filename="x.bin"',
+        });
+        res.end('BINARYDATA');
+        return;
+      }
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       if (req.url === '/close') res.end(CLOSER);
       else if (req.url === '/stay') res.end(STAY);
@@ -109,6 +118,45 @@ app.whenReady().then(async () => {
   await sleep(600);
   check('features無しのwindow.openはタブで開く', tabManager.tabs.length, before + 1);
   check('ウィンドウは増えない', popups().length, 0);
+
+  // ---- リンク先がダウンロードに化けたら about:blank タブを残さない(Chrome/Edge と同じ) ----
+  let downloads = 0;
+  const onWillDownload = (e) => {
+    downloads++;
+    e.preventDefault(); // 実ファイルは書かない・保存ダイアログも出さない
+  };
+  session.defaultSession.on('will-download', onWillDownload);
+  const beforeDl = tabManager.tabs.length;
+  await wc.executeJavaScript(`window.open('http://localhost:${PORT}/attach', '_blank'), 0`, true);
+  await sleep(1000);
+  check('ダウンロードは1回始まる', downloads, 1);
+  check('ダウンロードに化けたリンクの about:blank タブは残らない', tabManager.tabs.length, beforeDl);
+  session.defaultSession.removeListener('will-download', onWillDownload);
+
+  // ---- 回帰: 読み込み失敗(DNS等)はエラー表示のためタブを残す ----
+  const beforeErr = tabManager.tabs.length;
+  await wc.executeJavaScript(`window.open('http://does-not-exist.invalid/', '_blank'), 0`, true);
+  await sleep(1500);
+  check('読み込み失敗(DNS等)ではタブを残す', tabManager.tabs.length, beforeErr + 1);
+
+  // ---- URL未確定の window.open('about:blank') + 後から location を差し込む遅延パターン ----
+  // deny + タブにすると window.open() が null を返して location 代入が失敗し about:blank タブが残る。
+  // 本物のウィンドウで開いて opener を保ち、後の遷移を成立させる
+  const beforeDeferred = tabManager.tabs.length;
+  await wc.executeJavaScript(
+    `(() => { const w = window.open('about:blank'); setTimeout(() => { w.location.href = 'http://localhost:${PORT}/other'; }, 300); })(), 0`,
+    true
+  );
+  await sleep(1400);
+  check('URL未確定のwindow.openはウィンドウで開く', popups().length, 1);
+  check('タブは増えない(about:blankタブを残さない)', tabManager.tabs.length, beforeDeferred);
+  const deferred = popups()[0];
+  if (deferred) {
+    check('後から差し込んだURLへ遷移する', deferred.webContents.getURL(), `http://localhost:${PORT}/other`);
+    check('window.opener が生きている', await deferred.webContents.executeJavaScript('!!window.opener', true), true);
+    deferred.close();
+    await sleep(300);
+  }
 
   // ---- 実際のブラウザウィンドウ(chrome UI・プロファイル付き)でも同じように開く ----
   registerIpc();

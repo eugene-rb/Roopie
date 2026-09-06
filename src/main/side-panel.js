@@ -303,8 +303,14 @@ class SidePanel {
     // パネル内から開くリンクは通常のタブで開く(ホイールクリックは裏で開く)。
     // サイズ指定付きの window.open(Googleログイン等)はポップアップウィンドウで開く
     wc.setWindowOpenHandler((details) => {
-      if (popupWindow.isPopupRequest(details)) return popupWindow.responseFor(details, this.window);
-      this.tabManager.createTab(details.url, { background: details.disposition === 'background-tab' });
+      if (popupWindow.isPopupRequest(details) || popupWindow.isBlankTarget(details)) {
+        return popupWindow.responseFor(details, this.window);
+      }
+      this.tabManager.createTab(details.url, {
+        background: details.disposition === 'background-tab',
+        // リンク先がダウンロードに化けて遷移が中断された場合、about:blank タブを残さない
+        closeIfStillborn: true,
+      });
       return { action: 'deny' };
     });
     wc.on('did-create-window', (win, details) => popupWindow.setup(win, details, this.tabManager));

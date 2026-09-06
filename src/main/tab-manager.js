@@ -189,6 +189,28 @@ class TabManager {
       this.layout();
     });
     window.on('closed', () => this.stopFullscreenChromeWatch());
+
+    this._willDownloadListener = null;
+    this._watchedSession = null;
+    this.attachDownloadWatch();
+  }
+
+  // リンク/window.open で開いたばかりのタブが、遷移ではなくダウンロードに化けた場合、
+  // about:blank のタブが残る(この経路では webContents に did-fail-load も did-navigate も飛ばない)。
+  // セッションの will-download で開始元のタブを引き当てて閉じる(Chrome/Edge と同じ)。
+  // switchSession でセッションが変わるので張り直せるようにしておく。
+  attachDownloadWatch() {
+    if (this._willDownloadListener && this._watchedSession && !this._watchedSession.isDestroyed?.()) {
+      this._watchedSession.removeListener('will-download', this._willDownloadListener);
+    }
+    this._willDownloadListener = (_event, _item, webContents) => {
+      const tab =
+        webContents &&
+        this.tabs.find((t) => !t.view.webContents.isDestroyed() && t.view.webContents === webContents);
+      if (tab && tab.closeIfStillborn && !tab.committed) this.closeTab(tab.id);
+    };
+    this._watchedSession = this.session;
+    this.session.on('will-download', this._willDownloadListener);
   }
 
   // OS全画面(F11)中はページを画面いっぱいに広げ、タブバー/ツールバーを隠す。
@@ -257,6 +279,7 @@ class TabManager {
       zoom = 0,
       muted = false,
       referrer = null,
+      closeIfStillborn = false,
     } = {}
   ) {
     const id = nextTabId++;
@@ -327,6 +350,12 @@ class TabManager {
       wcListeners: [],
       // このタブを開いたリンク元のタブ(並び順を決めるためだけに使う)
       openerTabId,
+      // リンク/window.open で開いたタブが、最初のメインフレーム遷移で何も表示できず中断された
+      // (リンク先がダウンロードに化けた等)場合、about:blank を残さず自動で閉じる(Chrome/Edge と同じ)
+      closeIfStillborn,
+      // メインフレームのナビゲーションが1度でもコミットされたか(エラーページのコミットも含む)。
+      // ダウンロードはコミットしないので false のまま。closeIfStillborn の判定に使う
+      committed: false,
       // 所属するタブグループ(null=グループ無し)。リンクから開いたタブはリンク元のグループを継ぐ
       // (Chromeと同じ。ショートカットや「+」で開いたタブはグループに入れない)
       groupId: groupId ?? (openerTabId != null ? this.getTab(openerTabId)?.groupId ?? null : null),
@@ -476,6 +505,7 @@ class TabManager {
     on('did-navigate-in-page', update);
 
     on('did-navigate', (_e, url) => {
+      tab.committed = true; // メインフレームが1度でもコミットされた(エラーページ含む)
       tab.favicon = null;
       tab.isInternal = isInternalUrl(url);
       // 前のページの翻訳状態(訳した/提案中)を持ち越さない。
@@ -527,6 +557,14 @@ class TabManager {
     });
 
     on('did-fail-load', (_e, code, description, url, isMainFrame) => {
+      // リンク/window.open で開いたばかりのタブが、最初のメインフレーム遷移で何も表示できず
+      // 中断された(ERR_ABORTED = -3)場合は about:blank を残さずタブごと閉じる(Chrome/Edge と同じ)。
+      // ダウンロードに化けたケースは will-download 側(_attachDownloadWatch)で拾う。こちらは
+      // 外部スキーム等での即中断が対象。実エラー(DNS失敗 -105 等)は committed が立つので来ない
+      if (isMainFrame && code === -3 && !tab.committed && tab.closeIfStillborn) {
+        this.closeTab(tab.id);
+        return;
+      }
       // -3 (ABORTED) はユーザー操作による中断なので無視する
       if (isMainFrame && code !== -3) {
         console.error(`読み込み失敗: ${url} (${code} ${description})`);
@@ -573,13 +611,19 @@ class TabManager {
     // ただしサイズ指定付きの window.open(Googleログイン等)だけは、Chrome/Edgeと同じく
     // 本物のポップアップウィンドウで開く(タブにすると window.opener が切れて認証が終わらない)
     wc.setWindowOpenHandler((details) => {
-      if (popupWindow.isPopupRequest(details)) return popupWindow.responseFor(details, this.window);
+      // サイズ指定付き(Googleログイン等)/ URL未確定(後から location を差し込む遅延パターン)は
+      // 本物のポップアップウィンドウで開く。deny + タブにすると window.opener が切れる
+      if (popupWindow.isPopupRequest(details) || popupWindow.isBlankTarget(details)) {
+        return popupWindow.responseFor(details, this.window);
+      }
       this.createTab(details.url, {
         background: details.disposition === 'background-tab',
         openerTabId: tab.id,
         // target="_blank" 等で新規タブに移ると既定ではリファラが消え、
         // pixiv等のリファラチェックに引っかかる(ホットリンク防止エラー)ため引き継ぐ
         referrer: details.referrer,
+        // リンク先がダウンロードに化けて遷移が中断された場合、about:blank タブを残さない
+        closeIfStillborn: true,
       });
       return { action: 'deny' };
     });
@@ -1325,6 +1369,10 @@ class TabManager {
       clearInterval(this._fullscreenPollTimer);
       this._fullscreenPollTimer = null;
     }
+    if (this._willDownloadListener && this._watchedSession && !this._watchedSession.isDestroyed?.()) {
+      this._watchedSession.removeListener('will-download', this._willDownloadListener);
+      this._willDownloadListener = null;
+    }
   }
 
   // プロファイル切り替え: セッションが変わるので全タブを作り直す
@@ -1333,6 +1381,7 @@ class TabManager {
   switchSession(session) {
     this.isSwitchingProfile = true;
     this.session = session;
+    this.attachDownloadWatch(); // 新しいセッションの will-download を見張る
     this.splitTabId = null;
     this.destroySplitDivider(); // 仕切りは旧セッションのViewなので作り直す
     for (const id of this.tabs.map((t) => t.id)) {
