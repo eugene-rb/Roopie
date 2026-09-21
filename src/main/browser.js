@@ -357,6 +357,18 @@ for (const key of [
 }
 
 browser.initData = () => {
+  // dwnloader と同じく、接続先の名前解決を Cloudflare DoH へ問い合わせる。
+  // IPリテラルで指定し、問い合わせ先自身の解決がISPのDNSに依存しないようにする。
+  // ページは直接接続のまま。automatic だと初回にOSのDNSへ戻り、誤ったIPを
+  // 掴む場合があるため secure を使う。社内DNS等が必要なら起動時に
+  // ROOPIE_SYSTEM_DNS=1 を指定すると従来の名前解決へ戻せる。
+  // app.ready 後、各プロファイルのセッションを作る前に設定する(全セッション共通)。
+  const useSystemDns = process.env.ROOPIE_SYSTEM_DNS === '1';
+  app.configureHostResolver({
+    enableBuiltInResolver: !useSystemDns,
+    secureDnsMode: useSystemDns ? 'off' : 'secure',
+    secureDnsServers: useSystemDns ? [] : ['https://1.1.1.1/dns-query'],
+  });
   browser.profiles = new Profiles();
 
   // Googleアカウント一覧はプロファイル横断で共有する
