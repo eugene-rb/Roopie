@@ -261,7 +261,7 @@ function registerPagePreloads(session) {
   // メディアの検出はpreloadではなくメインプロセスから行う(tab-manager.jsのprobeMedia)。
   // preloadはメインフレームでしか走らず、プレイヤーをiframeに置くサイトを取りこぼすため
   // translate-preload.js は分離ワールドでDOMのテキストを差し替える(指示が来るまで何もしない)
-  for (const name of ['gesture-preload.js', 'autofill-preload.js', 'media-guard-preload.js', 'translate-preload.js']) {
+  for (const name of ['gesture-preload.js', 'autofill-preload.js', 'media-guard-preload.js', 'translate-preload.js', 'hitomi-adblock-preload.js']) {
     session.registerPreloadScript({ type: 'frame', filePath: path.join(PRELOAD_DIR, name) });
   }
   // ジェスチャーの検出はメインプロセスで行う(重いページでも止まらないようにするため)。
